@@ -89,14 +89,9 @@ ADMINS = [(ADMIN_NAME, ADMIN_EMAIL)] if ADMIN_EMAIL else []
 # SECURITY FIX: Default to False, only enable in dev with explicit env var
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-# ALLOWED_HOSTS - Ρυθμίσεις για τοπικό δίκτυο
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '192.168.*.*',      # Όλα τα τοπικά δίκτυα 192.168.x.x
-    '10.*.*.*',         # Εταιρικά δίκτυα 10.x.x.x
-    '172.16.*.*',       # Private networks 172.16.x.x
-]
+# ALLOWED_HOSTS - Απλή ρύθμιση για τοπική πρόσβαση
+# Για production: όρισε ALLOWED_HOSTS=domain.com στο .env
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else ['*']
 
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
