@@ -161,6 +161,9 @@ def restore_backup(backup_id, user=None, mode='replace', create_safety_backup=Tr
     """
     Επαναφέρει backup.
 
+    ΣΗΜΑΝΤΙΚΟ: Αυτή η συνάρτηση διατηρεί τους superusers κατά το restore
+    για να αποφευχθεί το πρόβλημα απώλειας πρόσβασης στο σύστημα.
+
     Args:
         backup_id: ID του BackupHistory record
         user: Ο χρήστης που κάνει restore
@@ -169,6 +172,14 @@ def restore_backup(backup_id, user=None, mode='replace', create_safety_backup=Tr
 
     Returns:
         dict με status και πληροφορίες
+
+    Λειτουργία:
+        1. Δημιουργεί safety backup (αν create_safety_backup=True)
+        2. Διατηρεί τους τρέχοντες superusers σε memory
+        3. Εκτελεί flush της βάσης
+        4. Φορτώνει groups.json fixture (απαραίτητο για dependencies)
+        5. Φορτώνει τα δεδομένα από το backup
+        6. Επαναφέρει τους superusers αν δεν υπάρχουν στο backup
     """
     from .models import BackupHistory
     from django.utils import timezone
@@ -264,7 +275,6 @@ def _dump_database():
         '--natural-foreign',
         '--natural-primary',
         '--exclude=contenttypes',
-        '--exclude=auth.permission',
         '--exclude=sessions',
         '--exclude=admin.logentry',
         '--indent=2',
@@ -282,7 +292,7 @@ def _restore_database(json_data, mode='replace'):
         mode: 'replace' ή 'merge'
     """
     import tempfile
-    from django.contrib.auth.models import Group
+    from common.utils.helpers import USER_MODEL
 
     # Γράψε σε temp file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
@@ -291,16 +301,59 @@ def _restore_database(json_data, mode='replace'):
 
     try:
         if mode == 'replace':
-            # Διαγραφή υπαρχόντων δεδομένων (προσεκτικά!)
+            # ΠΡΙΝ το flush: Διατήρηση superusers για safety
+            superusers_backup = []
+            try:
+                User = USER_MODEL
+                for su in User.objects.filter(is_superuser=True):
+                    superusers_backup.append({
+                        'username': su.username,
+                        'email': su.email,
+                        'password': su.password,  # Ήδη hashed
+                        'first_name': su.first_name,
+                        'last_name': su.last_name,
+                        'is_staff': su.is_staff,
+                        'is_active': su.is_active,
+                    })
+                logger.info(f"Backed up {len(superusers_backup)} superusers before flush")
+            except Exception as e:
+                logger.warning(f"Failed to backup superusers: {e}")
+
+            # Διαγραφή υπαρχόντων δεδομένων
             call_command('flush', '--no-input')
 
-        # Δημιουργία default groups αν δεν υπάρχουν
-        default_groups = ['Administrators', 'Managers', 'Users', 'Λογιστές', 'Υπάλληλοι']
-        for group_name in default_groups:
-            Group.objects.get_or_create(name=group_name)
+            # Φόρτωση βασικών fixtures (Groups) πρώτα
+            try:
+                call_command('loaddata', 'groups.json', verbosity=0)
+                logger.info("Loaded groups fixture before restore")
+            except Exception as e:
+                logger.warning(f"Failed to load groups fixture: {e}")
 
-        # Φόρτωση δεδομένων με ignorenonexistent για missing FKs
-        call_command('loaddata', temp_path, '--ignorenonexistent')
+        # Φόρτωση δεδομένων από backup
+        call_command('loaddata', temp_path)
+
+        # Επαναφορά superusers αν δεν υπάρχουν
+        if mode == 'replace' and superusers_backup:
+            User = USER_MODEL
+            restored_count = 0
+            for su_data in superusers_backup:
+                # Έλεγχος αν υπάρχει ήδη από το backup
+                if not User.objects.filter(username=su_data['username']).exists():
+                    User.objects.create(
+                        username=su_data['username'],
+                        email=su_data['email'],
+                        password=su_data['password'],
+                        first_name=su_data['first_name'],
+                        last_name=su_data['last_name'],
+                        is_superuser=True,
+                        is_staff=su_data['is_staff'],
+                        is_active=su_data['is_active'],
+                    )
+                    restored_count += 1
+                    logger.info(f"Restored missing superuser: {su_data['username']}")
+
+            if restored_count > 0:
+                logger.info(f"Restored {restored_count} superusers after backup restore")
 
     finally:
         os.unlink(temp_path)
