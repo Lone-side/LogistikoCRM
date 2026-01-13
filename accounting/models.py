@@ -615,6 +615,12 @@ class EmailTemplate(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField('Ενεργό', default=True)
 
+    requires_approval = models.BooleanField(
+        'Απαιτεί Έγκριση',
+        default=True,
+        help_text='Αν ενεργοποιηθεί, τα emails με αυτό το πρότυπο πηγαίνουν στην ουρά έγκρισης'
+    )
+
     class Meta:
         verbose_name = 'Πρότυπο Email'
         verbose_name_plural = 'Πρότυπα Email'
@@ -1298,6 +1304,75 @@ class EmailSettings(models.Model):
             self.last_test_error = error_msg
             self.save()
             return False, error_msg
+
+
+class RecipientList(models.Model):
+    """
+    Λίστες Παραληπτών για μαζική αποστολή email.
+    Στατικές λίστες που διαχειρίζεται ο χρήστης χειροκίνητα.
+    """
+
+    name = models.CharField('Όνομα Λίστας', max_length=200)
+    description = models.TextField('Περιγραφή', blank=True)
+
+    clients = models.ManyToManyField(
+        ClientProfile,
+        related_name='recipient_lists',
+        verbose_name='Πελάτες',
+        blank=True
+    )
+
+    requires_approval = models.BooleanField(
+        'Απαιτεί Έγκριση',
+        default=True,
+        help_text='Αν ενεργοποιηθεί, τα emails σε αυτή τη λίστα πηγαίνουν στην ουρά έγκρισης'
+    )
+
+    is_active = models.BooleanField('Ενεργή', default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_recipient_lists',
+        verbose_name='Δημιουργήθηκε από'
+    )
+
+    class Meta:
+        verbose_name = 'Λίστα Παραληπτών'
+        verbose_name_plural = 'Λίστες Παραληπτών'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.clients.count()} πελάτες)"
+
+    @property
+    def client_count(self):
+        """Αριθμός πελατών στη λίστα"""
+        return self.clients.count()
+
+    @property
+    def email_count(self):
+        """Αριθμός έγκυρων email στη λίστα"""
+        return self.clients.filter(email__isnull=False).exclude(email='').count()
+
+    def get_valid_emails(self):
+        """Επιστρέφει λίστα με έγκυρα emails"""
+        return list(
+            self.clients
+            .filter(email__isnull=False, is_active=True)
+            .exclude(email='')
+            .values_list('email', flat=True)
+        )
+
+    def get_clients_with_emails(self):
+        """Επιστρέφει queryset πελατών με έγκυρο email"""
+        return self.clients.filter(
+            email__isnull=False,
+            is_active=True
+        ).exclude(email='')
 
 
 class VoIPCall(models.Model):

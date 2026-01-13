@@ -57,6 +57,11 @@ from .api_email import (
     email_settings,
     email_settings_test,
     email_settings_send_test,
+    recipient_lists,
+    recipient_list_detail,
+    recipient_list_add_clients,
+    recipient_list_remove_clients,
+    send_to_list,
 )
 from .api_door import (
     door_status as api_door_status,
@@ -288,6 +293,13 @@ urlpatterns = [
     path("api/v1/email/settings/", email_settings, name="api_v1_email_settings"),
     path("api/v1/email/settings/test/", email_settings_test, name="api_v1_email_settings_test"),
     path("api/v1/email/settings/send-test/", email_settings_send_test, name="api_v1_email_settings_send_test"),
+
+    # Recipient Lists
+    path("api/v1/email/recipient-lists/", recipient_lists, name="api_v1_recipient_lists"),
+    path("api/v1/email/recipient-lists/<int:list_id>/", recipient_list_detail, name="api_v1_recipient_list_detail"),
+    path("api/v1/email/recipient-lists/<int:list_id>/add-clients/", recipient_list_add_clients, name="api_v1_recipient_list_add_clients"),
+    path("api/v1/email/recipient-lists/<int:list_id>/remove-clients/", recipient_list_remove_clients, name="api_v1_recipient_list_remove_clients"),
+    path("api/v1/email/send-to-list/", send_to_list, name="api_v1_send_to_list"),
 
     # ============================================
     # OBLIGATION DOCUMENT & NOTIFICATION ENDPOINTS

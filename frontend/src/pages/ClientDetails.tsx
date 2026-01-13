@@ -335,7 +335,14 @@ export default function ClientDetails() {
 
           {/* EMAILS TAB */}
           {activeTab === 'emails' && (
-            <ClientEmailsTab data={emailsData} isLoading={emailsLoading} />
+            <ClientEmailsTab
+              data={emailsData}
+              isLoading={emailsLoading}
+              clientId={clientId}
+              clientName={client.eponimia}
+              clientEmail={client.email || ''}
+              onRefresh={refetch}
+            />
           )}
 
           {/* CALLS TAB */}

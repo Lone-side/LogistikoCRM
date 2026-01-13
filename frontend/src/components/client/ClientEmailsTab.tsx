@@ -1,4 +1,8 @@
-import { RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { RefreshCw, Plus, Send, CheckCircle, XCircle, Clock, Mail } from 'lucide-react';
+import { Button } from '../Button';
+import { Modal } from '../Modal';
+import api from '../../lib/api';
 
 // Email interface
 export interface EmailItem {
@@ -11,18 +15,139 @@ export interface EmailItem {
   template_name?: string | null;
 }
 
+interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  body_html: string;
+}
+
 // Props interface
 export interface ClientEmailsTabProps {
   data: { emails: EmailItem[] } | undefined;
   isLoading: boolean;
+  clientId: number;
+  clientName: string;
+  clientEmail: string;
+  onRefresh?: () => void;
 }
 
 export default function ClientEmailsTab({
   data,
   isLoading,
+  clientId,
+  clientName,
+  clientEmail,
+  onRefresh,
 }: ClientEmailsTabProps) {
+  const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [composeForm, setComposeForm] = useState({
+    templateId: '',
+    subject: '',
+    body: '',
+  });
+
+  const fetchTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const response = await api.get('/v1/email/templates/');
+      setTemplates(response.data || []);
+    } catch (err) {
+      console.error('Error fetching templates:', err);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  const handleOpenCompose = () => {
+    if (templates.length === 0) {
+      fetchTemplates();
+    }
+    setIsComposeOpen(true);
+  };
+
+  const handleTemplateSelect = (templateId: string) => {
+    setComposeForm((prev) => ({ ...prev, templateId }));
+    if (templateId) {
+      const template = templates.find((t) => t.id === Number(templateId));
+      if (template) {
+        setComposeForm((prev) => ({
+          ...prev,
+          subject: template.subject,
+          body: template.body_html,
+        }));
+      }
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!composeForm.subject.trim() || !composeForm.body.trim()) {
+      setError('Συμπληρώστε θέμα και μήνυμα');
+      return;
+    }
+
+    setSending(true);
+    setError(null);
+    try {
+      await api.post('/v1/email/send/', {
+        client_id: clientId,
+        subject: composeForm.subject,
+        body: composeForm.body,
+        template_id: composeForm.templateId ? Number(composeForm.templateId) : null,
+      });
+
+      setIsComposeOpen(false);
+      setComposeForm({ templateId: '', subject: '', body: '' });
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Σφάλμα αποστολής email';
+      setError(errorMessage);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'sent':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'failed':
+        return <XCircle className="w-4 h-4 text-red-500" />;
+      case 'pending':
+      case 'queued':
+        return <Clock className="w-4 h-4 text-yellow-500" />;
+      default:
+        return <Mail className="w-4 h-4 text-gray-500" />;
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Header with New Email button */}
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-medium text-gray-900">Email</h3>
+        {clientEmail && (
+          <Button size="sm" onClick={handleOpenCompose}>
+            <Plus size={16} className="mr-1" />
+            Νέο Email
+          </Button>
+        )}
+      </div>
+
+      {/* No email warning */}
+      {!clientEmail && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-700">
+          Ο πελάτης δεν έχει καταχωρημένο email
+        </div>
+      )}
+
       {/* Loading */}
       {isLoading && (
         <div className="text-center py-8">
@@ -65,7 +190,12 @@ export default function ClientEmailsTab({
                         ? new Date(email.sent_at).toLocaleString('el-GR')
                         : '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{email.subject}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(email.status)}
+                        {email.subject}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-600">{email.recipient_email}</td>
                     <td className="px-4 py-3">
                       <span
@@ -87,6 +217,102 @@ export default function ClientEmailsTab({
           </table>
         </div>
       )}
+
+      {/* Compose Email Modal */}
+      <Modal
+        isOpen={isComposeOpen}
+        onClose={() => {
+          setIsComposeOpen(false);
+          setComposeForm({ templateId: '', subject: '', body: '' });
+          setError(null);
+        }}
+        title="Νέο Email"
+        size="xl"
+      >
+        <div className="space-y-4">
+          {/* Recipient info */}
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-sm">
+              <span className="text-gray-500">Προς:</span>{' '}
+              <span className="font-medium">{clientName}</span>{' '}
+              <span className="text-gray-500">({clientEmail})</span>
+            </p>
+          </div>
+
+          {/* Error message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+              <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <span className="text-sm text-red-700">{error}</span>
+            </div>
+          )}
+
+          {/* Template Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Πρότυπο</label>
+            <select
+              value={composeForm.templateId}
+              onChange={(e) => handleTemplateSelect(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loadingTemplates}
+            >
+              <option value="">-- Χωρίς πρότυπο --</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Subject */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Θέμα</label>
+            <input
+              type="text"
+              value={composeForm.subject}
+              onChange={(e) => setComposeForm((prev) => ({ ...prev, subject: e.target.value }))}
+              placeholder="Θέμα email..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Body */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Μήνυμα</label>
+            <textarea
+              value={composeForm.body}
+              onChange={(e) => setComposeForm((prev) => ({ ...prev, body: e.target.value }))}
+              placeholder="Κείμενο email..."
+              rows={8}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4 border-t border-gray-200">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsComposeOpen(false);
+                setComposeForm({ templateId: '', subject: '', body: '' });
+                setError(null);
+              }}
+            >
+              Ακύρωση
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={sending || !composeForm.subject.trim() || !composeForm.body.trim()}
+              isLoading={sending}
+              className="flex-1"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              Αποστολή
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

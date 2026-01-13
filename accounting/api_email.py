@@ -13,7 +13,7 @@ from django.db.models import Q
 
 from .models import (
     ClientProfile, MonthlyObligation, EmailTemplate, EmailLog, ClientDocument,
-    EmailSettings
+    EmailSettings, RecipientList
 )
 from .services.email_service import EmailService
 
@@ -35,7 +35,7 @@ class EmailTemplateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'subject', 'body_html',
             'obligation_type', 'obligation_type_name',
-            'is_active', 'created_at', 'updated_at'
+            'is_active', 'requires_approval', 'created_at', 'updated_at'
         ]
 
 
@@ -1218,3 +1218,328 @@ def email_settings_send_test(request):
             'success': False,
             'message': f'Σφάλμα: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================
+# RECIPIENT LISTS
+# ============================================
+
+class RecipientListSerializer(serializers.ModelSerializer):
+    """Serializer for RecipientList"""
+    client_count = serializers.IntegerField(read_only=True)
+    email_count = serializers.IntegerField(read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.get_full_name',
+        read_only=True,
+        allow_null=True
+    )
+    clients_data = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RecipientList
+        fields = [
+            'id', 'name', 'description', 'clients', 'clients_data',
+            'requires_approval', 'is_active',
+            'client_count', 'email_count',
+            'created_at', 'updated_at', 'created_by', 'created_by_name'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by']
+
+    def get_clients_data(self, obj):
+        """Return basic client info for display"""
+        return list(obj.clients.values('id', 'eponimia', 'afm', 'email'))
+
+
+class RecipientListCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating RecipientList"""
+    client_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False
+    )
+
+    class Meta:
+        model = RecipientList
+        fields = ['id', 'name', 'description', 'client_ids', 'requires_approval', 'is_active']
+
+    def create(self, validated_data):
+        client_ids = validated_data.pop('client_ids', [])
+        recipient_list = RecipientList.objects.create(**validated_data)
+        if client_ids:
+            clients = ClientProfile.objects.filter(id__in=client_ids)
+            recipient_list.clients.set(clients)
+        return recipient_list
+
+    def update(self, instance, validated_data):
+        client_ids = validated_data.pop('client_ids', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if client_ids is not None:
+            clients = ClientProfile.objects.filter(id__in=client_ids)
+            instance.clients.set(clients)
+        return instance
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def recipient_lists(request):
+    """
+    GET /api/v1/email/recipient-lists/
+    List all recipient lists
+
+    POST /api/v1/email/recipient-lists/
+    Create a new recipient list
+    """
+    if request.method == 'GET':
+        lists = RecipientList.objects.filter(is_active=True).order_by('name')
+        serializer = RecipientListSerializer(lists, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = RecipientListCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            recipient_list = serializer.save(created_by=request.user)
+            return Response(
+                RecipientListSerializer(recipient_list).data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def recipient_list_detail(request, list_id):
+    """
+    GET /api/v1/email/recipient-lists/{id}/
+    Get single recipient list
+
+    PUT /api/v1/email/recipient-lists/{id}/
+    Update a recipient list
+
+    DELETE /api/v1/email/recipient-lists/{id}/
+    Soft-delete a recipient list
+    """
+    try:
+        recipient_list = RecipientList.objects.get(id=list_id)
+    except RecipientList.DoesNotExist:
+        return Response(
+            {'error': 'Η λίστα δεν βρέθηκε.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if request.method == 'GET':
+        if not recipient_list.is_active:
+            return Response(
+                {'error': 'Η λίστα δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = RecipientListSerializer(recipient_list)
+        return Response(serializer.data)
+
+    elif request.method == 'PUT':
+        serializer = RecipientListCreateSerializer(
+            recipient_list, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(RecipientListSerializer(recipient_list).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        recipient_list.is_active = False
+        recipient_list.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def recipient_list_add_clients(request, list_id):
+    """
+    POST /api/v1/email/recipient-lists/{id}/add-clients/
+    Add clients to a recipient list
+
+    Body: {"client_ids": [1, 2, 3]}
+    """
+    try:
+        recipient_list = RecipientList.objects.get(id=list_id, is_active=True)
+    except RecipientList.DoesNotExist:
+        return Response(
+            {'error': 'Η λίστα δεν βρέθηκε.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    client_ids = request.data.get('client_ids', [])
+    if not client_ids:
+        return Response(
+            {'error': 'Δεν δόθηκαν πελάτες.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    clients = ClientProfile.objects.filter(id__in=client_ids)
+    recipient_list.clients.add(*clients)
+
+    return Response({
+        'success': True,
+        'message': f'Προστέθηκαν {clients.count()} πελάτες.',
+        'list': RecipientListSerializer(recipient_list).data
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def recipient_list_remove_clients(request, list_id):
+    """
+    POST /api/v1/email/recipient-lists/{id}/remove-clients/
+    Remove clients from a recipient list
+
+    Body: {"client_ids": [1, 2, 3]}
+    """
+    try:
+        recipient_list = RecipientList.objects.get(id=list_id, is_active=True)
+    except RecipientList.DoesNotExist:
+        return Response(
+            {'error': 'Η λίστα δεν βρέθηκε.'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    client_ids = request.data.get('client_ids', [])
+    if not client_ids:
+        return Response(
+            {'error': 'Δεν δόθηκαν πελάτες.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    clients = ClientProfile.objects.filter(id__in=client_ids)
+    recipient_list.clients.remove(*clients)
+
+    return Response({
+        'success': True,
+        'message': f'Αφαιρέθηκαν {clients.count()} πελάτες.',
+        'list': RecipientListSerializer(recipient_list).data
+    })
+
+
+# ============================================
+# SEND TO LIST
+# ============================================
+
+class SendToListSerializer(serializers.Serializer):
+    """Serializer for sending email to a recipient list"""
+    list_id = serializers.IntegerField()
+    subject = serializers.CharField(max_length=500)
+    body = serializers.CharField()
+    template_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate_list_id(self, value):
+        try:
+            recipient_list = RecipientList.objects.get(id=value, is_active=True)
+            if recipient_list.email_count == 0:
+                raise serializers.ValidationError('Η λίστα δεν έχει πελάτες με email.')
+        except RecipientList.DoesNotExist:
+            raise serializers.ValidationError('Η λίστα δεν βρέθηκε.')
+        return value
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_to_list(request):
+    """
+    POST /api/v1/email/send-to-list/
+    Send email to all clients in a recipient list
+
+    Body: {
+        "list_id": 1,
+        "subject": "Θέμα",
+        "body": "Κείμενο email (HTML)",
+        "template_id": 1  (optional)
+    }
+
+    Returns results for each recipient.
+    Checks requires_approval on both list and template.
+    """
+    serializer = SendToListSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    list_id = serializer.validated_data['list_id']
+    subject = serializer.validated_data['subject']
+    body = serializer.validated_data['body']
+    template_id = serializer.validated_data.get('template_id')
+
+    recipient_list = RecipientList.objects.get(id=list_id)
+    template = None
+    if template_id:
+        try:
+            template = EmailTemplate.objects.get(id=template_id, is_active=True)
+        except EmailTemplate.DoesNotExist:
+            pass
+
+    # Check if approval is required
+    requires_approval = recipient_list.requires_approval
+    if template and template.requires_approval:
+        requires_approval = True
+
+    # Get clients with valid emails
+    clients = recipient_list.get_clients_with_emails()
+
+    results = {
+        'sent': 0,
+        'failed': 0,
+        'skipped': 0,
+        'details': []
+    }
+
+    for client in clients:
+        # Render template variables for each client
+        rendered_subject = subject
+        rendered_body = body
+
+        # Simple variable replacement
+        variables = {
+            'client_name': client.eponimia or client.onoma or '',
+            'client_afm': client.afm or '',
+            'client_email': client.email or '',
+        }
+
+        for key, value in variables.items():
+            placeholder = '{' + key + '}'
+            rendered_subject = rendered_subject.replace(placeholder, str(value) if value else '')
+            rendered_body = rendered_body.replace(placeholder, str(value) if value else '')
+
+        # Send email
+        success, result = EmailService.send_email(
+            recipient_email=client.email,
+            subject=rendered_subject,
+            body=rendered_body,
+            client=client,
+            template=template,
+            user=request.user
+        )
+
+        if success:
+            results['sent'] += 1
+            results['details'].append({
+                'client_id': client.id,
+                'client': client.eponimia or client.onoma,
+                'email': client.email,
+                'status': 'sent',
+                'message': 'Επιτυχής αποστολή'
+            })
+        else:
+            results['failed'] += 1
+            results['details'].append({
+                'client_id': client.id,
+                'client': client.eponimia or client.onoma,
+                'email': client.email,
+                'status': 'failed',
+                'message': str(result)
+            })
+
+    return Response({
+        'success': True,
+        'message': f'Στάλθηκαν {results["sent"]} από {clients.count()} emails.',
+        'list_name': recipient_list.name,
+        'results': results
+    })
