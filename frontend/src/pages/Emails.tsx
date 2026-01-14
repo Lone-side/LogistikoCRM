@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components';
 import { Modal } from '../components/Modal';
-import api from '../lib/api';
+import apiClient from '../api/client';
 
 // Types
 interface EmailLog {
@@ -126,7 +126,7 @@ export default function Emails() {
   const fetchEmailHistory = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/v1/email/history/?page=1&page_size=50');
+      const response = await apiClient.get('/v1/email/history/?page=1&page_size=50');
       setEmailHistory(response.data.results || []);
     } catch (err) {
       setError('Σφάλμα φόρτωσης ιστορικού');
@@ -138,7 +138,7 @@ export default function Emails() {
   const fetchTemplates = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/v1/email/templates/');
+      const response = await apiClient.get('/v1/email/templates/');
       setTemplates(response.data || []);
     } catch (err) {
       setError('Σφάλμα φόρτωσης προτύπων');
@@ -150,7 +150,7 @@ export default function Emails() {
   const fetchRecipientLists = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/v1/email/recipient-lists/');
+      const response = await apiClient.get('/v1/email/recipient-lists/');
       setRecipientLists(response.data || []);
     } catch (err) {
       setError('Σφάλμα φόρτωσης λιστών');
@@ -161,7 +161,7 @@ export default function Emails() {
 
   const fetchClients = async () => {
     try {
-      const response = await api.get('/v1/clients/?page_size=1000');
+      const response = await apiClient.get('/v1/clients/?page_size=1000');
       setClients(response.data.results || []);
     } catch (err) {
       console.error('Error fetching clients:', err);
@@ -182,7 +182,7 @@ export default function Emails() {
           setError('Επιλέξτε πελάτη');
           return;
         }
-        await api.post('/v1/email/send/', {
+        await apiClient.post('/v1/email/send/', {
           client_id: Number(composeForm.clientId),
           subject: composeForm.subject,
           body: composeForm.body,
@@ -193,7 +193,7 @@ export default function Emails() {
           setError('Επιλέξτε λίστα');
           return;
         }
-        await api.post('/v1/email/send-to-list/', {
+        await apiClient.post('/v1/email/send-to-list/', {
           list_id: Number(composeForm.listId),
           subject: composeForm.subject,
           body: composeForm.body,
@@ -248,14 +248,14 @@ export default function Emails() {
 
     try {
       if (editingList) {
-        await api.put(`/v1/email/recipient-lists/${editingList.id}/`, {
+        await apiClient.put(`/v1/email/recipient-lists/${editingList.id}/`, {
           name: listForm.name,
           description: listForm.description,
           requires_approval: listForm.requires_approval,
           client_ids: listForm.selectedClients,
         });
       } else {
-        await api.post('/v1/email/recipient-lists/', {
+        await apiClient.post('/v1/email/recipient-lists/', {
           name: listForm.name,
           description: listForm.description,
           requires_approval: listForm.requires_approval,
@@ -298,7 +298,7 @@ export default function Emails() {
     }
 
     try {
-      await api.delete(`/v1/email/recipient-lists/${listId}/`);
+      await apiClient.delete(`/v1/email/recipient-lists/${listId}/`);
       fetchRecipientLists();
     } catch (err) {
       setError('Σφάλμα διαγραφής λίστας');

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { RefreshCw, Plus, Send, CheckCircle, XCircle, Clock, Mail } from 'lucide-react';
 import { Button } from '../Button';
 import { Modal } from '../Modal';
-import api from '../../lib/api';
+import apiClient from '../../api/client';
 
 // Email interface
 export interface EmailItem {
@@ -55,7 +55,7 @@ export default function ClientEmailsTab({
   const fetchTemplates = async () => {
     setLoadingTemplates(true);
     try {
-      const response = await api.get('/v1/email/templates/');
+      const response = await apiClient.get('/v1/email/templates/');
       setTemplates(response.data || []);
     } catch (err) {
       console.error('Error fetching templates:', err);
@@ -94,7 +94,7 @@ export default function ClientEmailsTab({
     setSending(true);
     setError(null);
     try {
-      await api.post('/v1/email/send/', {
+      await apiClient.post('/v1/email/send/', {
         client_id: clientId,
         subject: composeForm.subject,
         body: composeForm.body,
