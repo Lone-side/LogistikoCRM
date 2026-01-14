@@ -99,6 +99,41 @@ class EmailService:
         return get_connection()
 
     @staticmethod
+    def _get_company_context():
+        """
+        Get company/accountant context from EmailSettings model (preferred) or Django settings.
+
+        Returns:
+            dict with company/accountant variables
+        """
+        from accounting.models import EmailSettings
+
+        # Try to get from EmailSettings model first
+        try:
+            email_settings = EmailSettings.get_settings()
+            if email_settings:
+                return {
+                    'accountant_name': email_settings.accountant_name or getattr(settings, 'ACCOUNTANT_NAME', ''),
+                    'accountant_title': email_settings.accountant_title or getattr(settings, 'ACCOUNTANT_TITLE', ''),
+                    'company_name': email_settings.company_name or getattr(settings, 'COMPANY_NAME', ''),
+                    'company_phone': email_settings.company_phone or getattr(settings, 'COMPANY_PHONE', ''),
+                    'company_website': email_settings.company_website or getattr(settings, 'COMPANY_WEBSITE', ''),
+                    'email_signature': email_settings.email_signature or getattr(settings, 'EMAIL_SIGNATURE', ''),
+                }
+        except Exception as e:
+            logger.warning(f"Could not load EmailSettings: {e}")
+
+        # Fallback to Django settings
+        return {
+            'accountant_name': getattr(settings, 'ACCOUNTANT_NAME', ''),
+            'accountant_title': getattr(settings, 'ACCOUNTANT_TITLE', ''),
+            'company_name': getattr(settings, 'COMPANY_NAME', ''),
+            'company_phone': getattr(settings, 'COMPANY_PHONE', ''),
+            'company_website': getattr(settings, 'COMPANY_WEBSITE', ''),
+            'email_signature': getattr(settings, 'EMAIL_SIGNATURE', ''),
+        }
+
+    @staticmethod
     def get_context_for_obligation(obligation, user=None):
         """
         Build context dictionary for an obligation.
@@ -121,6 +156,9 @@ class EmailService:
             10: 'Οκτώβριος', 11: 'Νοέμβριος', 12: 'Δεκέμβριος'
         }
 
+        # Get company context from EmailSettings or Django settings
+        company_context = EmailService._get_company_context()
+
         context = {
             # Client variables
             'client_name': client.eponimia,
@@ -138,16 +176,11 @@ class EmailService:
             'deadline': obligation.deadline.strftime('%d/%m/%Y') if obligation.deadline else '',
             'completed_date': timezone.now().date().strftime('%d/%m/%Y'),
 
-            # Company/Accountant variables (from settings)
-            'accountant_name': getattr(settings, 'ACCOUNTANT_NAME', 'Λογιστικό Γραφείο'),
-            'accountant_title': getattr(settings, 'ACCOUNTANT_TITLE', ''),
-            'company_name': getattr(settings, 'COMPANY_NAME', 'Λογιστικό Γραφείο'),
-            'company_phone': getattr(settings, 'COMPANY_PHONE', ''),
-            'company_website': getattr(settings, 'COMPANY_WEBSITE', ''),
-            'email_signature': getattr(settings, 'EMAIL_SIGNATURE', ''),
+            # Company/Accountant variables (from EmailSettings model or Django settings)
+            **company_context,
 
             # User who sent the email
-            'sender_name': user.get_full_name() if user else getattr(settings, 'ACCOUNTANT_NAME', ''),
+            'sender_name': user.get_full_name() if user else company_context.get('accountant_name', ''),
         }
 
         return context
@@ -173,14 +206,15 @@ class EmailService:
         if obligation:
             context = EmailService.get_context_for_obligation(obligation, user)
         elif client:
-            # Build minimal context from client
+            # Build minimal context from client + company info from EmailSettings
+            company_context = EmailService._get_company_context()
             context = {
                 'client_name': client.eponimia,
                 'client_afm': client.afm,
                 'client_email': client.email or '',
-                'accountant_name': getattr(settings, 'ACCOUNTANT_NAME', 'Λογιστικό Γραφείο'),
-                'company_name': getattr(settings, 'COMPANY_NAME', 'Λογιστικό Γραφείο'),
+                'client_phone': client.kinito_tilefono or getattr(client, 'tilefono_epixeirisis_1', '') or '',
                 'completed_date': timezone.now().date().strftime('%d/%m/%Y'),
+                **company_context,
             }
 
         # Add any extra context

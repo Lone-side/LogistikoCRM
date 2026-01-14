@@ -84,11 +84,20 @@ class EmailLogSerializer(serializers.ModelSerializer):
 
 
 class SendEmailSerializer(serializers.Serializer):
-    """Serializer for sending email"""
+    """Serializer for sending email
+
+    Supports two modes:
+    1. Direct: Provide subject and body directly
+    2. Template: Provide template_id only (subject/body auto-rendered from template)
+    """
     client_id = serializers.IntegerField()
-    subject = serializers.CharField(max_length=500)
-    body = serializers.CharField()
+    subject = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    body = serializers.CharField(required=False, allow_blank=True)
     template_id = serializers.IntegerField(required=False, allow_null=True)
+    render_template = serializers.BooleanField(
+        default=True,
+        help_text='Αν True, αντικαθιστά τα placeholders {client_name}, {company_name} κλπ.'
+    )
     attachment_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
@@ -111,6 +120,18 @@ class SendEmailSerializer(serializers.Serializer):
             except EmailTemplate.DoesNotExist:
                 raise serializers.ValidationError('Το πρότυπο email δεν βρέθηκε.')
         return value
+
+    def validate(self, data):
+        """Ensure we have either template_id or subject+body"""
+        template_id = data.get('template_id')
+        subject = data.get('subject')
+        body = data.get('body')
+
+        if not template_id and (not subject or not body):
+            raise serializers.ValidationError(
+                'Απαιτείται είτε template_id είτε subject και body.'
+            )
+        return data
 
 
 class SendObligationNoticeSerializer(serializers.Serializer):
@@ -310,9 +331,10 @@ def send_email(request):
 
     Body: {
         "client_id": 123,
-        "subject": "Θέμα",
-        "body": "Κείμενο email (HTML)",
-        "template_id": 1,  (optional)
+        "subject": "Θέμα",  (optional if template_id provided)
+        "body": "Κείμενο email (HTML)",  (optional if template_id provided)
+        "template_id": 1,  (optional - if provided, can auto-render)
+        "render_template": true,  (default true - replaces {placeholders})
         "attachment_ids": [1, 2, 3]  (optional - document IDs)
     }
     """
@@ -322,15 +344,54 @@ def send_email(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     client_id = serializer.validated_data['client_id']
-    subject = serializer.validated_data['subject']
-    body = serializer.validated_data['body']
+    subject = serializer.validated_data.get('subject', '')
+    body = serializer.validated_data.get('body', '')
     template_id = serializer.validated_data.get('template_id')
+    render_template_flag = serializer.validated_data.get('render_template', True)
     attachment_ids = serializer.validated_data.get('attachment_ids', [])
 
     client = ClientProfile.objects.get(id=client_id)
     template = None
+
     if template_id:
         template = EmailTemplate.objects.get(id=template_id)
+
+        # If no subject/body provided, or render_template is True, render the template
+        if not subject or not body or render_template_flag:
+            rendered_subject, rendered_body = EmailService.render_template(
+                template=template,
+                client=client,
+                user=request.user
+            )
+            # Use rendered values if no custom values provided
+            if not subject:
+                subject = rendered_subject
+            elif render_template_flag:
+                # Replace placeholders in custom subject
+                subject = rendered_subject if '{' not in subject else subject
+                # Actually render the custom subject with context
+                company_context = EmailService._get_company_context()
+                context = {
+                    'client_name': client.eponimia,
+                    'client_afm': client.afm,
+                    **company_context,
+                }
+                for key, value in context.items():
+                    subject = subject.replace('{' + key + '}', str(value) if value else '')
+
+            if not body:
+                body = rendered_body
+            elif render_template_flag:
+                # Replace placeholders in custom body
+                company_context = EmailService._get_company_context()
+                context = {
+                    'client_name': client.eponimia,
+                    'client_afm': client.afm,
+                    'client_email': client.email or '',
+                    **company_context,
+                }
+                for key, value in context.items():
+                    body = body.replace('{' + key + '}', str(value) if value else '')
 
     # Get attachments
     attachments = []
