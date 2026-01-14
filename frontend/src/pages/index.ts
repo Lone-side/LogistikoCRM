@@ -7,7 +7,7 @@ export { default as Calendar } from './Calendar';
 export { default as Files } from './Files';
 export { default as Calls } from './Calls';
 export { default as Tickets } from './Tickets';
-export { default as Emails } from './EmailTemplates';
+export { default as Emails } from './Emails';
 export { default as EmailSettings } from './EmailSettings';
 export { default as Reports } from './Reports';
 export { default as Settings } from './Settings';
