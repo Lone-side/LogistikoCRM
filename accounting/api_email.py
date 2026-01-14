@@ -1035,6 +1035,24 @@ def email_history(request):
     })
 
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def email_log_delete(request, log_id):
+    """
+    DELETE /api/v1/email/history/<log_id>/
+    Delete a single email log entry
+    """
+    try:
+        email_log = EmailLog.objects.get(id=log_id)
+        email_log.delete()
+        return Response({'status': 'deleted'}, status=status.HTTP_200_OK)
+    except EmailLog.DoesNotExist:
+        return Response(
+            {'error': 'Email log not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
 # ============================================
 # EMAIL SETTINGS API
 # ============================================

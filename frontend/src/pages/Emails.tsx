@@ -305,6 +305,19 @@ export default function Emails() {
     }
   };
 
+  const handleDeleteEmail = async (emailId: number) => {
+    if (!window.confirm('Είστε σίγουροι ότι θέλετε να διαγράψετε αυτό το email από το ιστορικό;')) {
+      return;
+    }
+
+    try {
+      await apiClient.delete(`api/v1/email/history/${emailId}/`);
+      fetchEmailHistory();
+    } catch (err) {
+      setError('Σφάλμα διαγραφής email');
+    }
+  };
+
   const toggleClientInList = (clientId: number) => {
     setListForm((prev) => ({
       ...prev,
@@ -423,13 +436,22 @@ export default function Emails() {
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-gray-500">
-                              {new Date(email.sent_at).toLocaleString('el-GR')}
-                            </p>
-                            {email.sent_by_name && (
-                              <p className="text-xs text-gray-400">από {email.sent_by_name}</p>
-                            )}
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <p className="text-sm text-gray-500">
+                                {new Date(email.sent_at).toLocaleString('el-GR')}
+                              </p>
+                              {email.sent_by_name && (
+                                <p className="text-xs text-gray-400">από {email.sent_by_name}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleDeleteEmail(email.id)}
+                              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                              title="Διαγραφή"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </div>
                         </div>
                       </div>
