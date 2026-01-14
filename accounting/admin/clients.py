@@ -76,6 +76,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
         'katigoria_vivlion',
         'is_active',
         'obligations_status',
+        'tickets_count',
         'documents_count',
         'created_at',
         'folder_link',
@@ -139,6 +140,35 @@ class ClientProfileAdmin(admin.ModelAdmin):
         if count > 0:
             return format_html('<span style="color: #28a745; font-weight: bold;">{}</span>', count)
         return '-'
+
+    @admin.display(description='🎫 Tickets')
+    def tickets_count(self, obj):
+        """Count of client tickets with status breakdown"""
+        total = obj.voip_tickets.count()
+        if total == 0:
+            return format_html('<span style="color: #999;">—</span>')
+
+        # Count open tickets (open, assigned, in_progress)
+        open_count = obj.voip_tickets.filter(status__in=['open', 'assigned', 'in_progress']).count()
+
+        if open_count > 0:
+            # Has open tickets - show warning style with link
+            url = reverse('admin:accounting_ticket_changelist') + f'?client__id__exact={obj.id}&status__in=open,assigned,in_progress'
+            return format_html(
+                '<a href="{}" style="background: #ef4444; color: white; padding: 2px 8px; '
+                'border-radius: 10px; font-size: 11px; text-decoration: none; font-weight: bold;" '
+                'title="{} ανοιχτά από {} συνολικά">{} 🔴</a>',
+                url, open_count, total, open_count
+            )
+        else:
+            # All closed - show success style
+            url = reverse('admin:accounting_ticket_changelist') + f'?client__id__exact={obj.id}'
+            return format_html(
+                '<a href="{}" style="background: #10b981; color: white; padding: 2px 8px; '
+                'border-radius: 10px; font-size: 11px; text-decoration: none;" '
+                'title="{} tickets (όλα κλειστά)">{} ✅</a>',
+                url, total, total
+            )
 
     list_filter = [
         HasObligationsFilter,  # Νέο φίλτρο υποχρεώσεων

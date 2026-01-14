@@ -321,9 +321,80 @@ class VoIPCallLogAdmin(admin.ModelAdmin):
     created_at_formatted.short_description = 'Χρόνος'
 
 
+# ============================================
+# CUSTOM FILTERS FOR TICKETS
+# ============================================
+
+class HasClientFilter(admin.SimpleListFilter):
+    """Filter tickets by client presence"""
+    title = 'Πελάτης'
+    parameter_name = 'has_client'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('yes', '✅ Με πελάτη'),
+            ('no', '⚠️ Χωρίς πελάτη'),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(client__isnull=False)
+        if self.value() == 'no':
+            return queryset.filter(client__isnull=True)
+        return queryset
+
+
+class HasCallFilter(admin.SimpleListFilter):
+    """Filter tickets by call presence"""
+    title = 'Κλήση'
+    parameter_name = 'has_call'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('yes', '📞 Από κλήση'),
+            ('no', '📝 Χειροκίνητο'),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() == 'yes':
+            return queryset.filter(call__isnull=False)
+        if self.value() == 'no':
+            return queryset.filter(call__isnull=True)
+        return queryset
+
+
+class TicketAgeFilter(admin.SimpleListFilter):
+    """Filter tickets by age"""
+    title = 'Ηλικία Ticket'
+    parameter_name = 'age'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('today', '📅 Σήμερα'),
+            ('week', '📆 Τελευταία εβδομάδα'),
+            ('month', '🗓️ Τελευταίος μήνας'),
+            ('old', '⚠️ Παλαιότερα (>30 ημέρες)'),
+        )
+
+    def queryset(self, request, queryset):
+        from django.utils import timezone
+        from datetime import timedelta
+
+        now = timezone.now()
+        if self.value() == 'today':
+            return queryset.filter(created_at__date=now.date())
+        if self.value() == 'week':
+            return queryset.filter(created_at__gte=now - timedelta(days=7))
+        if self.value() == 'month':
+            return queryset.filter(created_at__gte=now - timedelta(days=30))
+        if self.value() == 'old':
+            return queryset.filter(created_at__lt=now - timedelta(days=30))
+        return queryset
+
+
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
-    """Professional Ticket Admin"""
+    """Professional Ticket Admin with enhanced filters and actions"""
 
     list_display = [
         'ticket_id_display',
@@ -334,15 +405,19 @@ class TicketAdmin(admin.ModelAdmin):
         'priority_badge',
         'assigned_to_display',
         'created_at_formatted',
-        'days_open'
+        'days_open',
+        'action_buttons',
     ]
 
     list_filter = [
         'status',
         'priority',
-        'created_at',
+        HasClientFilter,
+        HasCallFilter,
+        TicketAgeFilter,
         'assigned_to',
         ('client', admin.RelatedOnlyFieldListFilter),
+        'created_at',
     ]
 
     search_fields = [
@@ -490,6 +565,43 @@ class TicketAdmin(admin.ModelAdmin):
             color, text
         )
     days_open.short_description = 'Διάρκεια'
+
+    def action_buttons(self, obj):
+        """Action buttons for quick access: Edit, Delete"""
+        edit_url = reverse('admin:accounting_ticket_change', args=[obj.pk])
+        delete_url = reverse('admin:accounting_ticket_delete', args=[obj.pk])
+
+        return format_html(
+            '<div style="white-space: nowrap;">'
+            '<a href="{}" style="background: #3b82f6; color: white; padding: 4px 8px; '
+            'border-radius: 4px; text-decoration: none; font-size: 11px; margin-right: 4px;" '
+            'title="Επεξεργασία">✏️</a>'
+            '<a href="{}" style="background: #ef4444; color: white; padding: 4px 8px; '
+            'border-radius: 4px; text-decoration: none; font-size: 11px;" '
+            'title="Διαγραφή">🗑️</a>'
+            '</div>',
+            edit_url, delete_url
+        )
+    action_buttons.short_description = 'Ενέργειες'
+
+    # Override changelist_view to add quick filter links
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+
+        # Quick filter stats
+        from django.db.models import Count
+        base_qs = self.get_queryset(request)
+
+        extra_context['quick_filters'] = {
+            'all': base_qs.count(),
+            'open': base_qs.filter(status='open').count(),
+            'in_progress': base_qs.filter(status='in_progress').count(),
+            'urgent': base_qs.filter(priority='urgent', status__in=['open', 'assigned', 'in_progress']).count(),
+            'unassigned': base_qs.filter(assigned_to__isnull=True, status__in=['open', 'assigned', 'in_progress']).count(),
+            'today': base_qs.filter(created_at__date=datetime.now().date()).count(),
+        }
+
+        return super().changelist_view(request, extra_context=extra_context)
 
     # Actions
     def mark_as_assigned(self, request, queryset):
