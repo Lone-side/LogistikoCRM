@@ -708,3 +708,142 @@ export function getFileColor(fileType: string): string {
   };
   return colorMap[type] || '#6B7280';
 }
+
+
+// ============================================
+// FILESYSTEM BROWSER (NEW)
+// ============================================
+
+export interface FilesystemFolder {
+  name: string;
+  path: string;
+  item_count: number;
+}
+
+export interface FilesystemFile {
+  name: string;
+  path: string;
+  size: number;
+  size_display: string;
+  modified: string;
+  extension: string;
+  in_database: boolean;
+}
+
+export interface FilesystemBrowseResponse {
+  path: string;
+  exists: boolean;
+  breadcrumb: { name: string; path: string }[];
+  folders: FilesystemFolder[];
+  files: FilesystemFile[];
+  total_folders: number;
+  total_files: number;
+  message?: string;
+}
+
+export interface FolderTemplate {
+  id: string;
+  name: string;
+  description: string;
+  folder_count: number;
+}
+
+export interface SyncResponse {
+  success: boolean;
+  synced: number;
+  errors: number;
+  synced_files: { filename: string; path: string; id: number }[];
+  error_files: { filename: string; error: string }[];
+  message: string;
+}
+
+/**
+ * Browse actual filesystem (not just database records)
+ */
+export function useFilesystemBrowser(params?: { path?: string; client_id?: number }) {
+  return useQuery({
+    queryKey: [FILE_MANAGER_KEY, 'filesystem', params],
+    queryFn: async () => {
+      const response = await apiClient.get<FilesystemBrowseResponse>(
+        'api/v1/file-manager/filesystem/',
+        { params }
+      );
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Create a new folder in filesystem
+ */
+export function useCreateFolder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { path: string; folder_name: string }) => {
+      const response = await apiClient.post(
+        'api/v1/file-manager/filesystem/create-folder/',
+        data
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [FILE_MANAGER_KEY, 'filesystem'] });
+    },
+  });
+}
+
+/**
+ * Get available folder templates
+ */
+export function useFolderTemplates() {
+  return useQuery({
+    queryKey: [FILE_MANAGER_KEY, 'templates'],
+    queryFn: async () => {
+      const response = await apiClient.get<{ templates: FolderTemplate[] }>(
+        'api/v1/file-manager/filesystem/templates/'
+      );
+      return response.data.templates;
+    },
+  });
+}
+
+/**
+ * Apply a folder template to a client
+ */
+export function useApplyTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { client_id: number; template?: string }) => {
+      const response = await apiClient.post(
+        'api/v1/file-manager/filesystem/templates/',
+        data
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [FILE_MANAGER_KEY, 'filesystem'] });
+    },
+  });
+}
+
+/**
+ * Sync filesystem files to database
+ */
+export function useSyncFilesystem() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { client_id: number }) => {
+      const response = await apiClient.post<SyncResponse>(
+        'api/v1/file-manager/filesystem/sync/',
+        data
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [FILE_MANAGER_KEY] });
+    },
+  });
+}

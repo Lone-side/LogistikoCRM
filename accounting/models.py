@@ -1989,102 +1989,29 @@ def create_client_folders(sender, instance, created, **kwargs):
     """
     Auto-create folder structure για νέους πελάτες.
 
-    Χρησιμοποιεί τις ρυθμίσεις από FilingSystemSettings για:
-    - Τοποθεσία (local ή network)
-    - Μόνιμο φάκελο (00_ΜΟΝΙΜΑ)
-    - Κατηγορίες φακέλων
+    Απλοποιημένη έκδοση: Χρησιμοποιεί το folder_creation_mode
+    από τις ρυθμίσεις για να καθορίσει τι θα δημιουργηθεί.
+
+    Modes:
+    - none: Καμία αυτόματη δημιουργία
+    - minimal: Μόνο φάκελος πελάτη
+    - basic: Πελάτης + τρέχον έτος
+    - full: Πλήρης δομή
     """
     if not created:
         return
 
-    # Λήψη ρυθμίσεων αρχειοθέτησης
     try:
         from settings.models import FilingSystemSettings
         filing_settings = FilingSystemSettings.get_settings()
-        archive_root = filing_settings.get_archive_root()
-    except Exception:
-        archive_root = str(settings.MEDIA_ROOT)
-        filing_settings = None
 
-    base_path = os.path.join(archive_root, get_client_folder(instance))
+        # Χρήση της νέας method που χειρίζεται τα πάντα
+        created_paths = filing_settings.create_folders_for_client(instance)
 
-    try:
-        # === ΜΟΝΙΜΟΣ ΦΑΚΕΛΟΣ (00_ΜΟΝΙΜΑ) ===
-        if filing_settings and filing_settings.enable_permanent_folder:
-            permanent_path = os.path.join(base_path, filing_settings.permanent_folder_name)
-            for category in filing_settings.get_permanent_folder_categories():
-                os.makedirs(os.path.join(permanent_path, category), exist_ok=True)
-        else:
-            # Fallback - δημιουργία βασικών φακέλων
-            for category in ['contracts', 'registration', 'licenses']:
-                os.makedirs(os.path.join(base_path, '00_ΜΟΝΙΜΑ', category), exist_ok=True)
-
-        # === ΤΡΕΧΟΝ ΕΤΟΣ ===
-        current_year = datetime.now().year
-        year_path = os.path.join(base_path, str(current_year))
-
-        # Δημιουργία μηνιαίων φακέλων για τρέχον έτος
-        monthly_categories = (
-            filing_settings.get_monthly_folder_categories()
-            if filing_settings else
-            ['vat', 'apd', 'myf', 'payroll', 'invoices_issued', 'invoices_received', 'bank', 'general']
-        )
-
-        for month in range(1, 13):
-            if filing_settings and filing_settings.use_greek_month_names:
-                month_name = filing_settings.get_month_folder_name(month)
-            else:
-                month_name = f"{month:02d}"
-
-            month_path = os.path.join(year_path, month_name)
-            for category in monthly_categories:
-                os.makedirs(os.path.join(month_path, category), exist_ok=True)
-
-        # === ΕΤΗΣΙΟΣ ΦΑΚΕΛΟΣ (13_ΕΤΗΣΙΑ) ===
-        if filing_settings and filing_settings.enable_yearend_folder:
-            yearend_path = os.path.join(year_path, filing_settings.yearend_folder_name)
-            for category in filing_settings.get_yearend_folder_categories():
-                os.makedirs(os.path.join(yearend_path, category), exist_ok=True)
-        else:
-            # Fallback
-            yearend_path = os.path.join(year_path, '13_ΕΤΗΣΙΑ')
-            for category in ['e1', 'e2', 'e3', 'enfia', 'balance']:
-                os.makedirs(os.path.join(yearend_path, category), exist_ok=True)
-
-        # === INFO.txt ===
-        readme_path = os.path.join(base_path, 'INFO.txt')
-        with open(readme_path, 'w', encoding='utf-8') as f:
-            f.write(f"ΦΑΚΕΛΟΣ ΠΕΛΑΤΗ\n")
-            f.write(f"{'=' * 50}\n\n")
-            f.write(f"Επωνυμία: {instance.eponimia}\n")
-            f.write(f"ΑΦΜ: {instance.afm}\n")
-            f.write(f"ΔΟΥ: {instance.doy or '-'}\n")
-            f.write(f"Email: {instance.email or '-'}\n")
-            f.write(f"Τηλέφωνο: {instance.phone or '-'}\n")
-            f.write(f"\nΔημιουργία: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
-            f.write(f"\n{'=' * 50}\n")
-            f.write(f"ΔΟΜΗ ΦΑΚΕΛΩΝ\n")
-            f.write(f"{'=' * 50}\n\n")
-            f.write(f"00_ΜΟΝΙΜΑ/      → Μόνιμα έγγραφα (συμβάσεις, καταστατικό)\n")
-            f.write(f"  ├─ registration/  → Ιδρυτικά έγγραφα\n")
-            f.write(f"  ├─ contracts/     → Συμβάσεις\n")
-            f.write(f"  └─ licenses/      → Άδειες & πιστοποιητικά\n\n")
-            f.write(f"YYYY/           → Φάκελος έτους\n")
-            f.write(f"  ├─ 01-12/         → Μηνιαίοι φάκελοι\n")
-            f.write(f"  │   ├─ vat/           → ΦΠΑ\n")
-            f.write(f"  │   ├─ apd/           → ΑΠΔ/ΕΦΚΑ\n")
-            f.write(f"  │   ├─ myf/           → ΜΥΦ\n")
-            f.write(f"  │   ├─ payroll/       → Μισθοδοσία\n")
-            f.write(f"  │   ├─ invoices_issued/  → Εκδοθέντα τιμολόγια\n")
-            f.write(f"  │   ├─ invoices_received/→ Ληφθέντα τιμολόγια\n")
-            f.write(f"  │   ├─ bank/          → Τραπεζικά\n")
-            f.write(f"  │   └─ general/       → Γενικά\n")
-            f.write(f"  └─ 13_ΕΤΗΣΙΑ/     → Ετήσιες δηλώσεις\n")
-            f.write(f"      ├─ e1/            → Ε1 Φόρος Εισοδήματος\n")
-            f.write(f"      ├─ e2/            → Ε2 Ακίνητα\n")
-            f.write(f"      ├─ e3/            → Ε3 Οικονομικά Στοιχεία\n")
-            f.write(f"      ├─ enfia/         → ΕΝΦΙΑ\n")
-            f.write(f"      └─ balance/       → Ισολογισμός\n")
+        if created_paths:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Created {len(created_paths)} folders for client {instance.afm}")
 
     except Exception as e:
         import logging

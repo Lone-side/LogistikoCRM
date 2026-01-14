@@ -9,8 +9,7 @@ class FilingSystemSettings(models.Model):
     """
     Ρυθμίσεις Συστήματος Αρχειοθέτησης - Singleton model.
 
-    Επιτρέπει την προσαρμογή της δομής φακέλων και των
-    κανόνων αρχειοθέτησης για το λογιστικό γραφείο.
+    Απλοποιημένη προσέγγιση: Minimal by default, flexible by choice.
     """
 
     class Meta:
@@ -33,7 +32,23 @@ class FilingSystemSettings(models.Model):
         help_text='Ενεργοποίηση αποθήκευσης σε κοινόχρηστο φάκελο δικτύου'
     )
 
-    # === Δομή Φακέλων ===
+    # === ΝΕΕΣ Απλοποιημένες Ρυθμίσεις ===
+    FOLDER_CREATION_CHOICES = [
+        ('none', 'Καμία αυτόματη δημιουργία'),
+        ('minimal', 'Μόνο φάκελος πελάτη'),
+        ('basic', 'Πελάτης + Έτος'),
+        ('full', 'Πλήρης δομή (μήνες, κατηγορίες)'),
+    ]
+
+    folder_creation_mode = models.CharField(
+        'Αυτόματη Δημιουργία Φακέλων',
+        max_length=20,
+        choices=FOLDER_CREATION_CHOICES,
+        default='minimal',
+        help_text='Τι φακέλους να δημιουργεί αυτόματα για νέο πελάτη'
+    )
+
+    # === Δομή Φακέλων (για uploads) ===
     FOLDER_STRUCTURE_CHOICES = [
         ('standard', 'Τυπική (ΑΦΜ_Επωνυμία/Έτος/Μήνας/Κατηγορία)'),
         ('year_first', 'Πρώτα Έτος (Έτος/ΑΦΜ_Επωνυμία/Μήνας/Κατηγορία)'),
@@ -47,7 +62,7 @@ class FilingSystemSettings(models.Model):
         max_length=20,
         choices=FOLDER_STRUCTURE_CHOICES,
         default='standard',
-        help_text='Επιλογή τρόπου οργάνωσης φακέλων'
+        help_text='Επιλογή τρόπου οργάνωσης φακέλων κατά το upload'
     )
 
     custom_folder_template = models.CharField(
@@ -58,10 +73,18 @@ class FilingSystemSettings(models.Model):
         help_text='Template φακέλου. Μεταβλητές: {afm}, {name}, {year}, {month}, {category}, {month_name}'
     )
 
+    # === Folder Templates (για προαιρετική εφαρμογή) ===
+    folder_templates = models.JSONField(
+        'Templates Φακέλων',
+        default=dict,
+        blank=True,
+        help_text='Αποθηκευμένα templates δομής φακέλων που μπορεί να εφαρμόσει ο χρήστης'
+    )
+
     # === Μόνιμος Φάκελος ===
     enable_permanent_folder = models.BooleanField(
         'Μόνιμος Φάκελος (00_ΜΟΝΙΜΑ)',
-        default=True,
+        default=False,  # Changed to False - minimal by default
         help_text='Δημιουργία φακέλου για μόνιμα έγγραφα (συμβάσεις, καταστατικό, κλπ)'
     )
 
@@ -75,7 +98,7 @@ class FilingSystemSettings(models.Model):
     # === Ετήσιος Φάκελος ===
     enable_yearend_folder = models.BooleanField(
         'Φάκελος Ετήσιων Δηλώσεων',
-        default=True,
+        default=False,  # Changed to False - minimal by default
         help_text='Δημιουργία φακέλου 13_ΕΤΗΣΙΑ για ετήσιες δηλώσεις (Ε1, Ε2, Ε3, ΕΝΦΙΑ)'
     )
 
@@ -332,8 +355,119 @@ class FilingSystemSettings(models.Model):
         return ['vat', 'apd', 'myf', 'payroll', 'invoices_issued',
                 'invoices_received', 'bank', 'receipts', 'general']
 
+    # === ΝΕΕΣ Methods για flexible folder management ===
+
+    def should_auto_create_folders(self):
+        """Ελέγχει αν πρέπει να δημιουργηθούν φάκελοι αυτόματα."""
+        return self.folder_creation_mode != 'none'
+
+    def get_default_templates(self):
+        """
+        Επιστρέφει τα default folder templates που μπορεί να εφαρμόσει ο χρήστης.
+        """
+        return {
+            'minimal': {
+                'name': 'Ελάχιστη',
+                'description': 'Μόνο ο βασικός φάκελος πελάτη',
+                'structure': []
+            },
+            'basic': {
+                'name': 'Βασική',
+                'description': 'Πελάτης με φακέλους ανά έτος',
+                'structure': ['{year}']
+            },
+            'monthly': {
+                'name': 'Μηνιαία',
+                'description': 'Έτος > Μήνες (01-12)',
+                'structure': ['{year}/01', '{year}/02', '{year}/03', '{year}/04',
+                             '{year}/05', '{year}/06', '{year}/07', '{year}/08',
+                             '{year}/09', '{year}/10', '{year}/11', '{year}/12']
+            },
+            'accounting_simple': {
+                'name': 'Λογιστική Απλή',
+                'description': 'ΦΠΑ, Μισθοδοσία, Τιμολόγια, Γενικά',
+                'structure': ['ΦΠΑ', 'Μισθοδοσία', 'Τιμολόγια', 'Γενικά']
+            },
+            'accounting_full': {
+                'name': 'Λογιστική Πλήρης',
+                'description': 'Πλήρης δομή με μόνιμα, μηνιαία, ετήσια',
+                'structure': [
+                    '00_ΜΟΝΙΜΑ/Καταστατικό',
+                    '00_ΜΟΝΙΜΑ/Συμβάσεις',
+                    '00_ΜΟΝΙΜΑ/Άδειες',
+                    '{year}/01', '{year}/02', '{year}/03', '{year}/04',
+                    '{year}/05', '{year}/06', '{year}/07', '{year}/08',
+                    '{year}/09', '{year}/10', '{year}/11', '{year}/12',
+                    '{year}/13_ΕΤΗΣΙΑ/Ε1', '{year}/13_ΕΤΗΣΙΑ/Ε3',
+                    '{year}/13_ΕΤΗΣΙΑ/ΕΝΦΙΑ'
+                ]
+            }
+        }
+
+    def get_available_templates(self):
+        """Επιστρέφει default + custom templates."""
+        templates = self.get_default_templates()
+        if self.folder_templates:
+            templates.update(self.folder_templates)
+        return templates
+
+    def create_folders_for_client(self, client, template_name=None):
+        """
+        Δημιουργεί φακέλους για πελάτη βάσει mode ή template.
+
+        Args:
+            client: ClientProfile instance
+            template_name: Όνομα template (optional). Αν δεν δοθεί, χρησιμοποιεί το folder_creation_mode.
+
+        Returns:
+            list: Λίστα με τα paths που δημιουργήθηκαν
+        """
+        import re
+        from datetime import datetime
+
+        # Καθαρισμός επωνυμίας
+        safe_name = re.sub(r'[^\w\s-]', '', client.eponimia or '')[:30]
+        safe_name = safe_name.replace(' ', '_').strip('_') or 'client'
+
+        archive_root = self.get_archive_root()
+        client_folder = f"{client.afm}_{safe_name}"
+        base_path = os.path.join(archive_root, 'clients', client_folder)
+
+        created_paths = []
+        current_year = datetime.now().year
+
+        # Καθορισμός δομής
+        if template_name:
+            templates = self.get_available_templates()
+            template = templates.get(template_name, {})
+            structure = template.get('structure', [])
+        else:
+            # Βάσει folder_creation_mode
+            if self.folder_creation_mode == 'none':
+                return []
+            elif self.folder_creation_mode == 'minimal':
+                structure = []
+            elif self.folder_creation_mode == 'basic':
+                structure = ['{year}']
+            else:  # full
+                structure = self.get_default_templates()['accounting_full']['structure']
+
+        # Δημιουργία base folder
+        os.makedirs(base_path, exist_ok=True)
+        created_paths.append(base_path)
+
+        # Δημιουργία subfolders
+        for folder in structure:
+            folder_path = folder.replace('{year}', str(current_year))
+            full_path = os.path.join(base_path, folder_path)
+            os.makedirs(full_path, exist_ok=True)
+            created_paths.append(full_path)
+
+        return created_paths
+
     def __str__(self):
-        return f"Filing System Settings (Root: {self.get_archive_root()[:50]}...)"
+        mode_display = dict(self.FOLDER_CREATION_CHOICES).get(self.folder_creation_mode, '')
+        return f"Αρχειοθέτηση: {mode_display} ({self.get_archive_root()[:30]}...)"
 
 
 class BackupSettings(models.Model):

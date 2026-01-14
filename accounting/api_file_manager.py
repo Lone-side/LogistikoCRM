@@ -1002,7 +1002,7 @@ class RecentDocumentsView(APIView):
 
 
 class BrowseFoldersView(APIView):
-    """Browse folder structure"""
+    """Browse folder structure (database-based)"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1066,4 +1066,344 @@ class BrowseFoldersView(APIView):
                 'afm': c.afm,
                 'document_count': c.doc_count
             } for c in clients_with_docs]
+        })
+
+
+# ============================================
+# FILESYSTEM BROWSER API (NEW)
+# ============================================
+
+class FilesystemBrowserView(APIView):
+    """
+    Browse actual filesystem structure.
+    Allows viewing folders/files that exist on disk, even if not in database.
+
+    GET /api/v1/file-manager/filesystem/
+        ?path=clients/123456789_Company  - Browse specific path
+        ?client_id=1                     - Browse client folder
+
+    POST /api/v1/file-manager/filesystem/create-folder/
+        {"path": "clients/123456789_Company/NewFolder"}
+
+    POST /api/v1/file-manager/filesystem/sync/
+        {"client_id": 1}  - Sync filesystem files to database
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """Browse filesystem directory"""
+        from django.conf import settings as django_settings
+
+        try:
+            from settings.models import FilingSystemSettings
+            filing_settings = FilingSystemSettings.get_settings()
+            archive_root = filing_settings.get_archive_root()
+        except Exception:
+            archive_root = str(django_settings.MEDIA_ROOT)
+
+        path = request.query_params.get('path', 'clients')
+        client_id = request.query_params.get('client_id')
+
+        # If client_id provided, get client folder path
+        if client_id:
+            try:
+                client = ClientProfile.objects.get(id=client_id)
+                path = os.path.join('clients', get_client_folder(client))
+            except ClientProfile.DoesNotExist:
+                return Response({'error': 'Client not found'}, status=404)
+
+        # Security: Ensure path is within archive_root
+        full_path = os.path.normpath(os.path.join(archive_root, path))
+        if not full_path.startswith(os.path.normpath(archive_root)):
+            return Response({'error': 'Invalid path'}, status=400)
+
+        if not os.path.exists(full_path):
+            return Response({
+                'path': path,
+                'exists': False,
+                'folders': [],
+                'files': [],
+                'message': 'Ο φάκελος δεν υπάρχει'
+            })
+
+        if not os.path.isdir(full_path):
+            return Response({'error': 'Path is not a directory'}, status=400)
+
+        # List contents
+        folders = []
+        files = []
+
+        try:
+            for item in sorted(os.listdir(full_path)):
+                item_path = os.path.join(full_path, item)
+                rel_path = os.path.join(path, item)
+
+                if os.path.isdir(item_path):
+                    # Count items in folder
+                    try:
+                        item_count = len(os.listdir(item_path))
+                    except PermissionError:
+                        item_count = 0
+
+                    folders.append({
+                        'name': item,
+                        'path': rel_path,
+                        'item_count': item_count
+                    })
+                else:
+                    # Get file info
+                    stat = os.stat(item_path)
+                    ext = os.path.splitext(item)[1].lower()
+
+                    # Check if file is in database
+                    in_database = ClientDocument.objects.filter(
+                        file__endswith=item
+                    ).exists()
+
+                    files.append({
+                        'name': item,
+                        'path': rel_path,
+                        'size': stat.st_size,
+                        'size_display': self._format_size(stat.st_size),
+                        'modified': timezone.datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        'extension': ext,
+                        'in_database': in_database
+                    })
+        except PermissionError:
+            return Response({'error': 'Permission denied'}, status=403)
+
+        # Build breadcrumb
+        breadcrumb = []
+        parts = path.split(os.sep)
+        for i, part in enumerate(parts):
+            if part:
+                breadcrumb.append({
+                    'name': part,
+                    'path': os.sep.join(parts[:i+1])
+                })
+
+        return Response({
+            'path': path,
+            'exists': True,
+            'breadcrumb': breadcrumb,
+            'folders': folders,
+            'files': files,
+            'total_folders': len(folders),
+            'total_files': len(files)
+        })
+
+    def _format_size(self, size):
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+
+
+class CreateFolderView(APIView):
+    """Create a new folder in the filesystem"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.conf import settings as django_settings
+
+        try:
+            from settings.models import FilingSystemSettings
+            filing_settings = FilingSystemSettings.get_settings()
+            archive_root = filing_settings.get_archive_root()
+        except Exception:
+            archive_root = str(django_settings.MEDIA_ROOT)
+
+        path = request.data.get('path')
+        folder_name = request.data.get('folder_name')
+
+        if not path or not folder_name:
+            return Response({'error': 'path and folder_name required'}, status=400)
+
+        # Sanitize folder name
+        import re
+        safe_name = re.sub(r'[<>:"/\\|?*]', '', folder_name)
+        if not safe_name:
+            return Response({'error': 'Invalid folder name'}, status=400)
+
+        # Build full path
+        full_path = os.path.normpath(os.path.join(archive_root, path, safe_name))
+
+        # Security check
+        if not full_path.startswith(os.path.normpath(archive_root)):
+            return Response({'error': 'Invalid path'}, status=400)
+
+        if os.path.exists(full_path):
+            return Response({'error': 'Folder already exists'}, status=400)
+
+        try:
+            os.makedirs(full_path, exist_ok=True)
+            return Response({
+                'success': True,
+                'path': os.path.join(path, safe_name),
+                'message': f'Ο φάκελος "{safe_name}" δημιουργήθηκε'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class ApplyTemplateView(APIView):
+    """Apply a folder template to a client"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        client_id = request.data.get('client_id')
+        template_name = request.data.get('template')
+
+        if not client_id:
+            return Response({'error': 'client_id required'}, status=400)
+
+        try:
+            client = ClientProfile.objects.get(id=client_id)
+        except ClientProfile.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=404)
+
+        try:
+            from settings.models import FilingSystemSettings
+            filing_settings = FilingSystemSettings.get_settings()
+            created_paths = filing_settings.create_folders_for_client(client, template_name)
+
+            return Response({
+                'success': True,
+                'created_count': len(created_paths),
+                'paths': [os.path.basename(p) for p in created_paths[:10]],
+                'message': f'Δημιουργήθηκαν {len(created_paths)} φάκελοι'
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+    def get(self, request):
+        """Get available templates"""
+        try:
+            from settings.models import FilingSystemSettings
+            filing_settings = FilingSystemSettings.get_settings()
+            templates = filing_settings.get_available_templates()
+            return Response({
+                'templates': [
+                    {
+                        'id': key,
+                        'name': val.get('name', key),
+                        'description': val.get('description', ''),
+                        'folder_count': len(val.get('structure', []))
+                    }
+                    for key, val in templates.items()
+                ]
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+class SyncFilesystemView(APIView):
+    """
+    Sync filesystem files to database.
+    Scans client folder and creates ClientDocument entries for untracked files.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.conf import settings as django_settings
+
+        client_id = request.data.get('client_id')
+        if not client_id:
+            return Response({'error': 'client_id required'}, status=400)
+
+        try:
+            client = ClientProfile.objects.get(id=client_id)
+        except ClientProfile.DoesNotExist:
+            return Response({'error': 'Client not found'}, status=404)
+
+        try:
+            from settings.models import FilingSystemSettings
+            filing_settings = FilingSystemSettings.get_settings()
+            archive_root = filing_settings.get_archive_root()
+        except Exception:
+            archive_root = str(django_settings.MEDIA_ROOT)
+
+        # Get client folder
+        client_folder = get_client_folder(client)
+        client_path = os.path.join(archive_root, 'clients', client_folder)
+
+        if not os.path.exists(client_path):
+            return Response({
+                'success': False,
+                'message': 'Ο φάκελος πελάτη δεν υπάρχει',
+                'synced': 0
+            })
+
+        # Allowed extensions
+        allowed_extensions = {'.pdf', '.xlsx', '.xls', '.docx', '.doc',
+                           '.jpg', '.jpeg', '.png', '.gif', '.zip', '.txt', '.csv'}
+
+        synced = []
+        errors = []
+
+        # Walk through client folder
+        for root, dirs, files in os.walk(client_path):
+            for filename in files:
+                ext = os.path.splitext(filename)[1].lower()
+                if ext not in allowed_extensions:
+                    continue
+
+                file_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(file_path, archive_root)
+
+                # Check if already in database
+                if ClientDocument.objects.filter(file=rel_path).exists():
+                    continue
+
+                # Try to extract year/month from path
+                path_parts = rel_path.split(os.sep)
+                year = None
+                month = None
+
+                for part in path_parts:
+                    if part.isdigit() and len(part) == 4:
+                        year = int(part)
+                    elif part.isdigit() and 1 <= int(part) <= 12:
+                        month = int(part)
+                    elif part[:2].isdigit() and 1 <= int(part[:2]) <= 12:
+                        month = int(part[:2])
+
+                if not year:
+                    from datetime import datetime
+                    year = datetime.now().year
+
+                # Create document entry
+                try:
+                    stat = os.stat(file_path)
+                    doc = ClientDocument.objects.create(
+                        client=client,
+                        file=rel_path,
+                        original_filename=filename,
+                        file_type=ext.lstrip('.'),
+                        file_size=stat.st_size,
+                        year=year,
+                        month=month,
+                        document_category='general',
+                        uploaded_by=request.user,
+                        description=f'Synced from filesystem: {rel_path}'
+                    )
+                    synced.append({
+                        'filename': filename,
+                        'path': rel_path,
+                        'id': doc.id
+                    })
+                except Exception as e:
+                    errors.append({
+                        'filename': filename,
+                        'error': str(e)
+                    })
+
+        return Response({
+            'success': True,
+            'synced': len(synced),
+            'errors': len(errors),
+            'synced_files': synced[:20],  # Limit response
+            'error_files': errors[:10],
+            'message': f'Συγχρονίστηκαν {len(synced)} αρχεία'
         })

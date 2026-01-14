@@ -130,6 +130,11 @@ from .api_file_manager import (
     FileManagerStatsView,
     RecentDocumentsView,
     BrowseFoldersView,
+    # NEW Filesystem Browser APIs
+    FilesystemBrowserView,
+    CreateFolderView,
+    ApplyTemplateView,
+    SyncFilesystemView,
 )
 
 
@@ -490,6 +495,12 @@ urlpatterns = [
     path("api/v1/file-manager/stats/", FileManagerStatsView.as_view(), name="file_manager_stats"),
     path("api/v1/file-manager/recent/", RecentDocumentsView.as_view(), name="file_manager_recent"),
     path("api/v1/file-manager/browse/", BrowseFoldersView.as_view(), name="file_manager_browse"),
+
+    # Filesystem Browser (NEW) - Browse actual filesystem
+    path("api/v1/file-manager/filesystem/", FilesystemBrowserView.as_view(), name="file_manager_filesystem"),
+    path("api/v1/file-manager/filesystem/create-folder/", CreateFolderView.as_view(), name="file_manager_create_folder"),
+    path("api/v1/file-manager/filesystem/templates/", ApplyTemplateView.as_view(), name="file_manager_templates"),
+    path("api/v1/file-manager/filesystem/sync/", SyncFilesystemView.as_view(), name="file_manager_sync"),
 
     # Public Shared Link Access (NO AUTH REQUIRED)
     path("share/<str:token>/", PublicSharedLinkView.as_view(), name="shared_link_access"),
