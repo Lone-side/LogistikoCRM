@@ -27,6 +27,9 @@ class FilingSystemSettingsSerializer(serializers.ModelSerializer):
             'archive_root',
             'archive_root_display',
             'use_network_storage',
+            # Αυτόματη δημιουργία φακέλων (NEW)
+            'folder_creation_mode',
+            'folder_templates',
             # Δομή φακέλων
             'folder_structure',
             'custom_folder_template',

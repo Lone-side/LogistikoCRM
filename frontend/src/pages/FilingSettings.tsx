@@ -24,6 +24,7 @@ import { useFilingSettings, useFolderPreview } from '../hooks/useFilingSettings'
 import type { FilingSystemSettings } from '../types/filingSettings';
 import {
   FOLDER_STRUCTURE_CHOICES,
+  FOLDER_CREATION_CHOICES,
   FILE_NAMING_CHOICES,
 } from '../types/filingSettings';
 
@@ -186,6 +187,50 @@ const FilingSettingsPage: React.FC = () => {
                     </p>
                   </div>
                 )}
+              </div>
+            </section>
+
+            {/* Auto Folder Creation (NEW) */}
+            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+              <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                <FolderTree className="w-5 h-5 text-purple-600" />
+                Αυτόματη Δημιουργία Φακέλων
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Επιλέξτε τι φακέλους να δημιουργούνται αυτόματα όταν προστίθεται νέος πελάτης
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {FOLDER_CREATION_CHOICES.map((choice) => (
+                  <label
+                    key={choice.value}
+                    className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                      formData.folder_creation_mode === choice.value
+                        ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="folder_creation_mode"
+                      value={choice.value}
+                      checked={formData.folder_creation_mode === choice.value}
+                      onChange={(e) => handleChange('folder_creation_mode', e.target.value)}
+                      className="mt-1"
+                    />
+                    <div>
+                      <span className="font-medium block">{choice.label}</span>
+                      <span className="text-xs text-gray-500">{choice.description}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                  <Info className="w-4 h-4" />
+                  Μπορείτε πάντα να εφαρμόσετε template φακέλων αργότερα από τη σελίδα Αρχείων
+                </p>
               </div>
             </section>
 

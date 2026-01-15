@@ -6,6 +6,9 @@
 // Folder structure options
 export type FolderStructure = 'standard' | 'year_first' | 'category_first' | 'flat' | 'custom';
 
+// Folder creation mode (NEW)
+export type FolderCreationMode = 'none' | 'minimal' | 'basic' | 'full';
+
 // File naming conventions
 export type FileNamingConvention = 'original' | 'structured' | 'date_prefix' | 'afm_prefix';
 
@@ -16,6 +19,9 @@ export interface FilingSystemSettings {
   archive_root: string;
   archive_root_display: string;
   use_network_storage: boolean;
+  // Auto folder creation (NEW)
+  folder_creation_mode: FolderCreationMode;
+  folder_templates: Record<string, any>;
   // Folder structure
   folder_structure: FolderStructure;
   custom_folder_template: string;
@@ -44,6 +50,30 @@ export interface FilingSystemSettings {
   created_at: string;
   updated_at: string;
 }
+
+// Folder creation mode choices (NEW)
+export const FOLDER_CREATION_CHOICES: { value: FolderCreationMode; label: string; description: string }[] = [
+  {
+    value: 'none',
+    label: 'Καμία',
+    description: 'Χωρίς αυτόματη δημιουργία φακέλων'
+  },
+  {
+    value: 'minimal',
+    label: 'Ελάχιστη',
+    description: 'Μόνο ο βασικός φάκελος πελάτη'
+  },
+  {
+    value: 'basic',
+    label: 'Βασική',
+    description: 'Πελάτης + τρέχον έτος'
+  },
+  {
+    value: 'full',
+    label: 'Πλήρης',
+    description: 'Μήνες, κατηγορίες, ετήσια'
+  },
+];
 
 // Folder structure choices for dropdown
 export const FOLDER_STRUCTURE_CHOICES: { value: FolderStructure; label: string; description: string }[] = [
@@ -131,6 +161,10 @@ export interface GroupedCategories {
 export interface UpdateFilingSettingsRequest {
   use_network_storage?: boolean;
   archive_root?: string;
+  // NEW
+  folder_creation_mode?: FolderCreationMode;
+  folder_templates?: Record<string, any>;
+  // Existing
   folder_structure?: FolderStructure;
   custom_folder_template?: string;
   use_greek_month_names?: boolean;
