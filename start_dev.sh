@@ -38,6 +38,13 @@ else
     echo -e "${GREEN}✅ .env βρέθηκε${NC}"
 fi
 
+# Αυτόματη δημιουργία SECRET_KEY αν υπάρχει placeholder
+if grep -q "change-me-in-production\|insecure-dev-key" .env 2>/dev/null; then
+    NEW_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(50))")
+    sed -i "s|SECRET_KEY=.*|SECRET_KEY=$NEW_KEY|" .env
+    echo -e "${GREEN}✅ Δημιουργήθηκε SECRET_KEY αυτόματα${NC}"
+fi
+
 # Έλεγχος virtual environment
 if [ ! -d "venv" ]; then
     echo -e "${YELLOW}⚠️  Virtual environment δεν βρέθηκε. Δημιουργία...${NC}"
@@ -61,6 +68,12 @@ python manage.py migrate --check &>/dev/null || {
     echo -e "${YELLOW}⚠️  Εκτέλεση migrations...${NC}"
     python manage.py migrate
 }
+
+# Αρχικά δεδομένα & superuser (μόνο αν η βάση είναι κενή)
+if ! python manage.py shell -c "from django.contrib.auth import get_user_model; exit(0 if get_user_model().objects.exists() else 1)" 2>/dev/null; then
+    echo -e "${YELLOW}⚠️  Δεν βρέθηκαν χρήστες. Εκτέλεση αρχικής εγκατάστασης...${NC}"
+    python manage.py setupdata
+fi
 
 # Έλεγχος frontend dependencies
 if [ -d "frontend" ]; then

@@ -14,7 +14,28 @@
 
 ---
 
-# Django-CRM
+# LogistikoCRM
+
+## Γρήγορη Εκκίνηση
+
+```bash
+git clone https://github.com/jimmi21/LogistikoCRM
+cd LogistikoCRM
+make dev
+```
+
+Άνοιξε το **http://localhost:8000** — τα στοιχεία σύνδεσης εκτυπώνονται στο terminal.
+
+| Εντολή | Περιγραφή |
+|--------|-----------|
+| `make dev` | Πρώτη εγκατάσταση + εκκίνηση (SQLite, χωρίς Docker) |
+| `make run` | Εκκίνηση server (μετά την πρώτη εγκατάσταση) |
+| `make docker-dev` | Εκκίνηση με Docker |
+| `make help` | Όλες οι διαθέσιμες εντολές |
+
+---
+
+# Django-CRM (Base)
 
 *(Collaborative and Analytical Customer Relationship Management Software)*
 
