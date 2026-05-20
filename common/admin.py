@@ -201,11 +201,11 @@ class FileInline(GenericStackedInline):
                 or request.user.is_superoperator \
                 or request.user.is_task_operator \
                 or request.user.is_superuser \
+                or request.user.is_chief \
                 or hasattr(obj, 'department') and request.user.is_operator \
                 and obj.department_id == request.user.department_id \
                 or hasattr(obj, 'responsible') and obj.responsible.count() == 1 \
-                and request.user in (obj.responsible.all()) \
-                or hasattr(obj, 'win_closing_date') and request.user.is_chief:
+                and request.user in (obj.responsible.all()):
             return True
 
         return False

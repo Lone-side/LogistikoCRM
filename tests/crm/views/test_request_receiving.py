@@ -147,7 +147,8 @@ class TestRequestReceiving(BaseTestCase):
  
     def test_wrong_country_name(self):
         self.data['country'] = 'New country name'
-        response = self.client.post(self.add_request_url, self.data)
+        with self.settings(ADMINS=[('Test Admin', 'admin@example.com')]):
+            response = self.client.post(self.add_request_url, self.data)
         self.assertEqual(response.status_code, 200, response.reason_phrase)
         self.assertEqual(len(mail.outbox), 1)
         msg = "Country name error but no warning email was sent."

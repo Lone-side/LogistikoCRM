@@ -42,10 +42,10 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             priority=2
         )
 
-        # Create client obligation
-        self.client_obl = ClientObligation.objects.create(
+        # Create client obligation (signal may auto-create one)
+        self.client_obl, _ = ClientObligation.objects.get_or_create(
             client=self.client,
-            is_active=True
+            defaults={'is_active': True}
         )
         self.client_obl.obligation_types.add(
             self.monthly_obl_type,
@@ -59,7 +59,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Run for March 2024
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=3,
             stdout=out
         )
@@ -67,7 +67,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Check monthly obligation was created
         monthly_obls = MonthlyObligation.objects.filter(
             client=self.client,
-            year=2024,
+            year=2030,
             month=3
         )
 
@@ -86,14 +86,14 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Run for February 2024 (not a quarterly month)
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=2,
             stdout=out
         )
 
         monthly_obls = MonthlyObligation.objects.filter(
             client=self.client,
-            year=2024,
+            year=2030,
             month=2
         )
 
@@ -110,7 +110,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
 
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=4,
             dry_run=True,
             stdout=out
@@ -119,7 +119,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Nothing should be saved
         self.assertEqual(
             MonthlyObligation.objects.filter(
-                year=2024,
+                year=2030,
                 month=4
             ).count(),
             0
@@ -138,9 +138,9 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             eidos_ipoxreou="company"
         )
 
-        client_obl2 = ClientObligation.objects.create(
+        client_obl2, _ = ClientObligation.objects.get_or_create(
             client=client2,
-            is_active=True
+            defaults={'is_active': True}
         )
         client_obl2.obligation_types.add(self.monthly_obl_type)
 
@@ -149,7 +149,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Run for only first client
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=5,
             client=self.client.afm,
             stdout=out
@@ -159,7 +159,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         self.assertTrue(
             MonthlyObligation.objects.filter(
                 client=self.client,
-                year=2024,
+                year=2030,
                 month=5
             ).exists()
         )
@@ -167,7 +167,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         self.assertFalse(
             MonthlyObligation.objects.filter(
                 client=client2,
-                year=2024,
+                year=2030,
                 month=5
             ).exists()
         )
@@ -178,9 +178,9 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         existing = MonthlyObligation.objects.create(
             client=self.client,
             obligation_type=self.monthly_obl_type,
-            year=2024,
+            year=2030,
             month=6,
-            deadline=datetime(2024, 6, 30).date(),
+            deadline=datetime(2030, 6, 30).date(),
             status='completed',
             notes='Old notes'
         )
@@ -190,7 +190,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Run with force
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=6,
             force=True,
             stdout=out
@@ -200,7 +200,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         new_obl = MonthlyObligation.objects.get(
             client=self.client,
             obligation_type=self.monthly_obl_type,
-            year=2024,
+            year=2030,
             month=6
         )
 
@@ -218,7 +218,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
 
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=7,
             stdout=out
         )
@@ -226,7 +226,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # No obligations should be created
         self.assertEqual(
             MonthlyObligation.objects.filter(
-                year=2024,
+                year=2030,
                 month=7
             ).count(),
             0
@@ -247,7 +247,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             deadline_day=25
         )
 
-        profile.obligations.add(payroll_obl)
+        payroll_obl.profiles.add(profile)
 
         # Add profile to client
         self.client_obl.obligation_profiles.add(profile)
@@ -256,7 +256,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
 
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=8,
             stdout=out
         )
@@ -264,7 +264,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Should have obligations from profile + individual types
         monthly_obls = MonthlyObligation.objects.filter(
             client=self.client,
-            year=2024,
+            year=2030,
             month=8
         )
 
@@ -310,7 +310,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
 
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=9,
             quiet=True,
             stdout=out
@@ -328,7 +328,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
 
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=2030,
             month=10,
             verbose=True,
             stdout=out

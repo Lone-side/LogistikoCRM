@@ -62,5 +62,5 @@ urlpatterns += i18n_patterns(
     path(settings.SECRET_CRM_PREFIX, include('help.urls')),
     path(settings.SECRET_CRM_PREFIX, include('settings.urls')),
     path(settings.SECRET_ADMIN_PREFIX, admin.site.urls),  # Admin URL with secret prefix
-    path('contact_form/', contact_form, name='contact_form'),
+    path('contact_form/<uuid:uuid>/', contact_form, name='contact_form'),
 )

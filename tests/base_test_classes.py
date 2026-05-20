@@ -1,8 +1,9 @@
 from django.template.defaultfilters import striptags
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class BaseTestCase(TestCase):
     fixtures = (
         'currency.json', 'test_country.json', 'resolution.json',

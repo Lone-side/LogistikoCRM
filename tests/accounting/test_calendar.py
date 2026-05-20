@@ -2,7 +2,7 @@
 Tests for Calendar View functionality
 Tests for: calendar_view, calendar_events_api
 """
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
@@ -14,6 +14,7 @@ from accounting.models import (
 )
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class CalendarViewTestCase(TestCase):
     """Test cases for calendar view"""
 
@@ -66,12 +67,14 @@ class CalendarViewTestCase(TestCase):
             completed_date=today - timedelta(days=5)
         )
 
+        overdue_month = today.month - 2 if today.month > 2 else (today.month - 2) % 12 + 10
+        overdue_year = today.year if today.month > 2 else today.year - 1
         self.overdue_obligation = MonthlyObligation.objects.create(
             client=self.client_profile,
             obligation_type=self.obligation_type,
-            year=today.year,
-            month=today.month,
-            deadline=today - timedelta(days=3),
+            year=overdue_year,
+            month=overdue_month,
+            deadline=today - timedelta(days=30),
             status='pending'  # Still pending but past deadline
         )
 
@@ -135,6 +138,7 @@ class CalendarViewTestCase(TestCase):
         self.assertIn(self.obligation_type, response.context['obligation_types'])
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class CalendarEventsAPITestCase(TestCase):
     """Test cases for calendar events API endpoint"""
 
@@ -414,6 +418,7 @@ class CalendarEventsAPITestCase(TestCase):
             self.assertEqual(overdue_events[0]['color'], '#ef4444')
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class CalendarURLTestCase(TestCase):
     """Test URL configuration for calendar"""
 

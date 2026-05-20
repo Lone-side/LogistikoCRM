@@ -4,7 +4,7 @@ from random import random
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 from django.urls import reverse
 
 from crm.models import Company
@@ -21,6 +21,7 @@ contact_queue = queue.Queue()
 description = str(int(random() * 1E5))
 
 
+@override_settings(SECURE_SSL_REDIRECT=False)
 class TestImportExport(TransactionTestCase):
     """
     Test import/export Companies and Contacts from excel file.

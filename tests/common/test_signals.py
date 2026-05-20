@@ -109,18 +109,27 @@ class ClientProfileFolderCreationSignalTest(TestCase):
 
         # Check that folder structure was created
         from accounting.models import get_client_folder
+        from datetime import datetime
         base_path = os.path.join(settings.MEDIA_ROOT, get_client_folder(client))
 
-        # Categories that should be created
-        expected_categories = [
-            'contracts', 'invoices', 'tax', 'myf', 'vat', 'payroll', 'general'
-        ]
-
-        for category in expected_categories:
-            category_path = os.path.join(base_path, category)
+        # Permanent folder categories (under 00_ΜΟΝΙΜΑ/)
+        permanent_categories = ['contracts', 'registration', 'licenses']
+        for category in permanent_categories:
+            category_path = os.path.join(base_path, '00_ΜΟΝΙΜΑ', category)
             self.assertTrue(
                 os.path.exists(category_path),
-                f"Category folder '{category}' was not created"
+                f"Permanent folder '00_ΜΟΝΙΜΑ/{category}' was not created"
+            )
+
+        # Monthly categories (under {year}/{month}/)
+        current_year = datetime.now().year
+        monthly_categories = ['vat', 'myf', 'payroll', 'general']
+        month_path = os.path.join(base_path, str(current_year), '01')
+        for category in monthly_categories:
+            category_path = os.path.join(month_path, category)
+            self.assertTrue(
+                os.path.exists(category_path),
+                f"Monthly folder '{current_year}/01/{category}' was not created"
             )
 
         # Check INFO.txt was created

@@ -26,7 +26,7 @@ class ClientProfileModelTest(TestCase):
 
     def setUp(self):
         self.company = Company.objects.create(
-            company_name="Test Company Ltd",
+            full_name="Test Company Ltd",
             email="test@company.com"
         )
 
@@ -217,14 +217,11 @@ class ClientObligationModelTest(TestCase):
         self.profile = ObligationProfile.objects.create(
             name="Μισθοδοσία"
         )
-        self.profile.obligations.add(self.obl_type1, self.obl_type2)
+        self.profile.obligation_types.add(self.obl_type1, self.obl_type2)
 
     def test_create_client_obligation(self):
-        """Test creating client obligations"""
-        client_obl = ClientObligation.objects.create(
-            client=self.client,
-            is_active=True
-        )
+        """Test client obligation auto-creation and adding obligation types"""
+        client_obl = ClientObligation.objects.get(client=self.client)
         client_obl.obligation_types.add(self.obl_type1)
 
         self.assertEqual(client_obl.client, self.client)
@@ -240,9 +237,7 @@ class ClientObligationModelTest(TestCase):
             deadline_type="last_day"
         )
 
-        client_obl = ClientObligation.objects.create(
-            client=self.client
-        )
+        client_obl = ClientObligation.objects.get(client=self.client)
         client_obl.obligation_types.add(obl_type3)
         client_obl.obligation_profiles.add(self.profile)
 
@@ -278,20 +273,21 @@ class MonthlyObligationModelTest(TestCase):
 
     def test_create_monthly_obligation(self):
         """Test creating a monthly obligation"""
-        deadline = datetime(2024, 3, 31).date()
+        from django.utils import timezone
+        future_date = (timezone.now() + timedelta(days=30)).date()
 
         monthly_obl = MonthlyObligation.objects.create(
             client=self.client,
             obligation_type=self.obl_type,
-            year=2024,
-            month=3,
-            deadline=deadline,
+            year=future_date.year,
+            month=future_date.month,
+            deadline=future_date,
             status='pending'
         )
 
         self.assertEqual(monthly_obl.status, 'pending')
-        self.assertEqual(monthly_obl.year, 2024)
-        self.assertEqual(monthly_obl.month, 3)
+        self.assertEqual(monthly_obl.year, future_date.year)
+        self.assertEqual(monthly_obl.month, future_date.month)
         self.assertIsNone(monthly_obl.completed_date)
 
     def test_monthly_obligation_cost_calculation(self):

@@ -340,7 +340,6 @@ class MemoAdmin(BaseModelAdmin):
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
-
         obj = form.instance
         if 'stage' in form.changed_data and obj.stage == obj.REVIEWED:
             obj.send_review_notification()

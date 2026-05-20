@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('settings', '0005_gsissettings_afm'),
+        ('settings', '0006_merge_0004_filingsystemsettings_0004_gsissettings'),
     ]
 
     operations = [

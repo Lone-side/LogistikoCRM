@@ -185,7 +185,7 @@
             "is_staff": true,
             "is_active": true,
             "groups": [7],
-            "user_permissions": [110, 112]
+            "user_permissions": [202, 204]
         }
     },
     {

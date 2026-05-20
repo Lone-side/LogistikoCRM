@@ -204,7 +204,8 @@ class TestEmail(BaseTestCase):
 
         # test email with missing file
         url = reverse("site:crm_deal_change", args=(deal.id,))
-        response = self.client.get(url, follow=True)
+        with self.settings(ADMINS=[('Test Admin', 'admin@example.com')]):
+            response = self.client.get(url, follow=True)
         self.assertEqual(response.status_code, 200, response.reason_phrase)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn(FILE_ERROR_SUBJ.format(file.id), mail.outbox[0].subject)

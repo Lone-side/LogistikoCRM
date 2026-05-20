@@ -656,6 +656,11 @@ class EmailTemplate(models.Model):
             subject = subject.replace(placeholder, str(value) if value else '')
             body = body.replace(placeholder, str(value) if value else '')
 
+        # Replace any remaining {variable} placeholders with empty string
+        import re
+        subject = re.sub(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}', '', subject)
+        body = re.sub(r'\{[a-zA-Z_][a-zA-Z0-9_]*\}', '', body)
+
         return subject, body
 
     @classmethod
@@ -2060,7 +2065,7 @@ def create_client_folders(sender, instance, created, **kwargs):
             f.write(f"ΑΦΜ: {instance.afm}\n")
             f.write(f"ΔΟΥ: {instance.doy or '-'}\n")
             f.write(f"Email: {instance.email or '-'}\n")
-            f.write(f"Τηλέφωνο: {instance.phone or '-'}\n")
+            f.write(f"Τηλέφωνο: {instance.tilefono_epixeirisis_1 or instance.kinito_tilefono or '-'}\n")
             f.write(f"\nΔημιουργία: {datetime.now().strftime('%d/%m/%Y %H:%M')}\n")
             f.write(f"\n{'=' * 50}\n")
             f.write(f"ΔΟΜΗ ΦΑΚΕΛΩΝ\n")

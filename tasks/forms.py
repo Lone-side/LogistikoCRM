@@ -26,6 +26,12 @@ class TaskBaseForm(ModelForm):
             'token': forms.HiddenInput
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ('creation_date', 'token'):
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+
     def clean_name(self):
         name = self.cleaned_data['name']
         if not name or name == settings.NO_NAME_STR:
@@ -99,6 +105,12 @@ class MemoForm(ModelForm):
             'description': Textarea(attrs={'cols': 100, 'rows': 8}),
             'note': Textarea(attrs={'cols': 100, 'rows': 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ('creation_date', 'stage'):
+            if field_name in self.fields:
+                self.fields[field_name].required = False
 
     class Media:
         css = {'all': ('/static/common/css/memo_module.css',)}

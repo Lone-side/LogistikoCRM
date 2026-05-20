@@ -9,6 +9,9 @@ from common.utils.helpers import USER_MODEL
 @receiver(post_save, sender=USER_MODEL)
 def user_creation_handler(sender, instance, created, **kwargs):
     if created:
-        co_workers = Group.objects.get(name='co-workers')
-        instance.groups.add(co_workers)
+        try:
+            co_workers = Group.objects.get(name='co-workers')
+            instance.groups.add(co_workers)
+        except Group.DoesNotExist:
+            pass
         UserProfile.objects.create(user=instance)

@@ -168,6 +168,7 @@ class SetUserDepartmentTest(TestCase):
         self._add_session_to_request(request)
 
         groups = self.user.groups.all()
+        set_user_groups(request, groups)
         set_user_department(request, groups)
 
         self.assertEqual(request.user.department_id, 5)
@@ -181,6 +182,7 @@ class SetUserDepartmentTest(TestCase):
         self._add_session_to_request(request)
 
         groups = self.user.groups.all()
+        set_user_groups(request, groups)
         set_user_department(request, groups)
 
         self.assertIsNone(request.user.department_id)
@@ -328,9 +330,6 @@ class CheckUserLanguageTest(TestCase):
 
         # Mock current language as same
         mock_get_language.return_value = 'en'
-
-        # Get initial updated_at
-        initial_updated = self.profile.updated_at
 
         check_user_language(self.profile)
 
