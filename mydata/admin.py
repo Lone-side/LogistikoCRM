@@ -156,6 +156,7 @@ class VATRecordAdmin(admin.ModelAdmin):
         'issue_date',
         'rec_type_display',
         'inv_type',
+        'expense_category',
         'vat_category_display',
         'net_value',
         'vat_amount',
@@ -164,6 +165,7 @@ class VATRecordAdmin(admin.ModelAdmin):
     ]
     list_filter = [
         'rec_type',
+        'expense_category',
         'vat_category',
         'is_cancelled',
         ('issue_date', admin.DateFieldListFilter),
@@ -186,6 +188,7 @@ class VATRecordAdmin(admin.ModelAdmin):
         ('Στοιχεία', {
             'fields': (
                 'issue_date', 'rec_type', 'inv_type',
+                'expense_category',
                 'vat_category', 'vat_exemption_category'
             )
         }),

@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('settings', '0003_gsisettings'),
+        ('settings', '0003_massmailsettings'),
     ]
 
     operations = [

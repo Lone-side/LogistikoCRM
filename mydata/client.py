@@ -83,6 +83,7 @@ class VatInfoRecord:
     counter_vat_number: Optional[str]
     vat_offset_amount: Optional[Decimal]
     deductions_amount: Optional[Decimal]
+    expense_category: str = ''
 
     @property
     def is_income(self) -> bool:
@@ -601,34 +602,15 @@ class MyDataClient:
                     issue_date_str = self._get_xml_text_flexible(vat_elem, 'issueDate', ns)
                 issue_date = self._parse_date(issue_date_str) if issue_date_str else None
 
-                # Get all VAT fields from ΑΑΔΕ
                 # ΕΚΡΟΕΣ (Έσοδα/Πωλήσεις):
-                #   Vat303 = Καθαρή αξία εκροών (φορολογητέα αξία)
+                #   Vat303 = Καθαρή αξία εκροών
                 #   Vat333 = ΦΠΑ εκροών
-                # ΕΙΣΡΟΕΣ (Έξοδα/Αγορές):
-                #   Vat361 / VatUnclassified361 = Καθαρή αξία εισροών
-                #   Vat381 / VatUnclassified381 = ΦΠΑ εισροών
-                vat303 = self._get_xml_text_flexible(vat_elem, 'Vat303', ns)  # Καθαρή εκροών
-                vat333 = self._get_xml_text_flexible(vat_elem, 'Vat333', ns)  # ΦΠΑ εκροών
+                vat303 = self._get_xml_text_flexible(vat_elem, 'Vat303', ns)
+                vat333 = self._get_xml_text_flexible(vat_elem, 'Vat333', ns)
 
-                # Εισροές - try both classified and unclassified
-                vat361 = self._get_xml_text_flexible(vat_elem, 'Vat361', ns)
-                vat381 = self._get_xml_text_flexible(vat_elem, 'Vat381', ns)
-                vat_unclass_361 = self._get_xml_text_flexible(vat_elem, 'VatUnclassified361', ns)
-                vat_unclass_381 = self._get_xml_text_flexible(vat_elem, 'VatUnclassified381', ns)
-
-                # Combine classified and unclassified for εισροές
-                eisroes_net = vat361 or vat_unclass_361
-                eisroes_vat = vat381 or vat_unclass_381
-
-                # Check if we have ΕΚΡΟΕΣ data (έσοδα)
                 has_ekroes = vat303 or vat333
 
-                # Check if we have ΕΙΣΡΟΕΣ data (έξοδα)
-                has_eisroes = eisroes_net or eisroes_vat
-
                 if has_ekroes:
-                    # ΕΚΡΟΕΣ (Έσοδα/Πωλήσεις)
                     net_value = self._parse_decimal(vat303) if vat303 else Decimal('0')
                     vat_amount = self._parse_decimal(vat333) if vat333 else Decimal('0')
 
@@ -636,9 +618,9 @@ class MyDataClient:
                         mark=mark,
                         is_cancelled=is_cancelled,
                         issue_date=issue_date,
-                        rec_type=1,  # Εκροές
+                        rec_type=1,
                         inv_type='ΕΚΡΟΕΣ',
-                        vat_category=1,  # Default 24%
+                        vat_category=1,
                         vat_exemption_category='',
                         net_value=net_value,
                         vat_amount=vat_amount,
@@ -648,26 +630,52 @@ class MyDataClient:
                     )
                     records.append(record)
 
-                if has_eisroes:
-                    # ΕΙΣΡΟΕΣ (Έξοδα/Αγορές)
-                    net_value = self._parse_decimal(eisroes_net) if eisroes_net else Decimal('0')
-                    vat_amount = self._parse_decimal(eisroes_vat) if eisroes_vat else Decimal('0')
+                # ΕΙΣΡΟΕΣ — όλοι οι κωδικοί ΑΑΔΕ (361-366 / 381-386)
+                eisroes_categories = [
+                    ('361', '381'),  # Εμπορεύματα & Α' Ύλες
+                    ('362', '382'),  # Πάγια
+                    ('363', '383'),  # Λοιπές Δαπάνες
+                    ('364', '384'),  # Ενδοκοιν. Εμπορεύματα
+                    ('365', '385'),  # Ενδοκοιν. Πάγια
+                    ('366', '386'),  # Ενδοκοιν. Λοιπές Δαπάνες
+                ]
 
-                    record = VatInfoRecord(
-                        mark=mark + 1 if mark and has_ekroes else mark,  # Unique mark if both
-                        is_cancelled=is_cancelled,
-                        issue_date=issue_date,
-                        rec_type=2,  # Εισροές
-                        inv_type='ΕΙΣΡΟΕΣ',
-                        vat_category=1,  # Default 24%
-                        vat_exemption_category='',
-                        net_value=net_value,
-                        vat_amount=vat_amount,
-                        counter_vat_number='',
-                        vat_offset_amount=None,
-                        deductions_amount=None,
-                    )
-                    records.append(record)
+                eisroes_sub_idx = 0
+                for net_code, vat_code in eisroes_categories:
+                    net_val = self._get_xml_text_flexible(vat_elem, f'Vat{net_code}', ns)
+                    vat_val = self._get_xml_text_flexible(vat_elem, f'Vat{vat_code}', ns)
+                    net_unclass = self._get_xml_text_flexible(vat_elem, f'VatUnclassified{net_code}', ns)
+                    vat_unclass = self._get_xml_text_flexible(vat_elem, f'VatUnclassified{vat_code}', ns)
+
+                    cat_net = Decimal('0')
+                    cat_vat = Decimal('0')
+                    if net_val:
+                        cat_net += self._parse_decimal(net_val)
+                    if net_unclass:
+                        cat_net += self._parse_decimal(net_unclass)
+                    if vat_val:
+                        cat_vat += self._parse_decimal(vat_val)
+                    if vat_unclass:
+                        cat_vat += self._parse_decimal(vat_unclass)
+
+                    if cat_net or cat_vat:
+                        eisroes_sub_idx += 1
+                        record = VatInfoRecord(
+                            mark=mark + eisroes_sub_idx if mark and (has_ekroes or eisroes_sub_idx > 1) else mark,
+                            is_cancelled=is_cancelled,
+                            issue_date=issue_date,
+                            rec_type=2,
+                            inv_type=f'ΕΙΣΡΟΕΣ_{net_code}',
+                            vat_category=1,
+                            vat_exemption_category='',
+                            net_value=cat_net,
+                            vat_amount=cat_vat,
+                            counter_vat_number='',
+                            vat_offset_amount=None,
+                            deductions_amount=None,
+                            expense_category=net_code,
+                        )
+                        records.append(record)
 
                 # Skip records with no VAT data (empty invoices/cancelled)
 

@@ -382,9 +382,29 @@ class VATRecord(models.Model):
     # Invoice type
     inv_type = models.CharField(
         verbose_name='Τύπος Παραστατικού',
-        max_length=10,
+        max_length=20,
         db_index=True,
-        help_text='π.χ. 1.1, 2.1, 5.1'
+        help_text='π.χ. 1.1, 2.1, 5.1, ΕΙΣΡΟΕΣ_362'
+    )
+
+    EXPENSE_CATEGORY_CHOICES = [
+        ('', '-'),
+        ('361', 'Εμπορεύματα & Α\' Ύλες'),
+        ('362', 'Πάγια'),
+        ('363', 'Λοιπές Δαπάνες'),
+        ('364', 'Ενδοκοιν. Εμπορεύματα'),
+        ('365', 'Ενδοκοιν. Πάγια'),
+        ('366', 'Ενδοκοιν. Λοιπές Δαπάνες'),
+    ]
+
+    expense_category = models.CharField(
+        verbose_name='Κατηγορία Δαπάνης',
+        max_length=3,
+        choices=EXPENSE_CATEGORY_CHOICES,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Κωδικός εισροών ΑΑΔΕ (361-364)'
     )
 
     # VAT category
@@ -459,8 +479,7 @@ class VATRecord(models.Model):
         verbose_name = 'Εγγραφή ΦΠΑ'
         verbose_name_plural = 'Εγγραφές ΦΠΑ'
         ordering = ['-issue_date', '-mark']
-        # Unique constraint: same client + mark
-        unique_together = [['client', 'mark']]
+        unique_together = [['client', 'mark', 'expense_category']]
         indexes = [
             models.Index(fields=['client', 'issue_date']),
             models.Index(fields=['client', 'rec_type', 'issue_date']),
