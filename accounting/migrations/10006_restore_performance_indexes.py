@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('accounting', '10004_document_sharing_system'),
-        ('accounting', '10004_emailsettings'),
+        ('accounting', '10005_emailsettings'),
     ]
 
     operations = [

@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("accounting", "0028_unified_document_system"),
-        ("accounting", "10006_door_access_log"),
+        ("accounting", "10007_door_access_log"),
     ]
 
     operations = []

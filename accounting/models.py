@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from crm.models import Company, Contact
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
@@ -8,6 +9,17 @@ import os
 import re
 from django.conf import settings
 from django.utils.text import slugify
+
+
+def validate_afm(value):
+    """Επικύρωση ελληνικού ΑΦΜ: 9 ψηφία + έλεγχος checksum."""
+    if not value:
+        return
+    if not re.match(r'^\d{9}$', value):
+        raise ValidationError('Το ΑΦΜ πρέπει να είναι ακριβώς 9 ψηφία')
+    total = sum(int(value[i]) * (2 ** (8 - i)) for i in range(8))
+    if (total % 11) % 10 != int(value[8]):
+        raise ValidationError('Μη έγκυρο ΑΦΜ')
 
 
 class ClientProfile(models.Model):
@@ -29,7 +41,7 @@ class ClientProfile(models.Model):
     company = models.OneToOneField(Company, on_delete=models.CASCADE, null=True, blank=True, related_name='accounting_profile')
     contact = models.OneToOneField(Contact, on_delete=models.CASCADE, null=True, blank=True, related_name='accounting_profile')
     
-    afm = models.CharField('Α.Φ.Μ.', max_length=20, unique=True)
+    afm = models.CharField('Α.Φ.Μ.', max_length=9, unique=True, validators=[validate_afm])
     doy = models.CharField('Δ.Ο.Υ.', max_length=100, blank=True, null=True, default='')
     eponimia = models.CharField('Επωνυμία/Επώνυμο', max_length=200)
     onoma = models.CharField('Όνομα', max_length=100, blank=True, null=True, default='')
@@ -65,7 +77,7 @@ class ClientProfile(models.Model):
     tk_epixeirisis = models.CharField('Τ.Κ. Επιχείρησης', max_length=10, blank=True, null=True, default='')
     tilefono_epixeirisis_1 = models.CharField('Τηλέφωνο Επιχείρησης 1', max_length=20, blank=True, null=True, default='')
     tilefono_epixeirisis_2 = models.CharField('Τηλέφωνο Επιχείρησης 2', max_length=20, blank=True, null=True, default='')
-    email = models.EmailField('Email', blank=True, null=True, default='')
+    email = models.EmailField('Email', blank=True, default='')
     
     trapeza = models.CharField('Τράπεζα', max_length=100, blank=True, null=True, default='')
     iban = models.CharField('IBAN', max_length=34, blank=True, null=True, default='')
@@ -484,11 +496,12 @@ class MonthlyObligation(models.Model):
     def save(self, *args, **kwargs):
         if self.status == 'completed' and not self.completed_date:
             self.completed_date = timezone.now().date()
-        
-        if self.status != 'completed' and self.deadline < timezone.now().date():
-            self.status = 'overdue'
-        
         super().save(*args, **kwargs)
+
+    @property
+    def is_overdue(self):
+        """Υπολογισμένο property — δεν μεταλλάσσει το status."""
+        return self.status not in ('completed', 'cancelled') and self.deadline < timezone.now().date()
     
     # === Document Management Methods ===
 

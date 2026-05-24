@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('accounting', '10005_restore_performance_indexes'),
+        ('accounting', '10006_restore_performance_indexes'),
     ]
 
     operations = [
