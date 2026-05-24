@@ -29,7 +29,7 @@ import {
   Mail,
   FileSignature,
 } from 'lucide-react';
-import { FolderTreeNode, CategoryMeta } from '../types/filingSettings';
+import type { FolderTreeNode, CategoryMeta } from '../types/filingSettings';
 
 // ============================================
 // ICON MAPPING
