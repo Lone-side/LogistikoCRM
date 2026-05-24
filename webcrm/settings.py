@@ -682,6 +682,21 @@ if not DEBUG:
     # CORS - strict origins only in production
     CORS_ALLOW_ALL_ORIGINS = False
 
+    # Startup validation για κρίσιμα production settings
+    import warnings
+    if not os.getenv('SECRET_KEY'):
+        warnings.warn(
+            'PRODUCTION WARNING: SECRET_KEY not set via environment variable! '
+            'Set SECRET_KEY in your .env or server environment.',
+            RuntimeWarning, stacklevel=2
+        )
+    if DATABASES['default']['ENGINE'] != 'django.db.backends.sqlite3' and not os.getenv('DB_HOST'):
+        warnings.warn(
+            'PRODUCTION WARNING: DB_HOST not set via environment variable! '
+            'Set DB_HOST for non-SQLite databases.',
+            RuntimeWarning, stacklevel=2
+        )
+
 # Always enable HttpOnly for session cookies (good practice)
 SESSION_COOKIE_HTTPONLY = True
 
