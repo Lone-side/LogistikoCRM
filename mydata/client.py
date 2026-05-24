@@ -84,6 +84,7 @@ class VatInfoRecord:
     vat_offset_amount: Optional[Decimal]
     deductions_amount: Optional[Decimal]
     expense_category: str = ''
+    income_code: str = ''
 
     @property
     def is_income(self) -> bool:
@@ -602,33 +603,96 @@ class MyDataClient:
                     issue_date_str = self._get_xml_text_flexible(vat_elem, 'issueDate', ns)
                 issue_date = self._parse_date(issue_date_str) if issue_date_str else None
 
-                # ΕΚΡΟΕΣ (Έσοδα/Πωλήσεις):
-                #   Vat303 = Καθαρή αξία εκροών
-                #   Vat333 = ΦΠΑ εκροών
-                vat303 = self._get_xml_text_flexible(vat_elem, 'Vat303', ns)
-                vat333 = self._get_xml_text_flexible(vat_elem, 'Vat333', ns)
+                # ΕΚΡΟΕΣ — όλοι οι συντελεστές Φ2
+                # (net_code, vat_code, vat_category)
+                ekroes_rates = [
+                    ('301', '331', 2),   # 13%
+                    ('302', '332', 3),   # 6%
+                    ('303', '333', 1),   # 24%
+                    ('304', '334', 5),   # 9%
+                    ('305', '335', 4),   # 17%
+                    ('306', '336', 6),   # 4%
+                    ('309', '337', 1),   # Μειωμένος
+                ]
 
-                has_ekroes = vat303 or vat333
+                # Ειδικοί κωδικοί εκροών (μόνο καθαρή αξία, χωρίς ΦΠΑ)
+                ekroes_special = [
+                    ('310', 8),   # Απαλλασσόμενες/εξαιρούμενες
+                    ('311', 8),   # Μη υποκείμενες
+                    ('342', 8),   # Ενδοκοιν. παραδόσεις αγαθών
+                    ('345', 8),   # Ενδοκοιν. παροχές υπηρεσιών
+                    ('348', 8),   # Τριγωνικές συναλλαγές
+                ]
 
-                if has_ekroes:
-                    net_value = self._parse_decimal(vat303) if vat303 else Decimal('0')
-                    vat_amount = self._parse_decimal(vat333) if vat333 else Decimal('0')
+                ekroes_sub_idx = 0
+                has_ekroes = False
 
-                    record = VatInfoRecord(
-                        mark=mark,
-                        is_cancelled=is_cancelled,
-                        issue_date=issue_date,
-                        rec_type=1,
-                        inv_type='ΕΚΡΟΕΣ',
-                        vat_category=1,
-                        vat_exemption_category='',
-                        net_value=net_value,
-                        vat_amount=vat_amount,
-                        counter_vat_number='',
-                        vat_offset_amount=None,
-                        deductions_amount=None,
-                    )
-                    records.append(record)
+                for net_code, vat_code, vat_cat in ekroes_rates:
+                    net_val = self._get_xml_text_flexible(vat_elem, f'Vat{net_code}', ns)
+                    vat_val = self._get_xml_text_flexible(vat_elem, f'Vat{vat_code}', ns)
+                    net_unclass = self._get_xml_text_flexible(vat_elem, f'VatUnclassified{net_code}', ns)
+                    vat_unclass = self._get_xml_text_flexible(vat_elem, f'VatUnclassified{vat_code}', ns)
+
+                    cat_net = Decimal('0')
+                    cat_vat = Decimal('0')
+                    if net_val:
+                        cat_net += self._parse_decimal(net_val)
+                    if net_unclass:
+                        cat_net += self._parse_decimal(net_unclass)
+                    if vat_val:
+                        cat_vat += self._parse_decimal(vat_val)
+                    if vat_unclass:
+                        cat_vat += self._parse_decimal(vat_unclass)
+
+                    if cat_net or cat_vat:
+                        ekroes_sub_idx += 1
+                        has_ekroes = True
+                        record = VatInfoRecord(
+                            mark=mark + ekroes_sub_idx - 1 if mark and ekroes_sub_idx > 1 else mark,
+                            is_cancelled=is_cancelled,
+                            issue_date=issue_date,
+                            rec_type=1,
+                            inv_type=f'ΕΚΡΟΕΣ_{net_code}',
+                            vat_category=vat_cat,
+                            vat_exemption_category='',
+                            net_value=cat_net,
+                            vat_amount=cat_vat,
+                            counter_vat_number='',
+                            vat_offset_amount=None,
+                            deductions_amount=None,
+                            income_code=net_code,
+                        )
+                        records.append(record)
+
+                for net_code, vat_cat in ekroes_special:
+                    net_val = self._get_xml_text_flexible(vat_elem, f'Vat{net_code}', ns)
+                    net_unclass = self._get_xml_text_flexible(vat_elem, f'VatUnclassified{net_code}', ns)
+
+                    cat_net = Decimal('0')
+                    if net_val:
+                        cat_net += self._parse_decimal(net_val)
+                    if net_unclass:
+                        cat_net += self._parse_decimal(net_unclass)
+
+                    if cat_net:
+                        ekroes_sub_idx += 1
+                        has_ekroes = True
+                        record = VatInfoRecord(
+                            mark=mark + ekroes_sub_idx - 1 if mark and ekroes_sub_idx > 1 else mark,
+                            is_cancelled=is_cancelled,
+                            issue_date=issue_date,
+                            rec_type=1,
+                            inv_type=f'ΕΚΡΟΕΣ_{net_code}',
+                            vat_category=vat_cat,
+                            vat_exemption_category='',
+                            net_value=cat_net,
+                            vat_amount=Decimal('0'),
+                            counter_vat_number='',
+                            vat_offset_amount=None,
+                            deductions_amount=None,
+                            income_code=net_code,
+                        )
+                        records.append(record)
 
                 # ΕΙΣΡΟΕΣ — όλοι οι κωδικοί ΑΑΔΕ (361-366 / 381-386)
                 eisroes_categories = [
@@ -660,8 +724,9 @@ class MyDataClient:
 
                     if cat_net or cat_vat:
                         eisroes_sub_idx += 1
+                        mark_offset = ekroes_sub_idx + eisroes_sub_idx
                         record = VatInfoRecord(
-                            mark=mark + eisroes_sub_idx if mark and (has_ekroes or eisroes_sub_idx > 1) else mark,
+                            mark=mark + mark_offset - 1 if mark and mark_offset > 1 else mark,
                             is_cancelled=is_cancelled,
                             issue_date=issue_date,
                             rec_type=2,

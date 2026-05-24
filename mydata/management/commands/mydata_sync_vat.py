@@ -384,6 +384,7 @@ class Command(BaseCommand):
                 client=client,
                 mark=vat_record.mark,
                 expense_category=getattr(vat_record, 'expense_category', ''),
+                income_code=getattr(vat_record, 'income_code', ''),
                 defaults={
                     'is_cancelled': vat_record.is_cancelled,
                     'issue_date': vat_record.issue_date,

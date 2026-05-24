@@ -404,7 +404,33 @@ class VATRecord(models.Model):
         blank=True,
         default='',
         db_index=True,
-        help_text='Κωδικός εισροών ΑΑΔΕ (361-364)'
+        help_text='Κωδικός εισροών ΑΑΔΕ (361-366)'
+    )
+
+    INCOME_CODE_CHOICES = [
+        ('', '-'),
+        ('301', 'Εκροές 13%'),
+        ('302', 'Εκροές 6%'),
+        ('303', 'Εκροές 24%'),
+        ('304', 'Εκροές 9%'),
+        ('305', 'Εκροές 17%'),
+        ('306', 'Εκροές 4%'),
+        ('309', 'Εκροές μειωμένος'),
+        ('310', 'Απαλλασσόμενες εκροές'),
+        ('311', 'Μη υποκ. εκροές'),
+        ('342', 'Ενδοκοιν. Παραδόσεις'),
+        ('345', 'Ενδοκοιν. Υπηρεσίες'),
+        ('348', 'Ενδοκοιν. Τρίγωνες'),
+    ]
+
+    income_code = models.CharField(
+        verbose_name='Κωδικός Εκροών',
+        max_length=3,
+        choices=INCOME_CODE_CHOICES,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='Κωδικός εκροών ΑΑΔΕ Φ2 (301-348)'
     )
 
     # VAT category
@@ -479,7 +505,7 @@ class VATRecord(models.Model):
         verbose_name = 'Εγγραφή ΦΠΑ'
         verbose_name_plural = 'Εγγραφές ΦΠΑ'
         ordering = ['-issue_date', '-mark']
-        unique_together = [['client', 'mark', 'expense_category']]
+        unique_together = [['client', 'mark', 'expense_category', 'income_code']]
         indexes = [
             models.Index(fields=['client', 'issue_date']),
             models.Index(fields=['client', 'rec_type', 'issue_date']),
