@@ -100,7 +100,7 @@ def clients_obligation_status(request):
         clients_qs = clients_qs.filter(is_active=True)
 
     # Prefetch obligation data - related_name is 'obligation_settings'
-    clients_qs = clients_qs.select_related().prefetch_related(
+    clients_qs = clients_qs.select_related('company', 'contact').prefetch_related(
         'obligation_settings',
         'obligation_settings__obligation_types',
         'obligation_settings__obligation_profiles'

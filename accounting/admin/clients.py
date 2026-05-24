@@ -170,6 +170,12 @@ class ClientProfileAdmin(admin.ModelAdmin):
         'mark_inactive',
     ]
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related(
+            'obligation_settings__obligation_types',
+            'documents',
+        )
+
     fieldsets = (
         ('Βασικά Στοιχεία', {
             'fields': ('afm', 'doy', 'eponimia', 'onoma', 'onoma_patros', 'is_active')
@@ -322,7 +328,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
             'Δημιουργήθηκε'
         ])
 
-        for client in queryset.select_related():
+        for client in queryset.select_related('company', 'contact'):
             writer.writerow([
                 client.afm,
                 client.doy or '',

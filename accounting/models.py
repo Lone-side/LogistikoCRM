@@ -113,6 +113,12 @@ class ClientProfile(models.Model):
             models.Index(fields=['company'], name='client_company_idx'),
         ]
 
+    def clean(self):
+        if not self.company and not self.contact:
+            raise ValidationError(
+                'Ο πελάτης πρέπει να συνδέεται με τουλάχιστον μία Εταιρεία ή Επαφή.'
+            )
+
     def __str__(self):
         return f"{self.afm} - {self.eponimia}"
 

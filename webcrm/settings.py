@@ -1,27 +1,19 @@
 ﻿import sys
 import os
+import secrets
 from pathlib import Path
 from datetime import datetime as dt
 from django.utils.translation import gettext_lazy as _
-from pathlib import Path
-from datetime import datetime as dt
-from django.utils.translation import gettext_lazy as _
-# Near top of settings.py
 from celery.schedules import crontab
-# ΝΕΟ: Load environment variables
-
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 
 from crm.settings import *          # NOQA
 from common.settings import *       # NOQA
 from tasks.settings import *        # NOQA
 from voip.settings import *         # NOQA
 from .datetime_settings import *    # NOQA
-# Μετά συνέχισε με τα imports σου
-from crm.settings import *          # NOQA
-from common.settings import *       # NOQA
 
 # ---- Django settings ---- #
 
@@ -255,9 +247,9 @@ X_FRAME_OPTIONS = "SAMEORIGIN"
 
 # For more security, replace the url prefixes
 # with your own unique value.
-SECRET_CRM_PREFIX = '123/'
-SECRET_ADMIN_PREFIX = '456-admin/'
-SECRET_LOGIN_PREFIX = '789-login/'
+SECRET_CRM_PREFIX = os.getenv('SECRET_CRM_PREFIX', secrets.token_urlsafe(8) + '/')
+SECRET_ADMIN_PREFIX = os.getenv('SECRET_ADMIN_PREFIX', secrets.token_urlsafe(8) + '/')
+SECRET_LOGIN_PREFIX = os.getenv('SECRET_LOGIN_PREFIX', secrets.token_urlsafe(8) + '/')
 
 # Specify ip of host to avoid importing emails sent by CRM
 CRM_IP = "127.0.0.1"
@@ -378,12 +370,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://192.168.178.22:3000",  # Alternative React port
 ]
 
-# Για development - επιτρέπει όλες τις origins (wildcard)
-# ΣΗΜΕΙΩΣΗ: Αυτό λειτουργεί ΜΟΝΟ αν DEBUG=True
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -576,8 +563,8 @@ AUTO_CLIENT_OBLIGATION_PROFILE = None  # Βάλε το όνομα του default
 
 
 # ==================== CELERY CONFIG ====================
-CELERY_BROKER_URL = 'redis://localhost:6379'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379'
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -620,7 +607,7 @@ TASMOTA_DOOR_PULSE_DURATION = float(os.environ.get('TASMOTA_DOOR_PULSE_DURATION'
 
 # ==================== Fritz!Box VoIP Monitor Authentication ====================
 # SECURITY: Token for Fritz!Box monitor webhook authentication
-FRITZ_API_TOKEN = os.environ.get('FRITZ_API_TOKEN', 'change-this-token-in-production')
+FRITZ_API_TOKEN = os.environ.get('FRITZ_API_TOKEN')
 
 # ==============================================================================
 # 📦 CACHING CONFIGURATION
