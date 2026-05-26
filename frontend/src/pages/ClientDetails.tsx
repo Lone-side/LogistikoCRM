@@ -305,6 +305,7 @@ export default function ClientDetails() {
           {/* OBLIGATION PROFILE TAB */}
           {activeTab === 'profile' && (
             <ClientProfileTab
+              clientId={clientId}
               groupedTypes={obligationTypesGrouped || []}
               profiles={obligationProfiles || []}
               clientProfile={clientObligationProfile}
