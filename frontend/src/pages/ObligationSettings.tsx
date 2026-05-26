@@ -407,31 +407,28 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
         profileId = result.id;
       }
 
-      // Update type assignments
-      if (isEdit && profile) {
-        setIsSavingTypes(true);
-        const { default: apiClient } = await import('../api/client');
+      // Update type assignments (for both new and existing profiles)
+      setIsSavingTypes(true);
+      const { default: apiClient } = await import('../api/client');
 
-        // Get current types assigned to this profile
-        const currentTypeIds = profile.obligation_types?.map(t => t.id) || [];
+      const currentTypeIds = (isEdit && profile)
+        ? (profile.obligation_types?.map(t => t.id) || [])
+        : [];
 
-        // Types to add (in selectedTypeIds but not in currentTypeIds)
-        const toAdd = selectedTypeIds.filter(id => !currentTypeIds.includes(id));
-        // Types to remove (in currentTypeIds but not in selectedTypeIds)
-        const toRemove = currentTypeIds.filter(id => !selectedTypeIds.includes(id));
+      const toAdd = selectedTypeIds.filter(id => !currentTypeIds.includes(id));
+      const toRemove = currentTypeIds.filter(id => !selectedTypeIds.includes(id));
 
-        if (toAdd.length > 0) {
-          await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/add_types/`, {
-            obligation_type_ids: toAdd
-          });
-        }
-        if (toRemove.length > 0) {
-          await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/remove_types/`, {
-            obligation_type_ids: toRemove
-          });
-        }
-        setIsSavingTypes(false);
+      if (toAdd.length > 0) {
+        await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/add_types/`, {
+          obligation_type_ids: toAdd
+        });
       }
+      if (toRemove.length > 0) {
+        await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/remove_types/`, {
+          obligation_type_ids: toRemove
+        });
+      }
+      setIsSavingTypes(false);
 
       onClose();
     } catch (err: unknown) {
