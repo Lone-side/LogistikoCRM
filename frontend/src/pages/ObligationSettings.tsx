@@ -396,6 +396,7 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
     e.preventDefault();
     setError(null);
 
+    let createdProfileId: number | null = null;
     try {
       let profileId: number;
 
@@ -405,10 +406,9 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
       } else {
         const result = await createMutation.mutateAsync(formData);
         profileId = result.id;
+        createdProfileId = profileId;
       }
 
-      // Update type assignments (for both new and existing profiles)
-      setIsSavingTypes(true);
       const { default: apiClient } = await import('../api/client');
 
       const currentTypeIds = (isEdit && profile)
@@ -418,21 +418,36 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
       const toAdd = selectedTypeIds.filter(id => !currentTypeIds.includes(id));
       const toRemove = currentTypeIds.filter(id => !selectedTypeIds.includes(id));
 
-      if (toAdd.length > 0) {
-        await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/add_types/`, {
-          obligation_type_ids: toAdd
-        });
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        setIsSavingTypes(true);
+        try {
+          if (toAdd.length > 0) {
+            await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/add_types/`, {
+              obligation_type_ids: toAdd
+            });
+          }
+          if (toRemove.length > 0) {
+            await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/remove_types/`, {
+              obligation_type_ids: toRemove
+            });
+          }
+        } finally {
+          setIsSavingTypes(false);
+        }
       }
-      if (toRemove.length > 0) {
-        await apiClient.post(`api/v1/settings/obligation-profiles/${profileId}/remove_types/`, {
-          obligation_type_ids: toRemove
-        });
-      }
-      setIsSavingTypes(false);
 
       onClose();
     } catch (err: unknown) {
-      setIsSavingTypes(false);
+      // Rollback: if we just created the profile and type assignment failed,
+      // delete the orphan profile so the user can retry cleanly.
+      if (createdProfileId !== null) {
+        try {
+          const { default: apiClient } = await import('../api/client');
+          await apiClient.delete(`api/v1/settings/obligation-profiles/${createdProfileId}/`);
+        } catch {
+          // Best-effort cleanup; ignore secondary failure.
+        }
+      }
       const errorObj = err as { response?: { data?: { name?: string[]; error?: string } } };
       const errorData = errorObj.response?.data;
       if (errorData?.name) {

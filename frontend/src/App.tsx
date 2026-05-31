@@ -28,6 +28,7 @@ import Backup from './pages/Backup';
 import FileManager from './pages/FileManager';
 import FilingSettings from './pages/FilingSettings';
 import SharedLinkPortal from './pages/SharedLinkPortal';
+import AccountantDashboard from './pages/AccountantDashboard';
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -78,6 +79,9 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/share/:token" element={<SharedLinkPortal />} />
+
+          {/* Full-bleed showcase dashboard — no Layout wrapper */}
+          <Route path="/dashboard-v2" element={<AccountantDashboard />} />
 
           {/* Protected routes with Layout */}
           <Route

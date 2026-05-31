@@ -206,13 +206,38 @@ export default function ClientProfileTab({
     setSaveSuccess(false);
   };
 
-  // Apply copied obligations from another client
+  // Apply copied obligations from another client.
+  // Enforce exclusion groups: keep the first type seen per group, drop the rest.
   const applyCopiedObligations = (typeIds: number[], profileIds: number[]) => {
-    setSelectedTypeIds(new Set(typeIds));
+    const accepted = new Set<number>();
+    const seenGroups = new Set<number>();
+    const droppedNames: string[] = [];
+
+    for (const id of typeIds) {
+      const groupInfo = typeToGroupMap.get(id);
+      if (groupInfo && groupInfo.groupId !== null) {
+        if (seenGroups.has(groupInfo.groupId)) {
+          const t = groupInfo.types.find(x => x.id === id);
+          if (t) droppedNames.push(t.name);
+          continue;
+        }
+        seenGroups.add(groupInfo.groupId);
+      }
+      accepted.add(id);
+    }
+
+    setSelectedTypeIds(accepted);
     setSelectedProfileIds(new Set(profileIds));
     setHasChanges(true);
     setSaveSuccess(false);
     setShowCopyModal(false);
+
+    if (droppedNames.length > 0) {
+      setExclusionWarning(
+        `Παραλείφθηκαν λόγω αλληλοαποκλεισμού: ${droppedNames.join(', ')}`
+      );
+      setTimeout(() => setExclusionWarning(null), 6000);
+    }
   };
 
   // Count total types including from profiles
