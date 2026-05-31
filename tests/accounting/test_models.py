@@ -26,7 +26,7 @@ class ClientProfileModelTest(TestCase):
 
     def setUp(self):
         self.company = Company.objects.create(
-            company_name="Test Company Ltd",
+            full_name="Test Company Ltd",
             email="test@company.com"
         )
 
@@ -217,7 +217,7 @@ class ClientObligationModelTest(TestCase):
         self.profile = ObligationProfile.objects.create(
             name="Μισθοδοσία"
         )
-        self.profile.obligations.add(self.obl_type1, self.obl_type2)
+        self.profile.obligation_types.add(self.obl_type1, self.obl_type2)
 
     def test_create_client_obligation(self):
         """Test creating client obligations"""
@@ -278,20 +278,21 @@ class MonthlyObligationModelTest(TestCase):
 
     def test_create_monthly_obligation(self):
         """Test creating a monthly obligation"""
-        deadline = datetime(2024, 3, 31).date()
+        # Use a future deadline so save() does not auto-flip status to 'overdue'
+        future = timezone.now().date() + timedelta(days=30)
 
         monthly_obl = MonthlyObligation.objects.create(
             client=self.client,
             obligation_type=self.obl_type,
-            year=2024,
-            month=3,
-            deadline=deadline,
+            year=future.year,
+            month=future.month,
+            deadline=future,
             status='pending'
         )
 
         self.assertEqual(monthly_obl.status, 'pending')
-        self.assertEqual(monthly_obl.year, 2024)
-        self.assertEqual(monthly_obl.month, 3)
+        self.assertEqual(monthly_obl.year, future.year)
+        self.assertEqual(monthly_obl.month, future.month)
         self.assertIsNone(monthly_obl.completed_date)
 
     def test_monthly_obligation_cost_calculation(self):
