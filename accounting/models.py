@@ -650,11 +650,18 @@ class EmailTemplate(models.Model):
         subject = self.subject
         body = self.body_html
 
-        # Replace all variables
+        # Replace all provided variables
         for key, value in variables.items():
             placeholder = '{' + key + '}'
             subject = subject.replace(placeholder, str(value) if value else '')
             body = body.replace(placeholder, str(value) if value else '')
+
+        # Strip any remaining *known* placeholders that weren't provided, so
+        # clients never see raw "{obligation_type}" text in their emails.
+        # We only strip recognised variables to avoid touching legitimate braces.
+        for known, _label in self.get_available_variables():
+            subject = subject.replace(known, '')
+            body = body.replace(known, '')
 
         return subject, body
 

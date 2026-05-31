@@ -242,8 +242,10 @@ class ClientObligationModelTest(TestCase):
             deadline_type="last_day"
         )
 
-        client_obl = ClientObligation.objects.create(
-            client=self.client
+        # Reuse the signal-created ClientObligation (OneToOne on client).
+        client_obl, _ = ClientObligation.objects.update_or_create(
+            client=self.client,
+            defaults={'is_active': True}
         )
         client_obl.obligation_types.add(obl_type3)
         client_obl.obligation_profiles.add(self.profile)
