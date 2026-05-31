@@ -89,14 +89,19 @@ ADMINS = [(ADMIN_NAME, ADMIN_EMAIL)] if ADMIN_EMAIL else []
 # SECURITY FIX: Default to False, only enable in dev with explicit env var
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-# ALLOWED_HOSTS - Ρυθμίσεις για τοπικό δίκτυο
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '192.168.*.*',      # Όλα τα τοπικά δίκτυα 192.168.x.x
-    '10.*.*.*',         # Εταιρικά δίκτυα 10.x.x.x
-    '172.16.*.*',       # Private networks 172.16.x.x
-]
+# ALLOWED_HOSTS - ρυθμίζεται μέσω env (comma-separated λίστα).
+# ΠΡΟΣΟΧΗ: Το Django ΔΕΝ υποστηρίζει μερικά wildcards όπως '192.168.*.*'.
+# Για πρόσβαση από τοπικό δίκτυο: είτε DEBUG=True (επιτρέπει τα πάντα),
+# είτε όρισε ρητά τα hosts/IPs στο env ALLOWED_HOSTS.
+_allowed_hosts_env = os.getenv('ALLOWED_HOSTS', '')
+if _allowed_hosts_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts_env.split(',') if h.strip()]
+elif DEBUG:
+    # Development / τοπικό δίκτυο: επιτρέπει όλα τα hosts (τα μερικά wildcards
+    # δεν υποστηρίζονται, οπότε αυτός είναι ο μόνος τρόπος για 192.168.x.x clients).
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
@@ -666,13 +671,20 @@ CACHE_TTL_LONG = 60 * 60 * 24  # 24 hours - for rarely changing data
 # ==============================================================================
 # These settings are automatically applied when DEBUG=False
 if not DEBUG:
-    # Require proper SECRET_KEY in production
+    from django.core.exceptions import ImproperlyConfigured
+
+    # Require proper SECRET_KEY in production - fail fast instead of running insecure
     if SECRET_KEY == 'default-key-for-development':
-        import warnings
-        warnings.warn(
-            'WARNING: Using default SECRET_KEY in production! '
-            'Set SECRET_KEY environment variable.',
-            RuntimeWarning
+        raise ImproperlyConfigured(
+            'SECRET_KEY environment variable must be set in production '
+            '(DEBUG=False). Refusing to start with the default development key.'
+        )
+
+    # Require the Fritz!Box webhook token to be changed from its placeholder
+    if FRITZ_API_TOKEN == 'change-this-token-in-production':
+        raise ImproperlyConfigured(
+            'FRITZ_API_TOKEN environment variable must be set in production '
+            '(DEBUG=False). Refusing to start with the placeholder token.'
         )
 
     # HSTS (HTTP Strict Transport Security)

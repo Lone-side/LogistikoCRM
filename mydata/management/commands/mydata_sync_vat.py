@@ -383,8 +383,8 @@ class Command(BaseCommand):
             record, created = VATRecord.objects.update_or_create(
                 client=client,
                 mark=vat_record.mark,
-                expense_category=getattr(vat_record, 'expense_category', ''),
-                income_code=getattr(vat_record, 'income_code', ''),
+                expense_category=vat_record.expense_category,
+                income_code=vat_record.income_code,
                 defaults={
                     'is_cancelled': vat_record.is_cancelled,
                     'issue_date': vat_record.issue_date,

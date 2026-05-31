@@ -31,7 +31,7 @@ class Migration(migrations.Migration):
                 ],
                 db_index=True,
                 default="",
-                help_text="Κωδικός εισροών ΑΑΔΕ (361-364)",
+                help_text="Κωδικός εισροών ΑΑΔΕ (361-366)",
                 max_length=3,
                 verbose_name="Κατηγορία Δαπάνης",
             ),

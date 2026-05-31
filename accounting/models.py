@@ -1180,8 +1180,8 @@ class EmailSettings(models.Model):
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Failed to encrypt SMTP password: {e}")
-            # Store plain text as fallback (not recommended)
-            self._encrypted_smtp_password = value
+            # Never store the password in plaintext - fail loudly instead
+            raise
 
     class Meta:
         verbose_name = 'Ρυθμίσεις Email'

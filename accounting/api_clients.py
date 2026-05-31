@@ -178,14 +178,12 @@ class ClientCreateUpdateSerializer(serializers.ModelSerializer):
                 "Το ΑΦΜ πρέπει να αποτελείται από 9 ψηφία."
             )
 
-        # AFM checksum validation (warning only, not blocking)
+        # AFM checksum validation (blocking - the Greek AFM checksum is deterministic)
         total = sum(int(value[i]) * (2 ** (8 - i)) for i in range(8))
         check_digit = (total % 11) % 10
         if check_digit != int(value[8]):
-            # Log warning but allow saving (some valid AFMs may fail checksum)
-            import logging
-            logging.getLogger(__name__).warning(
-                f"AFM {value} failed checksum validation (expected {check_digit}, got {value[8]})"
+            raise serializers.ValidationError(
+                "Μη έγκυρο ΑΦΜ (αποτυχία ελέγχου checksum)."
             )
         return value
 

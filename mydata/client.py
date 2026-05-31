@@ -395,7 +395,8 @@ class MyDataClient:
             return Decimal('0')
         try:
             return Decimal(str(value))
-        except:
+        except (ValueError, TypeError, ArithmeticError) as e:
+            logger.warning(f"Could not parse decimal from {value!r}: {e}")
             return Decimal('0')
 
     @staticmethod
@@ -612,7 +613,7 @@ class MyDataClient:
                     ('304', '334', 5),   # 9%
                     ('305', '335', 4),   # 17%
                     ('306', '336', 6),   # 4%
-                    ('309', '337', 1),   # Μειωμένος
+                    ('309', '337', 8),   # Μειωμένος — ambiguous rate, tag as Χωρίς ΦΠΑ aggregate
                 ]
 
                 # Ειδικοί κωδικοί εκροών (μόνο καθαρή αξία, χωρίς ΦΠΑ)
@@ -623,9 +624,6 @@ class MyDataClient:
                     ('345', 8),   # Ενδοκοιν. παροχές υπηρεσιών
                     ('348', 8),   # Τριγωνικές συναλλαγές
                 ]
-
-                ekroes_sub_idx = 0
-                has_ekroes = False
 
                 for net_code, vat_code, vat_cat in ekroes_rates:
                     net_val = self._get_xml_text_flexible(vat_elem, f'Vat{net_code}', ns)
@@ -645,10 +643,8 @@ class MyDataClient:
                         cat_vat += self._parse_decimal(vat_unclass)
 
                     if cat_net or cat_vat:
-                        ekroes_sub_idx += 1
-                        has_ekroes = True
                         record = VatInfoRecord(
-                            mark=mark + ekroes_sub_idx - 1 if mark and ekroes_sub_idx > 1 else mark,
+                            mark=mark,
                             is_cancelled=is_cancelled,
                             issue_date=issue_date,
                             rec_type=1,
@@ -675,10 +671,8 @@ class MyDataClient:
                         cat_net += self._parse_decimal(net_unclass)
 
                     if cat_net:
-                        ekroes_sub_idx += 1
-                        has_ekroes = True
                         record = VatInfoRecord(
-                            mark=mark + ekroes_sub_idx - 1 if mark and ekroes_sub_idx > 1 else mark,
+                            mark=mark,
                             is_cancelled=is_cancelled,
                             issue_date=issue_date,
                             rec_type=1,
@@ -704,7 +698,6 @@ class MyDataClient:
                     ('366', '386'),  # Ενδοκοιν. Λοιπές Δαπάνες
                 ]
 
-                eisroes_sub_idx = 0
                 for net_code, vat_code in eisroes_categories:
                     net_val = self._get_xml_text_flexible(vat_elem, f'Vat{net_code}', ns)
                     vat_val = self._get_xml_text_flexible(vat_elem, f'Vat{vat_code}', ns)
@@ -723,15 +716,13 @@ class MyDataClient:
                         cat_vat += self._parse_decimal(vat_unclass)
 
                     if cat_net or cat_vat:
-                        eisroes_sub_idx += 1
-                        mark_offset = ekroes_sub_idx + eisroes_sub_idx
                         record = VatInfoRecord(
-                            mark=mark + mark_offset - 1 if mark and mark_offset > 1 else mark,
+                            mark=mark,
                             is_cancelled=is_cancelled,
                             issue_date=issue_date,
                             rec_type=2,
                             inv_type=f'ΕΙΣΡΟΕΣ_{net_code}',
-                            vat_category=1,
+                            vat_category=8,
                             vat_exemption_category='',
                             net_value=cat_net,
                             vat_amount=cat_vat,
