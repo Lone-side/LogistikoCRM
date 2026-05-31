@@ -169,7 +169,7 @@ class Command(BaseCommand):
             query = query.filter(client__afm=self.client_afm)
         
         client_obligations = query.select_related('client').prefetch_related(
-            'obligation_types', 'obligation_profiles__obligations'
+            'obligation_types', 'obligation_profiles__obligation_types'
         )
         
         total_clients = client_obligations.count()
@@ -270,8 +270,18 @@ class Command(BaseCommand):
         arrow = '█' * int(round(percent * bar_length))
         spaces = '░' * (bar_length - len(arrow))
         
-        sys.stdout.write(f'\r[{arrow}{spaces}] {int(percent*100)}% - {message[:40]:<40}')
-        sys.stdout.flush()
+        # Use self.stdout (Django's OutputWrapper) so the command respects the
+        # stdout passed via call_command and never crashes on a cp1253 Windows
+        # console when client names contain Greek characters.
+        try:
+            self.stdout.write(
+                f'\r[{arrow}{spaces}] {int(percent*100)}% - {message[:40]:<40}',
+                ending=''
+            )
+            self.stdout.flush()
+        except (UnicodeEncodeError, ValueError):
+            # Progress display is cosmetic — never let it abort the command.
+            pass
     
     def print_results(self):
         """Print detailed results"""

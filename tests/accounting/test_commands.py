@@ -57,10 +57,12 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         """Test that command generates monthly obligations"""
         out = StringIO()
 
-        # Run for March 2024
+        # Run for a March in the future so the obligation stays 'pending'
+        # (save() auto-flips past-deadline obligations to 'overdue').
+        future_year = timezone.now().year + 1
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=future_year,
             month=3,
             stdout=out
         )
@@ -68,7 +70,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Check monthly obligation was created
         monthly_obls = MonthlyObligation.objects.filter(
             client=self.client,
-            year=2024,
+            year=future_year,
             month=3
         )
 
@@ -175,13 +177,15 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
 
     def test_command_force_recreate(self):
         """Test force flag recreates existing obligations"""
+        # Use a future June so the recreated obligation stays 'pending'.
+        future_year = timezone.now().year + 1
         # Create existing obligation
         existing = MonthlyObligation.objects.create(
             client=self.client,
             obligation_type=self.monthly_obl_type,
-            year=2024,
+            year=future_year,
             month=6,
-            deadline=datetime(2024, 6, 30).date(),
+            deadline=datetime(future_year, 6, 30).date(),
             status='completed',
             notes='Old notes'
         )
@@ -191,7 +195,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Run with force
         call_command(
             'generate_monthly_obligations',
-            year=2024,
+            year=future_year,
             month=6,
             force=True,
             stdout=out
@@ -201,7 +205,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         new_obl = MonthlyObligation.objects.get(
             client=self.client,
             obligation_type=self.monthly_obl_type,
-            year=2024,
+            year=future_year,
             month=6
         )
 
@@ -248,7 +252,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             deadline_day=25
         )
 
-        profile.obligations.add(payroll_obl)
+        profile.obligation_types.add(payroll_obl)
 
         # Add profile to client
         self.client_obl.obligation_profiles.add(profile)
