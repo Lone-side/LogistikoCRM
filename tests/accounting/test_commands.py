@@ -42,10 +42,11 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             priority=2
         )
 
-        # Create client obligation
-        self.client_obl = ClientObligation.objects.create(
+        # A ClientObligation is auto-created via signal (OneToOne on client),
+        # so reuse it instead of creating a duplicate.
+        self.client_obl, _ = ClientObligation.objects.update_or_create(
             client=self.client,
-            is_active=True
+            defaults={'is_active': True}
         )
         self.client_obl.obligation_types.add(
             self.monthly_obl_type,
@@ -138,9 +139,9 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             eidos_ipoxreou="company"
         )
 
-        client_obl2 = ClientObligation.objects.create(
+        client_obl2, _ = ClientObligation.objects.update_or_create(
             client=client2,
-            is_active=True
+            defaults={'is_active': True}
         )
         client_obl2.obligation_types.add(self.monthly_obl_type)
 
