@@ -221,9 +221,11 @@ class ClientObligationModelTest(TestCase):
 
     def test_create_client_obligation(self):
         """Test creating client obligations"""
-        client_obl = ClientObligation.objects.create(
+        # A ClientObligation is auto-created via signal on ClientProfile creation,
+        # and client is a OneToOneField — reuse the existing instance.
+        client_obl, _ = ClientObligation.objects.update_or_create(
             client=self.client,
-            is_active=True
+            defaults={'is_active': True}
         )
         client_obl.obligation_types.add(self.obl_type1)
 
