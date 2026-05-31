@@ -66,10 +66,12 @@ class CalendarViewTestCase(TestCase):
             completed_date=today - timedelta(days=5)
         )
 
+        # Use the previous year to avoid colliding with pending_obligation
+        # on the (client, type, year, month) unique constraint.
         self.overdue_obligation = MonthlyObligation.objects.create(
             client=self.client_profile,
             obligation_type=self.obligation_type,
-            year=today.year,
+            year=today.year - 1,
             month=today.month,
             deadline=today - timedelta(days=3),
             status='pending'  # Still pending but past deadline

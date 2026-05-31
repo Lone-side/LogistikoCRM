@@ -9,6 +9,8 @@ from common.utils.helpers import USER_MODEL
 @receiver(post_save, sender=USER_MODEL)
 def user_creation_handler(sender, instance, created, **kwargs):
     if created:
-        co_workers = Group.objects.get(name='co-workers')
+        # get_or_create ώστε η δημιουργία χρήστη να μην σκάει αν λείπει το group
+        # (π.χ. σε φρέσκια βάση ή σε test χωρίς το groups fixture).
+        co_workers, _ = Group.objects.get_or_create(name='co-workers')
         instance.groups.add(co_workers)
-        UserProfile.objects.create(user=instance)
+        UserProfile.objects.get_or_create(user=instance)

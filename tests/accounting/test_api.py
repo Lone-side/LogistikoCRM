@@ -29,7 +29,7 @@ class ClientAPITest(APITestCase):
 
         # Create test client profile
         self.test_client = ClientProfile.objects.create(
-            afm="123456782",  # Valid checksum
+            afm="123456783",  # Valid checksum
             eponimia="Test Company",
             eidos_ipoxreou="company",
             doy="A' ΑΘΗΝΩΝ"
@@ -52,7 +52,7 @@ class ClientAPITest(APITestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(f'/accounting/api/v1/clients/{self.test_client.id}/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['afm'], '123456782')
+        self.assertEqual(response.data['afm'], '123456783')
 
     def test_client_search(self):
         """Test client search by AFM"""
@@ -64,7 +64,7 @@ class ClientAPITest(APITestCase):
         """Test creating client with valid AFM"""
         self.client.force_authenticate(user=self.user)
         data = {
-            'afm': '094160850',  # Valid checksum
+            'afm': '094160855',  # Valid checksum (distinct from setUp client)
             'eponimia': 'New Company',
             'eidos_ipoxreou': 'company',
         }
@@ -85,7 +85,7 @@ class ObligationAPITest(APITestCase):
 
         # Create test data
         self.test_client = ClientProfile.objects.create(
-            afm="123456782",
+            afm="123456783",
             eponimia="Test Company",
             eidos_ipoxreou="company"
         )
@@ -198,9 +198,9 @@ class FileValidationTest(TestCase):
         """Test filename sanitization"""
         from common.utils.file_validation import sanitize_filename
 
-        # Test path traversal prevention
-        self.assertEqual(sanitize_filename('../../../etc/passwd'), 'etc_passwd')
-        self.assertEqual(sanitize_filename('..\\..\\windows\\system32'), 'windows_system32')
+        # Test path traversal prevention — basename strips all path components
+        self.assertEqual(sanitize_filename('../../../etc/passwd'), 'passwd')
+        self.assertEqual(sanitize_filename('..\\..\\windows\\system32'), 'system32')
 
         # Test null byte removal
         self.assertEqual(sanitize_filename('file\x00.pdf'), 'file_.pdf')
@@ -221,7 +221,7 @@ class AFMValidationTest(TestCase):
         serializer = ClientCreateUpdateSerializer()
 
         # Valid AFM with correct checksum
-        valid_afm = '094160850'
+        valid_afm = '123456783'
         result = serializer.validate_afm(valid_afm)
         self.assertEqual(result, valid_afm)
 
