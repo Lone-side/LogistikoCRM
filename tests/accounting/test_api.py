@@ -14,11 +14,13 @@ class ClientAPITest(APITestCase):
     """Test Client REST API endpoints"""
 
     def setUp(self):
-        # Create test user
+        # Staff user — το CRM API είναι staff-only (μετά το client-portal
+        # default-deny, ένας μη-staff μη-client χρήστης δεν βλέπει δεδομένα).
         self.user = User.objects.create_user(
             username='testuser',
             email='test@test.com',
-            password='testpass123'
+            password='testpass123',
+            is_staff=True,
         )
         self.admin = User.objects.create_superuser(
             username='admin',

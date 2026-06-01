@@ -119,6 +119,53 @@ class PortalDataIsolationTest(APITestCase):
         self.assertIsNone(user['client_id'])
         self.assertTrue(user['is_staff'])
 
+    # ----- staff-gated endpoints: client → 403 (default-deny) -----
+    def test_client_forbidden_on_staff_endpoints(self):
+        self.client.force_authenticate(user=self.user_a)
+        staff_only = [
+            '/accounting/api/v1/search/?q=test',
+            '/accounting/api/dashboard/stats/',
+            '/accounting/api/reports/stats/',
+            '/accounting/api/v1/email/history/',
+            f'/accounting/api/reports/client-statement/{self.client_b.id}/',
+        ]
+        for url in staff_only:
+            resp = self.client.get(url)
+            self.assertEqual(
+                resp.status_code, status.HTTP_403_FORBIDDEN,
+                f'{url} → {resp.status_code} (αναμενόταν 403)',
+            )
+
+    def test_client_cannot_read_staff_stats(self):
+        # calls/tickets stats: ο πελάτης δεν λαμβάνει 200 (403 ή 404 λόγω routing).
+        self.client.force_authenticate(user=self.user_a)
+        for url in ['/accounting/api/v1/calls/stats/', '/accounting/api/v1/tickets/stats/']:
+            resp = self.client.get(url)
+            self.assertNotEqual(resp.status_code, status.HTTP_200_OK, url)
+
+    def test_staff_allowed_on_staff_endpoints(self):
+        # Sanity: το staff ΔΕΝ παίρνει 403 στα ίδια endpoints.
+        self.client.force_authenticate(user=self.staff)
+        for url in ['/accounting/api/dashboard/stats/', '/accounting/api/reports/stats/']:
+            resp = self.client.get(url)
+            self.assertNotEqual(resp.status_code, status.HTTP_403_FORBIDDEN, url)
+
+    # ----- credential fields NOT leaked to client -----
+    def test_client_profile_has_no_credentials(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get(f'/accounting/api/v1/clients/{self.client_a.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        for field in ('kodikos_taxisnet', 'kodikos_ika_ergodoti', 'kodikos_gemi',
+                      'onoma_xristi_taxisnet'):
+            self.assertNotIn(field, resp.data, f'credential {field} leaked to client!')
+
+    def test_staff_still_sees_credentials(self):
+        # Το staff πρέπει να συνεχίζει να βλέπει τα credentials (staff UI).
+        self.client.force_authenticate(user=self.staff)
+        resp = self.client.get(f'/accounting/api/v1/clients/{self.client_a.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('kodikos_taxisnet', resp.data)
+
     # ----- staff still sees everything -----
     def test_staff_sees_all_clients(self):
         self.client.force_authenticate(user=self.staff)
