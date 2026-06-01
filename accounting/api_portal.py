@@ -167,12 +167,20 @@ def me_vat(request):
         return err
 
     # Late import για να μην έχουμε circular dependency στο app startup.
-    from mydata.models import VATPeriodResult, VATRecord
-    from django.db.models import Sum
+    from mydata.services import VATPortalService
 
-    periods_qs = (VATPeriodResult.objects
-                  .filter(client=profile)
-                  .order_by('-year', '-period'))
+    # Το domain logic (split/aggregation/quantization) ζει στο service· εδώ
+    # μένει μόνο η σειριοποίηση (Decimals → strings) στο HTTP edge.
+    RECORD_LIMIT = 50
+
+    summary_d = VATPortalService.get_summary(profile)
+    summary = {
+        'output': {'net': str(summary_d['output']['net']),
+                   'vat': str(summary_d['output']['vat'])},
+        'input': {'net': str(summary_d['input']['net']),
+                  'vat': str(summary_d['input']['vat'])},
+    }
+
     periods = [{
         'id': p.id,
         'period_type': p.period_type,
@@ -186,11 +194,9 @@ def me_vat(request):
         'credit_to_next': str(p.credit_to_next),
         'is_locked': p.is_locked,
         'last_calculated_at': p.last_calculated_at,
-    } for p in periods_qs]
+    } for p in VATPortalService.get_periods(profile)]
 
-    records_qs = (VATRecord.objects
-                  .filter(client=profile, is_cancelled=False)
-                  .order_by('-issue_date')[:50])
+    records_qs = VATPortalService.get_recent_records(profile, limit=RECORD_LIMIT)
     records = [{
         'id': r.id,
         'mark': r.mark,
@@ -203,24 +209,11 @@ def me_vat(request):
         'vat_amount': str(r.vat_amount),
     } for r in records_qs]
 
-    # Aggregate (όλη η ιστορία, όχι μόνο τα 50 records που επιστρέφουμε).
-    agg = (VATRecord.objects
-           .filter(client=profile, is_cancelled=False)
-           .values('rec_type')
-           .annotate(total_net=Sum('net_value'), total_vat=Sum('vat_amount')))
-    summary = {'output': {'net': '0', 'vat': '0'}, 'input': {'net': '0', 'vat': '0'}}
-    for row in agg:
-        key = 'output' if row['rec_type'] == 1 else 'input'
-        summary[key] = {
-            'net': str(row['total_net'] or 0),
-            'vat': str(row['total_vat'] or 0),
-        }
-
     return Response({
         'summary': summary,
         'periods': periods,
         'records': records,
-        'records_truncated': records_qs.count() == 50,
+        'records_truncated': len(records) == RECORD_LIMIT,
     })
 
 

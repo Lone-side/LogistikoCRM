@@ -348,6 +348,34 @@ class PortalVATIsolationTest(APITestCase):
         resp = self.client.get('/accounting/api/client/me/vat/')
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_response_contract_shape(self):
+        # Regression guard: το frontend εξαρτάται από αυτό ΑΚΡΙΒΩΣ το shape.
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        d = resp.data
+        self.assertEqual(set(d.keys()), {'summary', 'periods', 'records', 'records_truncated'})
+        self.assertEqual(set(d['summary'].keys()), {'output', 'input'})
+        self.assertEqual(set(d['summary']['output'].keys()), {'net', 'vat'})
+        rec = d['records'][0]
+        self.assertEqual(
+            set(rec.keys()),
+            {'id', 'mark', 'issue_date', 'rec_type', 'kind', 'inv_type',
+             'net_value', 'vat_amount'},
+        )
+        self.assertEqual(rec['kind'], 'output')
+        self.assertFalse(d['records_truncated'])
+
+    def test_summary_is_2dp(self):
+        # client_a έχει output vat=24, net=100 → πρέπει '24.00'/'100.00' (όχι '24').
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/')
+        self.assertEqual(resp.data['summary']['output']['vat'], '24.00')
+        self.assertEqual(resp.data['summary']['output']['net'], '100.00')
+        # Καμία εισροή → πρέπει '0.00' (όχι '0').
+        self.assertEqual(resp.data['summary']['input']['vat'], '0.00')
+        self.assertEqual(resp.data['summary']['input']['net'], '0.00')
+
 
 # =============================================================================
 # /me/documents/upload — ο πελάτης ανεβάζει ΑΛΛΑ πάντα στον εαυτό του

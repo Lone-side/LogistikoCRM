@@ -5,11 +5,12 @@ Service Layer για myDATA Integration
 """
 
 from datetime import datetime, timedelta
-from decimal import Decimal
-from typing import List, Dict, Tuple
+from decimal import Decimal, ROUND_HALF_UP
+from typing import List, Dict, Tuple, Optional
 import logging
 
 from django.db import transaction
+from django.db.models import Sum, QuerySet
 from django.conf import settings
 from django.utils import timezone
 
@@ -20,6 +21,84 @@ from inventory.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Currency quantization: όλα τα ποσά ΦΠΑ στρογγυλοποιούνται σε 2 δεκαδικά.
+_CENTS = Decimal('0.01')
+_ZERO = Decimal('0.00')
+
+
+def _q(value) -> Decimal:
+    """Quantize a Decimal/None to 2 decimal places (default 0.00)."""
+    if value is None:
+        return _ZERO
+    return Decimal(value).quantize(_CENTS, rounding=ROUND_HALF_UP)
+
+
+class VATPortalService:
+    """
+    Read-only VAT domain logic for the client portal.
+
+    ΣΗΜΑΝΤΙΚΟ: όλες οι μέθοδοι δέχονται έναν ΗΔΗ επιλυμένο `client`
+    (ClientProfile), ΠΟΤΕ request/user. Η απομόνωση (isolation) παραμένει
+    αποκλειστικά στο view (_require_client). Έτσι το service είναι καθαρό
+    domain layer και testable χωρίς HTTP.
+
+    rec_type: 1 = εκροές (output / έσοδα), 2 = εισροές (input / έξοδα).
+    """
+
+    @staticmethod
+    def get_summary(client) -> Dict[str, Dict[str, Decimal]]:
+        """
+        Σύνολα net/vat ανά κατεύθυνση (output/input) για ΟΛΗ την ιστορία του
+        πελάτη, εξαιρώντας ακυρωμένα. Επιστρέφει quantized Decimals (2dp).
+        """
+        from mydata.models import VATRecord
+
+        summary = {
+            'output': {'net': _ZERO, 'vat': _ZERO},
+            'input': {'net': _ZERO, 'vat': _ZERO},
+        }
+        agg = (VATRecord.objects
+               .filter(client=client, is_cancelled=False)
+               .values('rec_type')
+               .annotate(total_net=Sum('net_value'), total_vat=Sum('vat_amount')))
+        for row in agg:
+            key = 'output' if row['rec_type'] == 1 else 'input'
+            summary[key] = {
+                'net': _q(row['total_net']),
+                'vat': _q(row['total_vat']),
+            }
+        return summary
+
+    @staticmethod
+    def get_periods(client, *, period_type: Optional[str] = None,
+                    year: Optional[int] = None) -> QuerySet:
+        """
+        VATPeriodResult του πελάτη, νεότερα πρώτα. Προαιρετικά φίλτρα
+        period_type ('monthly'|'quarterly') και year.
+        """
+        from mydata.models import VATPeriodResult
+
+        qs = VATPeriodResult.objects.filter(client=client)
+        if period_type:
+            qs = qs.filter(period_type=period_type)
+        if year is not None:
+            qs = qs.filter(year=year)
+        return qs.order_by('-year', '-period')
+
+    @staticmethod
+    def get_recent_records(client, *, limit: int = 50,
+                           year: Optional[int] = None) -> QuerySet:
+        """
+        Τα πιο πρόσφατα μη-ακυρωμένα VATRecord του πελάτη (έως `limit`).
+        Προαιρετικό φίλτρο year (στο issue_date).
+        """
+        from mydata.models import VATRecord
+
+        qs = VATRecord.objects.filter(client=client, is_cancelled=False)
+        if year is not None:
+            qs = qs.filter(issue_date__year=year)
+        return qs.order_by('-issue_date')[:limit]
 
 
 class MyDataService:
