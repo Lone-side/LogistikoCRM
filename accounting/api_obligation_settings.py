@@ -24,6 +24,7 @@ from .models import (
     ObligationProfile,
     ObligationGroup,
 )
+from .permissions import IsStaffUser
 
 
 # ============================================
@@ -216,7 +217,7 @@ class ObligationTypeSettingsViewSet(viewsets.ModelViewSet):
     """
     queryset = ObligationType.objects.all().select_related('exclusion_group').prefetch_related('profiles')
     authentication_classes = [JWTAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     pagination_class = None  # Return all types without pagination (frontend expects array, not paginated object)
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_active', 'frequency', 'profiles', 'exclusion_group']
@@ -270,7 +271,7 @@ class ObligationProfileSettingsViewSet(viewsets.ModelViewSet):
     queryset = ObligationProfile.objects.all().prefetch_related('obligation_types')
     serializer_class = ObligationProfileSettingsSerializer
     authentication_classes = [JWTAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     pagination_class = None  # Return all profiles without pagination (frontend expects array)
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
@@ -363,7 +364,7 @@ class ObligationGroupSettingsViewSet(viewsets.ModelViewSet):
     queryset = ObligationGroup.objects.all().prefetch_related('obligationtype_set')
     serializer_class = ObligationGroupSettingsSerializer
     authentication_classes = [JWTAuthentication, SessionAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     pagination_class = None  # Return all groups without pagination (frontend expects array)
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']

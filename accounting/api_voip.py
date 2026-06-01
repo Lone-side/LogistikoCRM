@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404
 
 from .models import VoIPCall, VoIPCallLog, Ticket, ClientProfile
 from .phone_utils import auto_match_call, batch_auto_match_calls, find_client_by_phone
-from .permissions import IsVoIPMonitor, IsLocalRequest
+from .permissions import IsVoIPMonitor, IsLocalRequest, IsStaffUser
 from .portal_mixins import ClientScopedQuerysetMixin
 
 import logging
@@ -526,7 +526,7 @@ class TicketViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 # ============================================
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsStaffUser])
 def calls_stats(request):
     """Get call statistics"""
     today = timezone.now().date()
@@ -556,7 +556,7 @@ def calls_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsStaffUser])
 def tickets_stats(request):
     """Get ticket statistics"""
     stats = {
@@ -582,7 +582,7 @@ def tickets_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsStaffUser])
 def search_clients_for_match(request):
     """Search clients for matching to a call"""
     query = request.query_params.get('q', '')

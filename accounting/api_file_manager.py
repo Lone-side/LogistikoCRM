@@ -65,6 +65,7 @@ from .models import (
     DocumentTag, DocumentTagAssignment, SharedLink, SharedLinkAccess,
     DocumentFavorite, DocumentCollection, get_client_folder
 )
+from .permissions import IsStaffUser
 
 
 # ============================================
@@ -344,7 +345,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
     """
     queryset = ClientDocument.objects.filter(is_current=True)
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = DocumentFilter
@@ -556,7 +557,7 @@ class TagViewSet(viewsets.ModelViewSet):
     """ViewSet for document tags"""
     queryset = DocumentTag.objects.all()
     serializer_class = DocumentTagSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering = ['name']
@@ -573,7 +574,7 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
     """ViewSet for shared links management"""
     queryset = SharedLink.objects.all()
     serializer_class = SharedLinkSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     ordering = ['-created_at']
@@ -821,7 +822,7 @@ class PublicSharedLinkDownloadView(APIView):
 
 class FavoriteViewSet(viewsets.ViewSet):
     """ViewSet for user favorites"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def list(self, request):
         """List user's favorite documents"""
@@ -875,7 +876,7 @@ class FavoriteViewSet(viewsets.ViewSet):
 
 class CollectionViewSet(viewsets.ModelViewSet):
     """ViewSet for document collections"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     pagination_class = StandardPagination
 
     def get_queryset(self):
@@ -930,7 +931,7 @@ class CollectionViewSet(viewsets.ModelViewSet):
 
 class FileManagerStatsView(APIView):
     """Get file manager statistics"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         # Total documents
@@ -988,7 +989,7 @@ class FileManagerStatsView(APIView):
 
 class RecentDocumentsView(APIView):
     """Get recent documents"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         limit = min(int(request.query_params.get('limit', 20)), 50)
@@ -1003,7 +1004,7 @@ class RecentDocumentsView(APIView):
 
 class BrowseFoldersView(APIView):
     """Browse folder structure"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         # Get distinct clients with documents

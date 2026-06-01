@@ -20,10 +20,11 @@ from .utils.report_constants import (
     get_previous_period_range,
     GREEK_MONTHS_SHORT,
 )
+from .permissions import IsStaffUser
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def reports_stats(request):
     """
     GET /api/reports/stats/
@@ -208,7 +209,7 @@ def calculate_comparison(period: str, current_start, current_end):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def reports_export(request):
     """
     GET /api/reports/export/
@@ -247,7 +248,7 @@ def reports_export(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def reports_export_download(request):
     """
     GET /api/reports/export/download/
@@ -423,7 +424,7 @@ def reports_export_download(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def client_statement(request, client_id):
     """
     GET /api/reports/client-statement/<client_id>/
@@ -544,7 +545,7 @@ def client_statement(request, client_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def vat_summary(request):
     """
     GET /api/reports/vat-summary/

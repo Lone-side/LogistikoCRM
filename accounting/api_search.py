@@ -13,12 +13,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ClientProfile, MonthlyObligation, VoIPCall, Ticket
+from .permissions import IsStaffUser
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def global_search(request):
     """
     Global search API for searching across all entities.

@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import ClientProfile, ObligationType, ObligationProfile, ClientObligation
+from .permissions import IsStaffUser
 
 try:
     import openpyxl
@@ -33,7 +34,7 @@ except ImportError:
 # ==============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def export_clients_template(request):
     """
     GET /api/v1/export/clients/template/
@@ -78,7 +79,7 @@ def export_clients_template(request):
 # ==============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def export_clients_csv(request):
     """
     GET /api/v1/export/clients/csv/
@@ -204,7 +205,7 @@ def export_clients_csv(request):
 # ==============================================================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 @parser_classes([MultiPartParser, FormParser])
 def import_clients_csv(request):
     """
@@ -453,7 +454,7 @@ def clean_value(value, field_name):
 # ==============================================================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def export_obligation_profiles_csv(request):
     """Export obligation profiles - kept for compatibility."""
     from django.http import HttpResponse
@@ -476,7 +477,7 @@ def export_obligation_profiles_csv(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def export_obligation_types_csv(request):
     """Export obligation types - kept for compatibility."""
     from django.http import HttpResponse
@@ -501,7 +502,7 @@ def export_obligation_types_csv(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def export_client_obligations_csv(request):
     """Export client obligation assignments."""
     from django.http import HttpResponse
@@ -527,7 +528,7 @@ def export_client_obligations_csv(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 @parser_classes([MultiPartParser, FormParser])
 def import_client_obligations_csv(request):
     """Import client obligation assignments from CSV."""

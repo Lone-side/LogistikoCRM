@@ -15,10 +15,11 @@ from calendar import monthrange
 from collections import defaultdict
 
 from .models import ClientProfile, MonthlyObligation
+from .permissions import IsStaffUser
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def dashboard_stats(request):
     """
     GET /api/dashboard/stats/
@@ -112,7 +113,7 @@ def dashboard_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def dashboard_calendar(request):
     """
     GET /api/dashboard/calendar/
@@ -196,7 +197,7 @@ def dashboard_calendar(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def dashboard_recent_activity(request):
     """
     GET /api/dashboard/recent-activity/
@@ -250,7 +251,7 @@ def dashboard_recent_activity(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def dashboard_client_stats(request):
     """
     GET /api/dashboard/client-stats/

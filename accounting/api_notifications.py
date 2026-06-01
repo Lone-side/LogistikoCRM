@@ -11,6 +11,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .models import MonthlyObligation
+from .permissions import IsStaffUser
 
 import logging
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def notifications_list(request):
     """
     Get user notifications for dashboard.

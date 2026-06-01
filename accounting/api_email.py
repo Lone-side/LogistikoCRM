@@ -16,6 +16,7 @@ from .models import (
     EmailSettings
 )
 from .services.email_service import EmailService
+from .permissions import IsStaffUser
 
 
 # ============================================
@@ -166,7 +167,7 @@ class BulkCompleteNotifySerializer(serializers.Serializer):
 # ============================================
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def email_templates(request):
     """
     GET /api/v1/email/templates/
@@ -189,7 +190,7 @@ def email_templates(request):
 
 
 @api_view(['GET', 'PUT', 'DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def email_template_detail(request, template_id):
     """
     GET /api/v1/email/templates/{id}/
@@ -236,7 +237,7 @@ def email_template_detail(request, template_id):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def preview_email(request):
     """
     POST /api/v1/email/preview/
@@ -302,7 +303,7 @@ def preview_email(request):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def send_email(request):
     """
     POST /api/v1/email/send/
@@ -369,7 +370,7 @@ def send_email(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def send_obligation_notice(request):
     """
     POST /api/v1/email/send-obligation-notice/
@@ -465,7 +466,7 @@ def send_obligation_notice(request):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def complete_and_notify(request, obligation_id):
     """
     POST /api/v1/obligations/{id}/complete-and-notify/
@@ -662,7 +663,7 @@ def complete_and_notify(request, obligation_id):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def bulk_complete_with_notify(request):
     """
     POST /api/v1/obligations/bulk-complete-notify/
@@ -769,7 +770,7 @@ def bulk_complete_with_notify(request):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def bulk_complete_with_documents(request):
     """
     POST /api/v1/obligations/bulk-complete-with-documents/
@@ -987,7 +988,7 @@ def bulk_complete_with_documents(request):
 # ============================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def email_history(request):
     """
     GET /api/v1/email/history/
@@ -1075,7 +1076,7 @@ class EmailSettingsSerializer(serializers.ModelSerializer):
 
 
 @api_view(['GET', 'PUT'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def email_settings(request):
     """
     GET /api/v1/email/settings/
@@ -1100,7 +1101,7 @@ def email_settings(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def email_settings_test(request):
     """
     POST /api/v1/email/settings/test/
@@ -1143,7 +1144,7 @@ def email_settings_test(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def email_settings_send_test(request):
     """
     POST /api/v1/email/settings/send-test/

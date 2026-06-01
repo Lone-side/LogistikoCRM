@@ -13,6 +13,21 @@ from accounting.portal import is_client_user
 logger = logging.getLogger(__name__)
 
 
+class IsStaffUser(BasePermission):
+    """
+    Επιτρέπει πρόσβαση ΜΟΝΟ σε staff/superuser.
+
+    Default-deny για client portal users: όλα τα endpoints διαχείρισης
+    (search, dashboard, reports, email, export, settings) πρέπει να είναι
+    απρόσιτα στους πελάτες. Οι πελάτες χρησιμοποιούν ΜΟΝΟ τα /api/client/me/.
+    """
+    message = 'Απαιτούνται δικαιώματα προσωπικού.'
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
+
+
 class IsStaffOrClientOwner(BasePermission):
     """
     Client Portal permission.
