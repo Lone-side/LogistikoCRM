@@ -57,7 +57,7 @@ describe('ClientPortal — VAT year selector', () => {
   it('renders a year selector on the VAT tab', async () => {
     const user = userEvent.setup()
     renderPortal()
-    await user.click(await screen.findByRole('button', { name: 'ΦΠΑ' }))
+    await user.click(await screen.findByRole('tab', { name: 'ΦΠΑ' }))
 
     const select = await screen.findByLabelText(/έτος/i)
     expect(select).toBeInTheDocument()
@@ -69,7 +69,7 @@ describe('ClientPortal — VAT year selector', () => {
   it('refetches VAT with the selected year', async () => {
     const user = userEvent.setup()
     renderPortal()
-    await user.click(await screen.findByRole('button', { name: 'ΦΠΑ' }))
+    await user.click(await screen.findByRole('tab', { name: 'ΦΠΑ' }))
 
     const select = await screen.findByLabelText(/έτος/i)
     await user.selectOptions(select, '2025')

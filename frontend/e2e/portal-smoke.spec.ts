@@ -19,17 +19,17 @@ test('client logs in, views VAT, and uploads a document', async ({ page }) => {
 
   // 2) PORTAL — redirected to the client portal (not staff dashboard)
   await expect(page).toHaveURL(/\/portal/, { timeout: 15_000 })
-  await expect(page.getByRole('button', { name: 'ΦΠΑ' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: 'ΦΠΑ' })).toBeVisible()
 
   // 3) VAT tab — summary + at least one period render
-  await page.getByRole('button', { name: 'ΦΠΑ' }).click()
+  await page.getByRole('tab', { name: 'ΦΠΑ' }).click()
   await expect(page.getByText('Εκροές (Έσοδα)')).toBeVisible()
   await expect(page.getByText('Περίοδοι ΦΠΑ')).toBeVisible()
   // Year selector is present and offers the seeded years.
   await expect(page.getByLabel('Έτος')).toBeVisible()
 
   // 4) UPLOAD — go to Έγγραφα, upload a file, expect success
-  await page.getByRole('button', { name: 'Έγγραφα' }).click()
+  await page.getByRole('tab', { name: 'Έγγραφα' }).click()
   await expect(page.getByText('Ανέβασμα εγγράφου')).toBeVisible()
 
   const fileChooserPromise = page.waitForEvent('filechooser')

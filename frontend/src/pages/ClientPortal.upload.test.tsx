@@ -39,7 +39,7 @@ function renderPortal() {
 }
 
 async function gotoDocuments(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'Έγγραφα' }))
+  await user.click(await screen.findByRole('tab', { name: 'Έγγραφα' }))
 }
 
 function fileInput(): HTMLInputElement {

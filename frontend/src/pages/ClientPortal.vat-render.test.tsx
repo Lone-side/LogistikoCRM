@@ -60,7 +60,7 @@ function renderPortal() {
 }
 
 async function gotoVat(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole('button', { name: 'ΦΠΑ' }))
+  await user.click(await screen.findByRole('tab', { name: 'ΦΠΑ' }))
 }
 
 describe('ClientPortal — VAT tab rendering', () => {

@@ -166,8 +166,12 @@ export default function ClientPortal() {
             Αποσύνδεση
           </button>
         </div>
-        {/* Tabs */}
-        <div className="max-w-5xl mx-auto px-4 flex gap-1">
+        {/* Tabs — horizontally scrollable on narrow screens */}
+        <div
+          role="tablist"
+          aria-label="Ενότητες πύλης"
+          className="max-w-5xl mx-auto px-4 flex gap-1 overflow-x-auto"
+        >
           {([
             ['overview', 'Επισκόπηση'],
             ['obligations', 'Υποχρεώσεις'],
@@ -176,8 +180,10 @@ export default function ClientPortal() {
           ] as [Tab, string][]).map(([key, label]) => (
             <button
               key={key}
+              role="tab"
+              aria-selected={tab === key}
               onClick={() => setTab(key)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
                 tab === key
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -224,7 +230,7 @@ export default function ClientPortal() {
             ) : obligations.length === 0 ? (
               <p className="p-6 text-gray-500">Δεν υπάρχουν υποχρεώσεις.</p>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium">Υποχρέωση</th>
@@ -245,7 +251,7 @@ export default function ClientPortal() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         )}
@@ -305,7 +311,7 @@ export default function ClientPortal() {
                   {vatData.periods.length === 0 ? (
                     <p className="p-6 text-gray-500">Δεν υπάρχουν υπολογισμένες περίοδοι.</p>
                   ) : (
-                    <table className="w-full text-sm">
+                    <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
                       <thead className="bg-gray-50 text-gray-600">
                         <tr>
                           <th className="text-left px-4 py-3 font-medium">Περίοδος</th>
@@ -333,7 +339,7 @@ export default function ClientPortal() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </table></div>
                   )}
                 </div>
 
@@ -344,7 +350,7 @@ export default function ClientPortal() {
                   {vatData.records.length === 0 ? (
                     <p className="p-6 text-gray-500">Δεν υπάρχουν παραστατικά.</p>
                   ) : (
-                    <table className="w-full text-sm">
+                    <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
                       <thead className="bg-gray-50 text-gray-600">
                         <tr>
                           <th className="text-left px-4 py-3 font-medium">Ημερομηνία</th>
@@ -371,7 +377,7 @@ export default function ClientPortal() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </table></div>
                   )}
                 </div>
               </>
@@ -441,7 +447,7 @@ export default function ClientPortal() {
             ) : documents.length === 0 ? (
               <p className="p-6 text-gray-500">Δεν υπάρχουν έγγραφα.</p>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium">Αρχείο</th>
@@ -475,7 +481,7 @@ export default function ClientPortal() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
           </div>
