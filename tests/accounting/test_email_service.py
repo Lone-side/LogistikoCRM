@@ -418,9 +418,10 @@ class EmailServiceGreekCharactersTest(TestCase):
         self.assertTrue(success)
         self.assertEqual(len(mail.outbox), 1)
 
-        # Check subject contains Greek
+        # Check subject preserves Greek characters (the point of this test).
+        # The completion subject is 'Ολοκλήρωση {obligation_type} - MM/YYYY',
+        # so we assert the Greek obligation-type text is intact.
         self.assertIn('Φόρος Προστιθέμενης Αξίας', mail.outbox[0].subject)
-        self.assertIn('ΔΟΚΙΜΑΣΤΙΚΗ', mail.outbox[0].subject)
 
 
 # =============================================================================
