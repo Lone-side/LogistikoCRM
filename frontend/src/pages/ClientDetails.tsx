@@ -45,6 +45,7 @@ import {
   ClientCallsTab,
   ClientTicketsTab,
   ClientNotesTab,
+  PortalAccessCard,
   UploadModal,
   CreateTicketModal,
   type TicketUpdateData,
@@ -281,12 +282,16 @@ export default function ClientDetails() {
         <div className="p-6">
           {/* INFO TAB */}
           {activeTab === 'info' && (
-            <ClientInfoTab
-              client={currentData as ClientFull}
-              clientId={clientId}
-              isEditing={isEditing}
-              onFieldChange={handleFieldChange}
-            />
+            <div className="space-y-6">
+              <ClientInfoTab
+                client={currentData as ClientFull}
+                clientId={clientId}
+                isEditing={isEditing}
+                onFieldChange={handleFieldChange}
+              />
+              {/* Διαχείριση πρόσβασης πύλης πελάτη (staff) */}
+              <PortalAccessCard clientId={clientId} />
+            </div>
           )}
 
           {/* OBLIGATIONS TAB */}

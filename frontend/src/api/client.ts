@@ -94,6 +94,16 @@ export const authApi = {
 };
 
 // Clients API functions
+export interface PortalStatus {
+  client_id: number;
+  has_portal_account: boolean;
+  portal_username: string | null;
+  has_email: boolean;
+  email: string | null;
+  invite_sent?: boolean;
+  detail?: string;
+}
+
 export const clientsApi = {
   getAll: async (params?: { search?: string; page?: number; page_size?: number }) => {
     const response = await apiClient.get('api/v1/clients/', { params });
@@ -102,6 +112,20 @@ export const clientsApi = {
 
   getById: async (id: number) => {
     const response = await apiClient.get(`api/v1/clients/${id}/`);
+    return response.data;
+  },
+
+  // --- Portal account management (staff) ---
+  getPortalStatus: async (id: number): Promise<PortalStatus> => {
+    const response = await apiClient.get(`api/v1/clients/${id}/portal-status/`);
+    return response.data;
+  },
+  createPortalAccount: async (id: number): Promise<PortalStatus> => {
+    const response = await apiClient.post(`api/v1/clients/${id}/create-portal-account/`);
+    return response.data;
+  },
+  resendPortalInvite: async (id: number): Promise<{ detail: string; invite_sent: boolean }> => {
+    const response = await apiClient.post(`api/v1/clients/${id}/resend-portal-invite/`);
     return response.data;
   },
 };

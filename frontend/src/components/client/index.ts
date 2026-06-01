@@ -29,3 +29,6 @@ export type { UploadModalProps } from './UploadModal';
 
 export { default as CreateTicketModal } from './CreateTicketModal';
 export type { CreateTicketModalProps } from './CreateTicketModal';
+
+// Portal account management (staff)
+export { PortalAccessCard } from './PortalAccessCard';
