@@ -25,6 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounting.models import ClientProfile
+from accounting.permissions import IsStaffUser
 from .models import MyDataCredentials, VATRecord, VATSyncLog
 from .serializers import (
     MyDataCredentialsSerializer,
@@ -188,7 +189,7 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 
     queryset = MyDataCredentials.objects.select_related('client').all()
     serializer_class = MyDataCredentialsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get_queryset(self):
         """Filter by client if specified."""
@@ -375,7 +376,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = VATRecord.objects.select_related('client').all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -525,7 +526,7 @@ class VATSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = VATSyncLog.objects.select_related('client').all()
     serializer_class = VATSyncLogSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get_queryset(self):
         """Apply filters."""
@@ -573,7 +574,7 @@ class MyDataDashboardView(APIView):
     - month: Month (default: current)
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         today = date.today()
@@ -660,7 +661,7 @@ class ClientVATDetailView(APIView):
     - include_records: Include individual records (default: false)
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request, afm):
         try:
@@ -779,7 +780,7 @@ class MonthlyTrendView(APIView):
     - months: Number of months to include (default: 6)
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         afm = request.query_params.get('afm')
@@ -874,7 +875,7 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
     - POST /periods/{id}/unlock/ - Ξεκλείδωμα περιόδου
     - POST /periods/{id}/set_credit/ - Ορισμός πιστωτικού
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get_queryset(self):
         from .models import VATPeriodResult
@@ -1080,7 +1081,7 @@ class VATPeriodCalculatorView(APIView):
 
     GET /api/mydata/calculator/?client_id=1&period_type=quarterly&year=2025&period=1
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         from .models import VATPeriodResult

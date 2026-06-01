@@ -204,8 +204,20 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     def upload(self, request):
         """
         POST /api/v1/documents/upload/
-        Upload a new document with multipart/form-data
+        Upload a new document with multipart/form-data (STAFF only).
+
+        SECURITY: αυτό το staff εργαλείο δέχεται αυθαίρετο client_id. Οι πελάτες
+        ΔΕΝ επιτρέπεται να το χρησιμοποιήσουν (θα παρέκαμπταν το write-guard του
+        ClientScopedQuerysetMixin και θα ανέβαζαν σε ξένο φάκελο). Οι πελάτες
+        χρησιμοποιούν το /api/client/me/documents/upload/ (κλειδωμένο στον εαυτό).
         """
+        from accounting.portal import is_client_user
+        if is_client_user(request.user):
+            return Response(
+                {'detail': 'Δεν επιτρέπεται. Χρησιμοποιήστε /api/client/me/documents/upload/.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         serializer = DocumentUploadSerializer(data=request.data)
 
         if not serializer.is_valid():
