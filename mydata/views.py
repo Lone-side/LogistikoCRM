@@ -11,9 +11,10 @@ Django REST Framework Views για myDATA module.
 
 from datetime import date, timedelta
 from calendar import monthrange
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import logging
 
+from django.db import transaction
 from django.db.models import Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -1046,22 +1047,31 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            period.previous_credit = Decimal(str(credit))
-            period.save(update_fields=['previous_credit', 'updated_at'])
-
-            # Recalculate with new credit
-            period.calculate_from_records(save=True)
-
-            return Response({
-                'success': True,
-                'message': f'Το πιστωτικό ορίστηκε σε {period.previous_credit}€',
-                'period': self.get_serializer(period).data
-            })
-        except (ValueError, TypeError):
+            credit_value = Decimal(str(credit))
+        except (ValueError, TypeError, InvalidOperation):
             return Response(
                 {'error': 'Μη έγκυρο ποσό'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Το πιστωτικό υπόλοιπο δεν μπορεί να είναι αρνητικό.
+        if credit_value < 0:
+            return Response(
+                {'error': 'Το πιστωτικό υπόλοιπο δεν μπορεί να είναι αρνητικό'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Atomic: η αποθήκευση του credit και ο επανυπολογισμός commit-άρουν μαζί.
+        with transaction.atomic():
+            period.previous_credit = credit_value
+            period.save(update_fields=['previous_credit', 'updated_at'])
+            period.calculate_from_records(save=True)
+
+        return Response({
+            'success': True,
+            'message': f'Το πιστωτικό ορίστηκε σε {period.previous_credit}€',
+            'period': self.get_serializer(period).data
+        })
 
 
 class VATPeriodCalculatorView(APIView):

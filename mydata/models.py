@@ -8,7 +8,7 @@ Models για myDATA Integration (ΑΑΔΕ Ηλεκτρονικά Βιβλία)
 - MyDataSyncLog: Logging για sync operations
 """
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
@@ -511,6 +511,9 @@ class VATRecord(models.Model):
             models.Index(fields=['client', 'rec_type', 'issue_date']),
             models.Index(fields=['client', 'vat_category', 'issue_date']),
             models.Index(fields=['issue_date', 'rec_type']),
+            # Portal hot path: filter(client=…, is_cancelled=False).order_by(-issue_date)
+            models.Index(fields=['client', 'is_cancelled', 'issue_date'],
+                         name='vatrecord_client_active_idx'),
         ]
 
     def __str__(self):
@@ -1119,6 +1122,14 @@ class VATPeriodResult(models.Model):
         last_day = calendar.monthrange(self.year, last_month)[1]
         return date(self.year, last_month, last_day)
 
+    def clean(self):
+        """Model validation: το πιστωτικό υπόλοιπο δεν μπορεί να είναι αρνητικό."""
+        super().clean()
+        if self.previous_credit is not None and self.previous_credit < 0:
+            raise ValidationError(
+                {'previous_credit': 'Το πιστωτικό υπόλοιπο δεν μπορεί να είναι αρνητικό.'}
+            )
+
     # =========================================================================
     # CALCULATION METHODS
     # =========================================================================
@@ -1175,7 +1186,9 @@ class VATPeriodResult(models.Model):
         self.last_calculated_at = timezone.now()
 
         if save:
-            self.save()
+            # Atomic: ο υπολογισμός + η αποθήκευση ως μία μονάδα.
+            with transaction.atomic():
+                self.save()
 
         return {
             'vat_output': self.vat_output,
