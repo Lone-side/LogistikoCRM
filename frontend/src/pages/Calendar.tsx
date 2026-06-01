@@ -854,13 +854,17 @@ export default function Calendar() {
         }}
         obligation={selectedObligation ? {
           id: selectedObligation.id,
-          client_id: selectedObligation.client_id,
+          client: selectedObligation.client_id,
+          obligation_type: 0,
           type_code: selectedObligation.type_code,
           type_name: selectedObligation.type_name,
           month: currentMonth,
           year: currentYear,
+          deadline: '',
           status: selectedObligation.status,
-        } as Obligation : null}
+          created_at: '',
+          updated_at: '',
+        } satisfies Obligation : null}
         clientName={getSelectedClient()?.eponimia || selectedObligation?.client_name || ''}
         clientEmail={getSelectedClient()?.email || undefined}
         onComplete={handleCompleteAndNotify}

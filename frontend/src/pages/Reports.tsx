@@ -5,7 +5,6 @@ import {
   TrendingDown,
   Calendar,
   Download,
-  Filter,
   Users,
   ClipboardList,
   RefreshCw,
@@ -17,7 +16,6 @@ import {
 import { Button } from '../components';
 import {
   useReportsStats,
-  useReportsExport,
   useReportExport,
   type ReportPeriod
 } from '../hooks/useReports';
@@ -46,11 +44,9 @@ export default function Reports() {
   const [period, setPeriod] = useState<ReportPeriod>('month');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const { data: stats, isLoading, isError, error, refetch } = useReportsStats(period);
-  const { data: exportData } = useReportsExport();
   const {
     isExporting,
     exportType,
-    error: exportError,
     exportClients,
     exportObligations,
     exportMonthlyPdf,

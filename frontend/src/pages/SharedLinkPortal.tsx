@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   File, FileText, FileSpreadsheet, Image, Download, Lock, Mail,
-  Clock, AlertCircle, CheckCircle, Loader2, FolderOpen, Eye
+  AlertCircle, Loader2, FolderOpen
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import apiClient from '../api/client';
@@ -48,9 +48,6 @@ export default function SharedLinkPortal() {
 
   // Content state
   const [content, setContent] = useState<PublicSharedContent | null>(null);
-
-  // Preview state
-  const [previewDoc, setPreviewDoc] = useState<{ filename: string; url: string; type: string } | null>(null);
 
   // Initial load
   useEffect(() => {
