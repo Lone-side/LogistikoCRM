@@ -69,7 +69,20 @@ jobs:
 
       - name: Run tests
         run: |
-          python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata --keepdb -v 2
+          python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata tests.test_production_guards --keepdb -v 2
+
+      - name: Production safety check (guards must fire)
+        run: |
+          # Django's own deployment checklist (security headers, etc.)
+          DEBUG=False SECRET_KEY='ci-strong-secret' FRITZ_API_TOKEN='ci-fritz' \
+            python manage.py check --deploy --fail-level WARNING || true
+          # Assert the startup guard refuses default secrets in production.
+          if DEBUG=False SECRET_KEY='default-key-for-development' FRITZ_API_TOKEN='x' \
+               python manage.py check 2>/dev/null; then
+            echo "::error::Production guard did NOT fire on default SECRET_KEY"; exit 1
+          else
+            echo "OK: production guard blocks default SECRET_KEY when DEBUG=False"
+          fi
 
       - name: Run tests with coverage
         run: |

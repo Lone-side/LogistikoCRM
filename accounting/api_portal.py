@@ -20,7 +20,7 @@ import os
 from rest_framework.decorators import api_view, permission_classes, throttle_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -151,8 +151,16 @@ def me_calls(request):
     return Response({'count': len(data), 'results': data})
 
 
-class VatReadThrottle(ScopedRateThrottle):
+class VatReadThrottle(SimpleRateThrottle):
+    # NOTE: ScopedRateThrottle no-ops on function views (it reads throttle_scope
+    # off the view, which @api_view functions lack). SimpleRateThrottle with a
+    # fixed scope actually enforces. Keyed per authenticated user (fallback IP).
     scope = 'vat_read'
+
+    def get_cache_key(self, request, view):
+        ident = (request.user.pk if request.user and request.user.is_authenticated
+                 else self.get_ident(request))
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
 
 
 @api_view(['GET'])
@@ -323,8 +331,13 @@ def me_upload_document(request):
 # PASSWORD SET / RESET — για clients που δημιουργήθηκαν χωρίς usable password
 # =============================================================================
 
-class SetPasswordThrottle(ScopedRateThrottle):
+class SetPasswordThrottle(SimpleRateThrottle):
+    # SimpleRateThrottle (not ScopedRateThrottle) so it actually enforces on this
+    # function view. Unauthenticated endpoint → key by client IP.
     scope = 'set_password'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
 
 
 # Ενιαίο γενικό μήνυμα για ΟΛΕΣ τις αποτυχίες uid/token/client, ώστε να μην
@@ -342,7 +355,7 @@ def set_password(request):
 
     Ορισμός κωδικού μέσω one-time token (Django default_token_generator).
     Το staff δημιουργεί τον λογαριασμό· ο πελάτης λαμβάνει uid+token και ορίζει
-    κωδικό εδώ. Rate-limited (10/hour) κατά brute-force.
+    κωδικό εδώ. Rate-limited (3/hour) κατά brute-force.
 
     Body: { "uid": "<base64 user id>", "token": "<token>", "password": "<new>" }
     """
@@ -359,7 +372,7 @@ def set_password(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Resolve user + token + client-status με ΕΝΙΑΙΟ generic error (no oracle).
+    # Resolve user με ΕΝΙΑΙΟ generic error (no enumeration oracle).
     user = None
     try:
         user_id = urlsafe_base64_decode(uid).decode()
@@ -367,15 +380,17 @@ def set_password(request):
     except (TypeError, ValueError, OverflowError, User.DoesNotExist):
         user = None
 
-    if (
-        user is None
-        or not is_client_user(user)
-        or not default_token_generator.check_token(user, token)
-    ):
+    # Constant-time: ΠΑΝΤΑ τρέχουμε token check (ακόμη κι αν λείπει ο user ή δεν
+    # είναι client), ώστε ο χρόνος απόκρισης να μην προδίδει αν το uid υπάρχει.
+    token_user = user if (user is not None and is_client_user(user)) else None
+    token_ok = default_token_generator.check_token(token_user, token)
+
+    if token_user is None or not token_ok:
         return Response(
             {'detail': _INVALID_LINK},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    user = token_user
 
     # Έλεγχος ισχύος κωδικού με τους validators του Django (μήκος, κοινοί,
     # αριθμητικοί κ.λπ.).
