@@ -13,6 +13,18 @@ from celery.schedules import crontab
 from dotenv import load_dotenv
 load_dotenv()
 
+# Προειδοποίηση (όχι σφάλμα) αν τρέχει σε μη υποστηριζόμενη Python. Το Django 5.0
+# υποστηρίζει 3.10–3.12· σε 3.13/3.14 ο Django test client σπάει και η
+# συμπεριφορά αποκλίνει από production (Docker/CI = 3.11).
+if sys.version_info[:2] not in {(3, 10), (3, 11), (3, 12)}:
+    import warnings as _warnings
+    _warnings.warn(
+        f"Μη υποστηριζόμενη έκδοση Python {sys.version_info.major}."
+        f"{sys.version_info.minor} για Django 5.0 (συνιστάται 3.11 — βλ. "
+        f".python-version). Σε 3.13+ τα tests/test-client ενδέχεται να σπάσουν.",
+        RuntimeWarning,
+    )
+
 
 from crm.settings import *          # NOQA
 from common.settings import *       # NOQA
