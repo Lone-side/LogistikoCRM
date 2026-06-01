@@ -131,3 +131,30 @@ class PortalDataIsolationTest(APITestCase):
         ids = self._list_ids('/accounting/api/v1/obligations/')
         self.assertIn(self.obl_a.id, ids)
         self.assertIn(self.obl_b.id, ids)
+
+    # ----- /api/client/me/ endpoints -----
+    def test_me_profile_returns_own_profile(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/profile/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data['id'], self.client_a.id)
+        self.assertEqual(resp.data['afm'], self.client_a.afm)
+
+    def test_me_obligations_returns_only_own(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/obligations/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        ids = {o['id'] for o in resp.data['results']}
+        self.assertEqual(ids, {self.obl_a.id})
+        self.assertNotIn(self.obl_b.id, ids)
+
+    def test_me_endpoints_forbidden_for_staff(self):
+        # Τα /me/ είναι αποκλειστικά για πελάτες· staff παίρνει 403.
+        self.client.force_authenticate(user=self.staff)
+        for ep in ['profile', 'obligations', 'documents', 'calls']:
+            resp = self.client.get(f'/accounting/api/client/me/{ep}/')
+            self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, ep)
+
+    def test_me_endpoints_require_auth(self):
+        resp = self.client.get('/accounting/api/client/me/profile/')
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)

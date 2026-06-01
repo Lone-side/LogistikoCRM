@@ -10,6 +10,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views_main as views
 from . import api_auth
+from . import api_portal
 from .api_clients import ClientViewSet
 from .api_obligations import ObligationViewSet, ObligationTypeViewSet
 from .api_dashboard import (
@@ -309,6 +310,14 @@ urlpatterns = [
     path("api/v1/calls/stats/", calls_stats, name="api_calls_stats"),
     path("api/v1/tickets/stats/", tickets_stats, name="api_tickets_stats"),
     path("api/v1/clients/search-for-match/", search_clients_for_match, name="search_clients_for_match"),
+
+    # ==================================================
+    # CLIENT PORTAL ENDPOINTS (/api/client/me/) - read-mostly, scoped
+    # ==================================================
+    path("api/client/me/profile/", api_portal.me_profile, name="portal_me_profile"),
+    path("api/client/me/obligations/", api_portal.me_obligations, name="portal_me_obligations"),
+    path("api/client/me/documents/", api_portal.me_documents, name="portal_me_documents"),
+    path("api/client/me/calls/", api_portal.me_calls, name="portal_me_calls"),
 
     # ==================================================
     # JWT AUTHENTICATION ENDPOINTS
