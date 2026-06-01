@@ -504,3 +504,23 @@ class PortalUploadIsolationTest(APITestCase):
             format='multipart',
         )
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_upload_sanitizes_path_traversal_filename(self):
+        # SECURITY: ο πελάτης δίνει filename με path traversal — πρέπει να
+        # αποθηκεύεται καθαρισμένο (όχι '..', όχι separators).
+        self.client.force_authenticate(user=self.user_a)
+        evil = '../../../../etc/passwd.pdf'
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file(name=evil)},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content[:300])
+        doc = ClientDocument.objects.get(id=resp.data['id'])
+        # Καθαρισμένο: χωρίς '..' και χωρίς path separators.
+        self.assertNotIn('..', doc.filename)
+        self.assertNotIn('/', doc.filename)
+        self.assertNotIn('\\', doc.filename)
+        self.assertNotIn('..', doc.original_filename)
+        # Το πραγματικό αρχείο στον δίσκο δεν ξεφεύγει από το media root.
+        self.assertNotIn('..', doc.file.name)

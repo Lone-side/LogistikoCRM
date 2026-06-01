@@ -292,11 +292,17 @@ def me_upload_document(request):
         category = 'general'
     description = (request.data.get('description') or '').strip()[:500]
 
+    # SECURITY (defense-in-depth): καθάρισε το όνομα αρχείου ώστε να μην περιέχει
+    # path traversal / separators / control chars — ακόμη κι αν ο parser αλλάξει.
+    from common.utils.file_validation import sanitize_filename
+    safe_name = sanitize_filename(uploaded.name)
+    uploaded.name = safe_name
+
     doc = ClientDocument.objects.create(
         client=profile,                # ← forced, NEVER from body
         file=uploaded,
-        original_filename=uploaded.name,
-        filename=uploaded.name,
+        original_filename=safe_name,
+        filename=safe_name,
         file_size=uploaded.size,
         document_category=category,
         description=description,

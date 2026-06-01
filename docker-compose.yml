@@ -39,6 +39,10 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    # ΠΡΟΣΟΧΗ (PRODUCTION): τα defaults εδώ είναι για ΤΟΠΙΚΗ ανάπτυξη. Για
+    # production ΟΡΙΣΕ σε .env: DJANGO_ENV=production, DEBUG=False, ισχυρό
+    # SECRET_KEY, ισχυρό DB_PASSWORD, και ALLOWED_HOSTS=ο τομέας σου. Με
+    # DEBUG=False το settings.py ρίχνει ImproperlyConfigured αν λείπει SECRET_KEY.
     environment:
       - DJANGO_ENV=${DJANGO_ENV:-development}
       - DEBUG=${DEBUG:-True}
@@ -50,7 +54,7 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
-      - ALLOWED_HOSTS=*
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
     volumes:
       - .:/app
       - static_volume:/app/static
