@@ -12,9 +12,12 @@ Endpoints:
     GET /accounting/api/client/me/calls/       - Οι κλήσεις του
 """
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.http import urlsafe_base64_decode
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -138,15 +141,26 @@ def me_calls(request):
 # PASSWORD SET / RESET — για clients που δημιουργήθηκαν χωρίς usable password
 # =============================================================================
 
+class SetPasswordThrottle(ScopedRateThrottle):
+    scope = 'set_password'
+
+
+# Ενιαίο γενικό μήνυμα για ΟΛΕΣ τις αποτυχίες uid/token/client, ώστε να μην
+# υπάρχει enumeration oracle (ίδια απάντηση είτε το uid είναι έγκυρο/client
+# είτε όχι).
+_INVALID_LINK = 'Ο σύνδεσμος είναι άκυρος ή έληξε. Ζητήστε νέο.'
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([SetPasswordThrottle])
 def set_password(request):
     """
-    POST /api/client/me/set-password/
+    POST /api/client/set-password/
 
     Ορισμός κωδικού μέσω one-time token (Django default_token_generator).
-    Το staff δημιουργεί τον λογαριασμό· ο πελάτης λαμβάνει uid+token (μέσω
-    email/SMS) και ορίζει κωδικό εδώ. Δεν απαιτεί authentication.
+    Το staff δημιουργεί τον λογαριασμό· ο πελάτης λαμβάνει uid+token και ορίζει
+    κωδικό εδώ. Rate-limited (10/hour) κατά brute-force.
 
     Body: { "uid": "<base64 user id>", "token": "<token>", "password": "<new>" }
     """
@@ -163,31 +177,31 @@ def set_password(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    if len(password) < 8:
-        return Response(
-            {'detail': 'Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+    # Resolve user + token + client-status με ΕΝΙΑΙΟ generic error (no oracle).
+    user = None
     try:
         user_id = urlsafe_base64_decode(uid).decode()
         user = User.objects.get(pk=user_id)
     except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        user = None
+
+    if (
+        user is None
+        or not is_client_user(user)
+        or not default_token_generator.check_token(user, token)
+    ):
         return Response(
-            {'detail': 'Μη έγκυρος σύνδεσμος.'},
+            {'detail': _INVALID_LINK},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Ασφάλεια: μόνο client users μπορούν να ορίσουν κωδικό από αυτό το endpoint.
-    if not is_client_user(user):
+    # Έλεγχος ισχύος κωδικού με τους validators του Django (μήκος, κοινοί,
+    # αριθμητικοί κ.λπ.).
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as e:
         return Response(
-            {'detail': 'Μη έγκυρος σύνδεσμος.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if not default_token_generator.check_token(user, token):
-        return Response(
-            {'detail': 'Ο σύνδεσμος έληξε ή είναι άκυρος. Ζητήστε νέο.'},
+            {'detail': ' '.join(e.messages)},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

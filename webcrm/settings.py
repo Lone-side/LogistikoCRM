@@ -435,6 +435,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',       # Anonymous users: 100 requests/hour
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
+        'set_password': '10/hour',  # Client portal password-set: brute-force guard
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
