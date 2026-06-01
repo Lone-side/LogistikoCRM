@@ -376,6 +376,61 @@ class PortalVATIsolationTest(APITestCase):
         self.assertEqual(resp.data['summary']['input']['vat'], '0.00')
         self.assertEqual(resp.data['summary']['input']['net'], '0.00')
 
+    def test_filter_by_year_records_and_periods(self):
+        from decimal import Decimal
+        from datetime import date
+        from mydata.models import VATRecord, VATPeriodResult
+        # Δεύτερη χρονιά για τον client_a.
+        VATRecord.objects.create(
+            client=self.client_a, mark=1500, is_cancelled=False,
+            issue_date=date(2025, 3, 1), rec_type=1, inv_type='1.1',
+            vat_category=1, net_value=Decimal('50'), vat_amount=Decimal('12'),
+        )
+        VATPeriodResult.objects.create(
+            client=self.client_a, period_type='monthly', year=2025, period=3,
+            final_result=Decimal('12'),
+        )
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/?year=2025')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        marks = {r['mark'] for r in resp.data['records']}
+        self.assertEqual(marks, {1500})  # μόνο 2025, όχι το 2026 (mark=1001)
+        years = {p['year'] for p in resp.data['periods']}
+        self.assertEqual(years, {2025})
+
+    def test_filter_by_period_type(self):
+        from decimal import Decimal
+        from mydata.models import VATPeriodResult
+        VATPeriodResult.objects.create(
+            client=self.client_a, period_type='quarterly', year=2026, period=2,
+            final_result=Decimal('80'),
+        )
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/?period_type=quarterly')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        types = {p['period_type'] for p in resp.data['periods']}
+        self.assertEqual(types, {'quarterly'})
+
+    def test_invalid_period_type_400(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/?period_type=weekly')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_filter_does_not_leak_across_clients(self):
+        # client_a φιλτράρει 2026, αλλά δεν πρέπει να δει ποτέ το record του b.
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/?year=2026')
+        marks = {r['mark'] for r in resp.data['records']}
+        self.assertNotIn(2001, marks)
+        self.assertEqual(marks, {1001})
+
+    def test_vat_read_throttle_attached(self):
+        # Το /me/vat πρέπει να φέρει το vat_read scoped throttle (anti-scraping).
+        from accounting.api_portal import me_vat, VatReadThrottle
+        throttles = getattr(me_vat.cls, 'throttle_classes', [])
+        self.assertIn(VatReadThrottle, throttles)
+        self.assertEqual(VatReadThrottle.scope, 'vat_read')
+
 
 # =============================================================================
 # /me/documents/upload — ο πελάτης ανεβάζει ΑΛΛΑ πάντα στον εαυτό του

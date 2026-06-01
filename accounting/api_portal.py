@@ -151,8 +151,13 @@ def me_calls(request):
     return Response({'count': len(data), 'results': data})
 
 
+class VatReadThrottle(ScopedRateThrottle):
+    scope = 'vat_read'
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([VatReadThrottle])
 def me_vat(request):
     """
     GET /api/client/me/vat/
@@ -168,6 +173,22 @@ def me_vat(request):
 
     # Late import για να μην έχουμε circular dependency στο app startup.
     from mydata.services import VATPortalService
+
+    # Προαιρετικά φίλτρα. period_type: κλειστό σύνολο → 400 αν άκυρο.
+    # year: lenient — αν δεν είναι ακέραιος, αγνοείται.
+    period_type = request.query_params.get('period_type')
+    if period_type and period_type not in ('monthly', 'quarterly'):
+        return Response(
+            {'detail': "Μη έγκυρο period_type (επιτρέπονται: monthly, quarterly)."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    year = None
+    raw_year = request.query_params.get('year')
+    if raw_year:
+        try:
+            year = int(raw_year)
+        except (ValueError, TypeError):
+            year = None
 
     # Το domain logic (split/aggregation/quantization) ζει στο service· εδώ
     # μένει μόνο η σειριοποίηση (Decimals → strings) στο HTTP edge.
@@ -194,9 +215,9 @@ def me_vat(request):
         'credit_to_next': str(p.credit_to_next),
         'is_locked': p.is_locked,
         'last_calculated_at': p.last_calculated_at,
-    } for p in VATPortalService.get_periods(profile)]
+    } for p in VATPortalService.get_periods(profile, period_type=period_type, year=year)]
 
-    records_qs = VATPortalService.get_recent_records(profile, limit=RECORD_LIMIT)
+    records_qs = VATPortalService.get_recent_records(profile, limit=RECORD_LIMIT, year=year)
     records = [{
         'id': r.id,
         'mark': r.mark,

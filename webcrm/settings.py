@@ -436,6 +436,7 @@ REST_FRAMEWORK = {
         'anon': '100/hour',       # Anonymous users: 100 requests/hour
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'set_password': '10/hour',  # Client portal password-set: brute-force guard
+        'vat_read': '120/hour',     # Client portal VAT read: anti-scraping guard
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
