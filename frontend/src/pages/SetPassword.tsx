@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle, KeyRound } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -17,6 +17,13 @@ export default function SetPassword() {
 
   const linkMissing = !uid || !token;
 
+  // Redirect μετά την επιτυχία, με καθαρισμό του timer αν ξεφορτωθεί το component.
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => navigate('/login'), 2500);
+    return () => clearTimeout(t);
+  }, [done, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -34,7 +41,6 @@ export default function SetPassword() {
     try {
       await apiClient.post('api/client/set-password/', { uid, token, password });
       setDone(true);
-      setTimeout(() => navigate('/login'), 2500);
     } catch (err: unknown) {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;

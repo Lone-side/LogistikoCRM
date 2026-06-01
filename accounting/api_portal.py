@@ -103,6 +103,17 @@ def me_documents(request):
     # Μόνο τρέχουσες εκδόσεις αν το model το υποστηρίζει.
     if hasattr(ClientDocument, 'is_current'):
         qs = qs.filter(is_current=True)
+
+    def _download_url(doc):
+        # d.file είναι πάντα FieldFile· truthy μόνο αν υπάρχει αρχείο.
+        # .url ρίχνει ValueError σε κενό FieldFile — το πιάνουμε.
+        if not doc.file:
+            return None
+        try:
+            return request.build_absolute_uri(doc.file.url)
+        except ValueError:
+            return None
+
     data = [{
         'id': d.id,
         'filename': d.filename,
@@ -111,7 +122,7 @@ def me_documents(request):
         'uploaded_at': d.uploaded_at,
         'obligation': (d.obligation.obligation_type.name
                        if d.obligation and d.obligation.obligation_type else None),
-        'download_url': d.file.url if getattr(d, 'file', None) else None,
+        'download_url': _download_url(d),
     } for d in qs]
     return Response({'count': len(data), 'results': data})
 

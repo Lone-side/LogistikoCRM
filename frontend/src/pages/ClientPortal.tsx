@@ -52,12 +52,12 @@ export default function ClientPortal() {
     queryFn: portalApi.getProfile,
   });
 
-  const { data: obligationsData, isLoading: oblLoading } = useQuery({
+  const { data: obligationsData, isLoading: oblLoading, isError: oblError } = useQuery({
     queryKey: ['portal', 'obligations'],
     queryFn: portalApi.getObligations,
   });
 
-  const { data: documentsData, isLoading: docLoading } = useQuery({
+  const { data: documentsData, isLoading: docLoading, isError: docError } = useQuery({
     queryKey: ['portal', 'documents'],
     queryFn: portalApi.getDocuments,
   });
@@ -115,25 +115,35 @@ export default function ClientPortal() {
 
       <main className="max-w-5xl mx-auto px-4 py-6">
         {tab === 'overview' && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm text-gray-500">Εκκρεμείς</p>
-              <p className="text-3xl font-bold text-amber-600 mt-1">{pending}</p>
+          oblError ? (
+            <div className="rounded-xl bg-red-50 border border-red-200 p-5 text-sm text-red-700">
+              Σφάλμα φόρτωσης δεδομένων. Δοκιμάστε ξανά αργότερα.
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm text-gray-500">Εκπρόθεσμες</p>
-              <p className="text-3xl font-bold text-red-600 mt-1">{overdue}</p>
+          ) : oblLoading ? (
+            <p className="text-gray-500">Φόρτωση…</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <p className="text-sm text-gray-500">Εκκρεμείς</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">{pending}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <p className="text-sm text-gray-500">Εκπρόθεσμες</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{overdue}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <p className="text-sm text-gray-500">Ολοκληρωμένες</p>
+                <p className="text-3xl font-bold text-green-600 mt-1">{completed}</p>
+              </div>
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm text-gray-500">Ολοκληρωμένες</p>
-              <p className="text-3xl font-bold text-green-600 mt-1">{completed}</p>
-            </div>
-          </div>
+          )
         )}
 
         {tab === 'obligations' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {oblLoading ? (
+            {oblError ? (
+              <p className="p-6 text-red-700">Σφάλμα φόρτωσης υποχρεώσεων. Δοκιμάστε ξανά.</p>
+            ) : oblLoading ? (
               <p className="p-6 text-gray-500">Φόρτωση…</p>
             ) : obligations.length === 0 ? (
               <p className="p-6 text-gray-500">Δεν υπάρχουν υποχρεώσεις.</p>
@@ -166,7 +176,9 @@ export default function ClientPortal() {
 
         {tab === 'documents' && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {docLoading ? (
+            {docError ? (
+              <p className="p-6 text-red-700">Σφάλμα φόρτωσης εγγράφων. Δοκιμάστε ξανά.</p>
+            ) : docLoading ? (
               <p className="p-6 text-gray-500">Φόρτωση…</p>
             ) : documents.length === 0 ? (
               <p className="p-6 text-gray-500">Δεν υπάρχουν έγγραφα.</p>
