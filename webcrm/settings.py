@@ -198,6 +198,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'common.utils.csp_middleware.ContentSecurityPolicyMiddleware',  # CSP (SD-001)
     'common.utils.usermiddleware.UserMiddleware'
 ]
 
@@ -458,7 +459,9 @@ REST_FRAMEWORK = {
 # JWT Settings
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=5),
+    # Short-lived access token (SD-001): bounds the window a stolen token is
+    # useful. Refresh rotation below makes this transparent to the user.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
