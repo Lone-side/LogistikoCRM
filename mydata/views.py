@@ -1167,8 +1167,11 @@ class VATPeriodCalculatorView(APIView):
             period=int(period)
         )
 
-        # If new or request wants recalculation
-        if created or request.query_params.get('recalculate'):
+        # If new or request wants recalculation — αλλά ΠΟΤΕ σε κλειδωμένη
+        # (υποβεβλημένη) περίοδο: το calculate_from_records πετάει ValidationError
+        # για locked, που αλλιώς γινόταν αναπιάστο 500 στην προβολή. Οι κλειδωμένες
+        # κρατούν τις οριστικοποιημένες τιμές τους.
+        if (created or request.query_params.get('recalculate')) and not period_result.is_locked:
             period_result.calculate_from_records(save=True)
 
         # Build response - flat structure matching frontend interface

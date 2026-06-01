@@ -18,9 +18,11 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, force_authenticate
 
+from decimal import Decimal
+
 from accounting.models import ClientProfile
 from mydata.models import MyDataCredentials, VATPeriodResult
-from mydata.views import MyDataCredentialsViewSet
+from mydata.views import MyDataCredentialsViewSet, VATPeriodCalculatorView
 
 
 def _sync_view():
@@ -73,3 +75,38 @@ class SyncLockedFeedbackTest(TestCase):
         self.assertFalse(resp.data.get('skipped'))
         self.assertNotEqual(resp.data.get('locked'), True)
         self.assertTrue(resp.data.get('success'))
+
+
+class CalculatorLockedPeriodTest(TestCase):
+    """
+    Ο VATPeriodCalculatorView με recalculate=true ΔΕΝ πρέπει να σκάει (500) σε
+    κλειδωμένη περίοδο: το calculate_from_records πετάει ValidationError για
+    locked. Αντ' αυτού επιστρέφει 200 με τις οριστικοποιημένες τιμές, ώστε το
+    frontend να φορτώσει και να δείξει το κουμπί «Ξεκλείδωμα».
+    """
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.staff = User.objects.create_user(
+            username='staff2', password='x', is_staff=True)
+        self.client_p = ClientProfile.objects.create(
+            afm='159053680', eponimia='ΔΟΚΙΜΗ ΑΕ', eidos_ipoxreou='company')
+        # Κλειδωμένο Q1 με ΟΡΙΣΤΙΚΟΠΟΙΗΜΕΝΕΣ τιμές που δεν πρέπει να αλλάξουν.
+        self.period = VATPeriodResult.objects.create(
+            client=self.client_p, period_type='quarterly', year=2026, period=1,
+            is_locked=True,
+            vat_output=Decimal('57.60'), vat_input=Decimal('169.11'),
+            vat_difference=Decimal('-111.51'), final_result=Decimal('0.00'),
+        )
+
+    def test_recalculate_on_locked_returns_200_not_500(self):
+        req = self.factory.get(
+            '/x', {'client_id': self.client_p.id, 'period_type': 'quarterly',
+                   'year': 2026, 'period': 1, 'recalculate': 'true'})
+        force_authenticate(req, user=self.staff)
+        resp = VATPeriodCalculatorView.as_view()(req)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(resp.data['is_locked'])
+        # Οι κλειδωμένες τιμές παραμένουν αμετάβλητες (δεν έγινε recalc).
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.vat_output, Decimal('57.60'))
+        self.assertEqual(self.period.vat_input, Decimal('169.11'))
