@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useAuthStore } from './stores/authStore';
-import { Layout, ErrorBoundary } from './components';
+import { ErrorBoundary } from './components';
+import { ProtectedRoute, ClientRoute } from './routes/guards';
 import { ToastProvider } from './components/Toast';
 
 // Pages
@@ -41,76 +40,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-// Protected Route wrapper with Layout (staff). Clients are redirected to /portal.
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const user = useAuthStore((state) => state.user);
-  const checkAuth = useAuthStore((state) => state.checkAuth);
-  const [isChecking, setIsChecking] = useState(true);
-
-  useEffect(() => {
-    const verify = async () => {
-      await checkAuth();
-      setIsChecking(false);
-    };
-    verify();
-  }, [checkAuth]);
-
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Client users δεν έχουν πρόσβαση στο staff UI — redirect στην πύλη πελάτη.
-  if (user?.is_client) {
-    return <Navigate to="/portal" replace />;
-  }
-
-  return <Layout>{children}</Layout>;
-}
-
-// Client Portal route wrapper. Μόνο για client users· staff πάει στο dashboard.
-function ClientRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const user = useAuthStore((state) => state.user);
-  const checkAuth = useAuthStore((state) => state.checkAuth);
-  const [isChecking, setIsChecking] = useState(true);
-
-  useEffect(() => {
-    const verify = async () => {
-      await checkAuth();
-      setIsChecking(false);
-    };
-    verify();
-  }, [checkAuth]);
-
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Staff users δεν χρειάζονται την πύλη πελάτη — πάνε στο dashboard.
-  if (!user?.is_client) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-}
 
 function App() {
   return (
