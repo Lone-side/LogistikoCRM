@@ -10,6 +10,55 @@
 - PostgreSQL/MySQL για παραγωγή, SQLite για ανάπτυξη
 - Υποστήριξη 23 γλωσσών (ελληνικά default)
 - Timezone: Europe/Athens
+- **Client Portal**: πελάτες συνδέονται και βλέπουν ΜΟΝΟ τα δικά τους δεδομένα
+
+---
+
+## 🏛️ Αρχιτεκτονικές Αποφάσεις (Client Portal — ΣΗΜΑΝΤΙΚΟ)
+
+> Πλήρης τεκμηρίωση: `docs/SECURITY_DECISIONS.md` · Πριν παραγωγή: `GOLIVE.md`
+
+### Ρόλοι & απομόνωση (multi-tenant)
+- **1 πελάτης = 1 login.** `ClientProfile.user` (OneToOne → User). Δημιουργία μέσω
+  `ClientProfile.create_portal_user()` (βάζει τον χρήστη στο group `'client'`,
+  τον βγάζει από το `'co-workers'`).
+- Ρόλος client: `accounting/portal.py::is_client_user()` (group `'client'` ή
+  συνδεδεμένο profile, ΚΑΙ όχι staff).
+- **Isolation — fail-closed:** `accounting/portal_mixins.py::ClientScopedQuerysetMixin`
+  φιλτράρει το queryset ώστε ο client να βλέπει μόνο τα δικά του· read-only
+  (POST/PUT/PATCH/DELETE → 403). Άγνωστος authenticated → άδειο queryset.
+- **Permission `IsStaffUser`** (`accounting/permissions.py`): default-deny για
+  πελάτες. **ΚΑΝΟΝΑΣ:** κάθε νέο staff/management endpoint (π.χ. στο `mydata`,
+  search, dashboard, reports, email, export) ΠΡΕΠΕΙ να έχει `IsStaffUser`. Οι
+  πελάτες χρησιμοποιούν ΜΟΝΟ τα `/api/client/me/...`.
+
+### Endpoints πελάτη (read-mostly, scoped)
+`accounting/api_portal.py`: `/api/client/me/{profile,obligations,documents,vat,calls}/`
+(GET, μέσω `_require_client`), `/api/client/me/documents/upload/` (forced στον
+δικό του πελάτη), `/api/client/set-password/`. Domain logic ΦΠΑ: `mydata/services.py::VATPortalService`.
+
+### Auth & ασφάλεια
+- JWT (SimpleJWT): **access 15min**, refresh 7d με rotation+blacklist.
+- **Throttling** (`SimpleRateThrottle`, ΟΧΙ `ScopedRateThrottle` — η τελευταία
+  κάνει no-op σε function/JWT views): `login 5/min`, `set_password 3/hour`,
+  `vat_read 120/hour`. Keyed by IP.
+- `set_password`: constant-time token check (no enumeration oracle).
+- **Production guards** (`webcrm/settings.py`, όταν `DEBUG=False`): raise
+  `ImproperlyConfigured` αν λείπει `SECRET_KEY`/`FRITZ_API_TOKEN`.
+- **CSP**: `common/utils/csp_middleware.py` (`script-src 'self'`).
+- **JWT σε localStorage**: αποδεκτό ρίσκο με mitigations — βλ. SD-001.
+
+### Email προσκλήσεις
+`EmailService.send_portal_invite(client)` στέλνει set-password link στο
+`PORTAL_URL`. Admin actions: «Δημιουργία λογαριασμού Portal + αποστολή πρόσκλησης»
+και «Επαναποστολή πρόσκλησης». `seed_demo` command για demo δεδομένα.
+
+### Frontend
+- **Tests:** Vitest + React Testing Library (`npm test`), Playwright E2E
+  (`npm run test:e2e`, χρειάζεται backend με `seed_demo`). Όλα στο CI.
+- **Routing:** `src/routes/guards.tsx` (`ProtectedRoute` staff, `ClientRoute`
+  πελάτης) με per-route `ErrorBoundary` (compact, resetKeys=path).
+- Portal: mobile-responsive (scrollable tabs/tables) + a11y (role="tab"/tablist).
 
 ---
 
@@ -224,17 +273,23 @@ npm test           # Εκτέλεση tests
 
 ### Testing
 ```bash
-# Django tests
-python manage.py test
+# --- Backend (Django) ---
+python manage.py test                          # όλα
+python manage.py test tests.accounting tests.mydata   # κύρια apps
+python manage.py test tests.test_production_guards     # prod guards
+# Σημ.: ΑΠΑΙΤΕΙΤΑΙ Python 3.11 (prod/CI). Σε 3.13/3.14 ο Django test client σπάει.
 
-# Συγκεκριμένο app
-python manage.py test accounting
-python manage.py test accounting.tests.test_models
+# --- Frontend (Vitest + React Testing Library) ---
+cd frontend
+npm test            # unit/component tests (vitest run)
+npx tsc -b          # typecheck (πρέπει 0 errors)
 
-# Με pytest (αν είναι εγκατεστημένο)
-pytest
-pytest tests/accounting/ -v
-pytest --cov=accounting  # Με coverage
+# --- E2E (Playwright) ---
+# 1) Σήκωσε backend με demo δεδομένα:
+python manage.py seed_demo --reset
+python manage.py runserver 8000 --noreload
+# 2) Σε άλλο terminal:
+cd frontend && npm run test:e2e
 ```
 
 ### Celery Workers
