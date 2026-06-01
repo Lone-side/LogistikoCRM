@@ -137,8 +137,9 @@ export const portalApi = {
     const response = await apiClient.get('api/client/me/calls/');
     return response.data;
   },
-  getVat: async () => {
-    const response = await apiClient.get('api/client/me/vat/');
+  getVat: async (year?: number) => {
+    const params = year ? { year } : undefined;
+    const response = await apiClient.get('api/client/me/vat/', { params });
     return response.data;
   },
   uploadDocument: async (file: File, category: string, description?: string) => {

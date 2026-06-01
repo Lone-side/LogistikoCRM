@@ -94,10 +94,23 @@ export default function ClientPortal() {
     queryFn: portalApi.getDocuments,
   });
 
+  // VAT year filter. undefined = όλα τα έτη (default — αμετάβλητη συμπεριφορά).
+  const [vatYear, setVatYear] = useState<number | undefined>(undefined);
+
   const { data: vatData, isLoading: vatLoading, isError: vatError } = useQuery<VatData>({
-    queryKey: ['portal', 'vat'],
-    queryFn: portalApi.getVat,
+    queryKey: ['portal', 'vat', vatYear ?? 'all'],
+    queryFn: () => portalApi.getVat(vatYear),
   });
+
+  // Σταθερή λίστα ετών: αντλείται από το ΑΦΙΛΤΡΑΡΙΣΤΟ σύνολο περιόδων, ώστε να
+  // μη "χάνονται" επιλογές όταν φιλτράρουμε σε ένα έτος.
+  const { data: vatAllYears } = useQuery<VatData>({
+    queryKey: ['portal', 'vat', 'all'],
+    queryFn: () => portalApi.getVat(undefined),
+  });
+  const availableYears: number[] = Array.from(
+    new Set((vatAllYears?.periods ?? []).map((p) => p.year)),
+  ).sort((a, b) => b - a);
 
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -239,6 +252,27 @@ export default function ClientPortal() {
 
         {tab === 'vat' && (
           <div className="space-y-4">
+            {/* Φίλτρο έτους — οδηγεί το ?year= στο backend. */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="vat-year" className="text-sm text-gray-600">
+                Έτος
+              </label>
+              <select
+                id="vat-year"
+                aria-label="Έτος"
+                value={vatYear ?? ''}
+                onChange={(e) =>
+                  setVatYear(e.target.value ? Number(e.target.value) : undefined)
+                }
+                className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
+              >
+                <option value="">Όλα τα έτη</option>
+                {availableYears.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+
             {vatError ? (
               <div className="rounded-xl bg-red-50 border border-red-200 p-5 text-sm text-red-700">
                 Σφάλμα φόρτωσης δεδομένων ΦΠΑ.

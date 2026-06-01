@@ -136,6 +136,9 @@ jobs:
       - name: Type check
         run: npm run build -- --noEmit || echo "::warning::TypeScript errors found"
 
+      - name: Unit tests (Vitest)
+        run: npm test
+
       - name: Build
         run: npm run build
 
