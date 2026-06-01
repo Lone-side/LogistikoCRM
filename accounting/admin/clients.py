@@ -170,6 +170,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
         'mark_active',
         'mark_inactive',
         'create_portal_account',
+        'resend_portal_invite',
     ]
 
     @admin.display(description='🔑 Portal')
@@ -186,14 +187,16 @@ class ClientProfileAdmin(admin.ModelAdmin):
             'border-radius:10px;font-size:11px;">— Χωρίς</span>'
         )
 
-    @admin.action(description='🔑 Δημιουργία λογαριασμού Portal')
+    @admin.action(description='🔑 Δημιουργία λογαριασμού Portal + αποστολή πρόσκλησης')
     def create_portal_account(self, request, queryset):
         """
         Δημιουργεί portal λογαριασμό (username = ΑΦΜ) για τους επιλεγμένους
-        πελάτες. Ο λογαριασμός δημιουργείται χωρίς usable password — ο πελάτης
-        ορίζει κωδικό μέσω reset. Παραλείπει όσους έχουν ήδη λογαριασμό.
+        πελάτες και στέλνει email πρόσκλησης με σύνδεσμο ορισμού κωδικού.
+        Παραλείπει όσους έχουν ήδη λογαριασμό.
         """
-        created, skipped = 0, 0
+        from accounting.services.email_service import EmailService
+
+        created, skipped, invited, no_email = 0, 0, 0, 0
         for client in queryset:
             if client.user_id:
                 skipped += 1
@@ -201,18 +204,26 @@ class ClientProfileAdmin(admin.ModelAdmin):
             try:
                 client.create_portal_user()
                 created += 1
+                if EmailService.send_portal_invite(client):
+                    invited += 1
+                else:
+                    no_email += 1
             except Exception as e:
                 self.message_user(
-                    request,
-                    f'Σφάλμα για {client.afm}: {e}',
-                    level=messages.ERROR,
+                    request, f'Σφάλμα για {client.afm}: {e}', level=messages.ERROR,
                 )
         if created:
             self.message_user(
                 request,
-                f'Δημιουργήθηκαν {created} λογαριασμοί portal. '
-                f'Οι πελάτες πρέπει να ορίσουν κωδικό μέσω reset link.',
+                f'Δημιουργήθηκαν {created} λογαριασμοί portal· στάλθηκαν {invited} '
+                f'προσκλήσεις με σύνδεσμο ορισμού κωδικού.',
                 level=messages.SUCCESS,
+            )
+        if no_email:
+            self.message_user(
+                request,
+                f'{no_email} πελάτες χωρίς email — δώστε τον σύνδεσμο χειροκίνητα.',
+                level=messages.WARNING,
             )
         if skipped:
             self.message_user(
@@ -220,6 +231,27 @@ class ClientProfileAdmin(admin.ModelAdmin):
                 f'{skipped} πελάτες είχαν ήδη λογαριασμό (παραλείφθηκαν).',
                 level=messages.WARNING,
             )
+
+    @admin.action(description='✉️ Επαναποστολή πρόσκλησης Portal')
+    def resend_portal_invite(self, request, queryset):
+        """Ξαναστέλνει την πρόσκληση portal (νέο σύνδεσμο) σε όσους έχουν λογαριασμό."""
+        from accounting.services.email_service import EmailService
+
+        sent, skipped = 0, 0
+        for client in queryset:
+            if not client.user_id:
+                skipped += 1
+                continue
+            if EmailService.send_portal_invite(client):
+                sent += 1
+            else:
+                skipped += 1
+        self.message_user(
+            request,
+            f'Στάλθηκαν {sent} προσκλήσεις· {skipped} παραλείφθηκαν '
+            f'(χωρίς λογαριασμό ή χωρίς email).',
+            level=messages.SUCCESS if sent else messages.WARNING,
+        )
 
     fieldsets = (
         ('Βασικά Στοιχεία', {

@@ -577,6 +577,48 @@ class EmailService:
         )
 
     @staticmethod
+    def send_portal_invite(client, async_send=False):
+        """
+        Στέλνει στον πελάτη πρόσκληση portal με σύνδεσμο ορισμού κωδικού.
+
+        Προϋποθέσεις: ο πελάτης έχει email ΚΑΙ έχει portal user (create_portal_user).
+        Επιστρέφει True αν στάλθηκε, αλλιώς False (graceful — δεν σκάει).
+        """
+        from django.conf import settings as dj_settings
+
+        if not client.email:
+            logger.warning(f"Portal invite skipped for {client.afm}: no email")
+            return False
+
+        portal_url = getattr(dj_settings, 'PORTAL_URL', '').rstrip('/')
+        link = client.get_password_set_link(base_url=portal_url)
+        if not link or not link.get('url'):
+            logger.warning(f"Portal invite skipped for {client.afm}: no portal user")
+            return False
+
+        subject = f"Πρόσβαση στην Πύλη Πελάτη — {client.eponimia}"
+        body = (
+            f"Αγαπητέ/ή πελάτη ({client.eponimia}),\n\n"
+            f"Δημιουργήθηκε λογαριασμός για την Πύλη Πελάτη του λογιστικού μας "
+            f"γραφείου. Για να ορίσετε τον κωδικό σας και να αποκτήσετε πρόσβαση, "
+            f"ανοίξτε τον παρακάτω σύνδεσμο:\n\n"
+            f"{link['url']}\n\n"
+            f"Όνομα χρήστη: {client.user.username}\n\n"
+            f"Ο σύνδεσμος είναι προσωπικός και λήγει για λόγους ασφαλείας. Αν λήξει, "
+            f"ζητήστε νέο από το γραφείο μας.\n\n"
+            f"Με εκτίμηση,\nΤο λογιστικό σας γραφείο"
+        )
+
+        ok, _ = EmailService.send_email(
+            recipient_email=client.email,
+            subject=subject,
+            body=body,
+            client=client,
+            async_send=async_send,
+        )
+        return ok
+
+    @staticmethod
     def preview_email(template, obligation=None, client=None, extra_context=None, user=None):
         """
         Preview email without sending.
