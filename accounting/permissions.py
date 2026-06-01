@@ -8,7 +8,44 @@ import logging
 from rest_framework.permissions import BasePermission
 from django.conf import settings
 
+from accounting.portal import is_client_user
+
 logger = logging.getLogger(__name__)
+
+
+class IsStaffOrClientOwner(BasePermission):
+    """
+    Client Portal permission.
+
+    - Staff/superuser: πλήρης πρόσβαση (όπως πριν).
+    - Client user: πρόσβαση μόνο σε αντικείμενα που ανήκουν στον ΔΙΚΟ του πελάτη.
+
+    Το object-level έλεγχο γίνεται στο has_object_permission μέσω ενός callable
+    `owner_lookup` που ορίζει το viewset (π.χ. lambda obj: obj.client.user).
+    Το queryset-level scoping γίνεται ξεχωριστά στο get_queryset του viewset
+    (βλ. ClientScopedQuerysetMixin) — αυτή η κλάση είναι η δεύτερη γραμμή άμυνας.
+    """
+
+    def has_permission(self, request, view):
+        # Πρέπει να είναι authenticated· τα υπόλοιπα κρίνονται ανά object/queryset.
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if user.is_staff or user.is_superuser:
+            return True
+        if not is_client_user(user):
+            return False
+
+        # Βρες τον owner-user του object. Το viewset μπορεί να ορίσει
+        # `client_owner_field` (dotted path προς το User), default 'client.user'.
+        owner_field = getattr(view, 'client_owner_field', 'client.user')
+        owner = obj
+        for part in owner_field.split('.'):
+            owner = getattr(owner, part, None)
+            if owner is None:
+                return False
+        return owner == user
 
 
 class IsVoIPMonitor(BasePermission):

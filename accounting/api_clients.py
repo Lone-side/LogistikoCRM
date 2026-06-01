@@ -15,6 +15,7 @@ from django.db.models import Count, Q
 
 from .models import ClientProfile, MonthlyObligation, ClientDocument
 from .serializers import ClientDocumentSerializer
+from .portal_mixins import ClientScopedQuerysetMixin
 
 
 class ClientPagination(PageNumberPagination):
@@ -210,7 +211,7 @@ class ClientObligationNestedSerializer(serializers.ModelSerializer):
 # CLIENT VIEWSET
 # ============================================
 
-class ClientViewSet(viewsets.ModelViewSet):
+class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     REST API ViewSet for ClientProfile
 
@@ -225,6 +226,8 @@ class ClientViewSet(viewsets.ModelViewSet):
     """
     queryset = ClientProfile.objects.all()
     permission_classes = [IsAuthenticated]
+    # Το ίδιο το model ΕΙΝΑΙ ο ClientProfile, οπότε scope field = '' (filter by pk).
+    client_scope_field = ''
     pagination_class = ClientPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ClientFilter

@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.db.models import Q
 
 from .models import MonthlyObligation, ClientProfile, ObligationType, ClientDocument
+from .portal_mixins import ClientScopedQuerysetMixin
 
 
 class ObligationPagination(PageNumberPagination):
@@ -223,7 +224,7 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
 # OBLIGATION VIEWSET
 # ============================================
 
-class ObligationViewSet(viewsets.ModelViewSet):
+class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     REST API ViewSet for MonthlyObligation
 

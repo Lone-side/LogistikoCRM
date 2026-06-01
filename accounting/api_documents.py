@@ -16,6 +16,7 @@ from django.db.models import Q
 import os
 
 from .models import ClientDocument, ClientProfile, MonthlyObligation
+from .portal_mixins import ClientScopedQuerysetMixin
 
 
 class DocumentPagination(PageNumberPagination):
@@ -173,7 +174,7 @@ class DocumentUploadSerializer(serializers.Serializer):
 # DOCUMENT VIEWSET
 # ============================================
 
-class DocumentViewSet(viewsets.ModelViewSet):
+class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     REST API ViewSet for ClientDocument
 

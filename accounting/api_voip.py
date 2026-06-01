@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404
 from .models import VoIPCall, VoIPCallLog, Ticket, ClientProfile
 from .phone_utils import auto_match_call, batch_auto_match_calls, find_client_by_phone
 from .permissions import IsVoIPMonitor, IsLocalRequest
+from .portal_mixins import ClientScopedQuerysetMixin
 
 import logging
 
@@ -155,7 +156,7 @@ class TicketCreateSerializer(serializers.ModelSerializer):
 # VIEWSETS
 # ============================================
 
-class VoIPCallViewSet(viewsets.ModelViewSet):
+class VoIPCallViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     Enhanced VoIP Call ViewSet with match and ticket creation
 
@@ -372,7 +373,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_404_NOT_FOUND)
 
 
-class TicketViewSet(viewsets.ModelViewSet):
+class TicketViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     Ticket management ViewSet
 
