@@ -20,6 +20,7 @@ from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
+from rest_framework.throttling import SimpleRateThrottle
 from drf_spectacular.utils import extend_schema, OpenApiExample
 
 from common.utils.api_response import api_success, api_error
@@ -106,6 +107,20 @@ class LogoutSerializer(serializers.Serializer):
 # VIEWS
 # ==============================================================================
 
+class LoginRateThrottle(SimpleRateThrottle):
+    """
+    Brute-force / credential-stuffing guard for the login endpoint.
+
+    Keyed by client IP (the username varies in stuffing attacks). Uses
+    SimpleRateThrottle with a fixed scope so it actually enforces on this
+    class-based JWT view (rate from settings: DEFAULT_THROTTLE_RATES['login']).
+    """
+    scope = 'login'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
     POST /api/auth/login/
@@ -120,8 +135,11 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         - access: JWT access token
         - refresh: JWT refresh token
         - user: User object with id, username, email, etc.
+
+    Rate-limited per IP (see LoginRateThrottle) against brute-force.
     """
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 class CustomTokenRefreshView(TokenRefreshView):

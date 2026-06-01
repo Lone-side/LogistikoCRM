@@ -449,6 +449,7 @@ REST_FRAMEWORK = {
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'set_password': '3/hour',   # Client portal password-set: brute-force guard (tight)
         'vat_read': '120/hour',     # Client portal VAT read: anti-scraping guard
+        'login': '5/min',           # Login: brute-force / credential-stuffing guard (per IP)
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
