@@ -36,15 +36,26 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     @classmethod
     def get_token(cls, user):
+        from accounting.portal import is_client_user, get_client_profile
+
         token = super().get_token(user)
         # Add custom claims
         token['username'] = user.username
         token['email'] = user.email
         token['is_staff'] = user.is_staff
+        # Client portal claims
+        client = is_client_user(user)
+        token['is_client'] = client
+        profile = get_client_profile(user) if client else None
+        token['client_id'] = profile.id if profile else None
         return token
 
     def validate(self, attrs):
+        from accounting.portal import is_client_user, get_client_profile
+
         data = super().validate(attrs)
+        client = is_client_user(self.user)
+        profile = get_client_profile(self.user) if client else None
         # Add user info to response
         data['user'] = {
             'id': self.user.id,
@@ -54,6 +65,11 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'last_name': self.user.last_name,
             'is_staff': self.user.is_staff,
             'is_superuser': self.user.is_superuser,
+            # Client portal fields
+            'is_client': client,
+            'client_id': profile.id if profile else None,
+            'client_afm': profile.afm if profile else None,
+            'client_name': profile.eponimia if profile else None,
         }
         return data
 
@@ -61,11 +77,24 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user info."""
 
+    is_client = serializers.SerializerMethodField()
+    client_id = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name',
-                  'is_staff', 'is_superuser', 'is_active', 'date_joined', 'last_login']
+                  'is_staff', 'is_superuser', 'is_active', 'date_joined', 'last_login',
+                  'is_client', 'client_id']
         read_only_fields = fields
+
+    def get_is_client(self, obj):
+        from accounting.portal import is_client_user
+        return is_client_user(obj)
+
+    def get_client_id(self, obj):
+        from accounting.portal import get_client_profile
+        profile = get_client_profile(obj)
+        return profile.id if profile else None
 
 
 class LogoutSerializer(serializers.Serializer):

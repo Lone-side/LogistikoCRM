@@ -93,6 +93,32 @@ class PortalDataIsolationTest(APITestCase):
         resp = self.client.get(f'/accounting/api/v1/obligations/{self.obl_b.id}/')
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
+    # ----- login response carries client role -----
+    def test_login_response_marks_client(self):
+        resp = self.client.post(
+            '/accounting/api/auth/login/',
+            {'username': self.user_a.username, 'password': 'PassA123!'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content[:200])
+        user = resp.data['user']
+        self.assertTrue(user['is_client'])
+        self.assertEqual(user['client_id'], self.client_a.id)
+        self.assertEqual(user['client_afm'], self.client_a.afm)
+        self.assertFalse(user['is_staff'])
+
+    def test_login_response_marks_staff_not_client(self):
+        resp = self.client.post(
+            '/accounting/api/auth/login/',
+            {'username': self.staff.username, 'password': 'StaffPass123!'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content[:200])
+        user = resp.data['user']
+        self.assertFalse(user['is_client'])
+        self.assertIsNone(user['client_id'])
+        self.assertTrue(user['is_staff'])
+
     # ----- staff still sees everything -----
     def test_staff_sees_all_clients(self):
         self.client.force_authenticate(user=self.staff)
