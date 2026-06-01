@@ -395,6 +395,17 @@ export interface TrendData {
   vat_due: number;
 }
 
+export interface VATSyncResult {
+  success: boolean;
+  skipped?: boolean;
+  locked?: boolean;
+  message?: string;
+  detail?: string;
+  records_created?: number;
+  records_updated?: number;
+  records_fetched?: number;
+}
+
 export const mydataApi = {
   // Dashboard overview
   getDashboard: async (year?: number, month?: number): Promise<MyDataDashboardResponse> => {
@@ -471,7 +482,7 @@ export const mydataApi = {
       return response.data;
     },
 
-    sync: async (id: number, year?: number, month?: number) => {
+    sync: async (id: number, year?: number, month?: number): Promise<VATSyncResult> => {
       const data: Record<string, number> = {};
       if (year) data.year = year;
       if (month) data.month = month;

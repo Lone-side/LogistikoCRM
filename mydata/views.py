@@ -315,7 +315,9 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
     def sync(self, request, pk=None):
         """Trigger VAT sync for this client."""
         from django.core.management import call_command
+        from django.db.models import Max
         from io import StringIO
+        from mydata.models import VATSyncLog
 
         credentials = self.get_object()
 
@@ -345,10 +347,50 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
             else:
                 args.extend(['--days', str(days)])
 
+            # Κρατάμε το τελευταίο sync-log id ΠΡΙΝ τρέξει το command, ώστε μετά
+            # να εξετάσουμε ΜΟΝΟ τα logs που δημιούργησε αυτό το sync.
+            before_id = VATSyncLog.objects.filter(
+                client=credentials.client
+            ).aggregate(m=Max('id'))['m'] or 0
+
             call_command('mydata_sync_vat', *args, stdout=out)
+
+            new_logs = list(
+                VATSyncLog.objects.filter(
+                    client=credentials.client, id__gt=before_id
+                )
+            )
+            fetched = sum((l.records_fetched or 0) for l in new_logs)
+            created = sum((l.records_created or 0) for l in new_logs)
+            updated = sum((l.records_updated or 0) for l in new_logs)
+            skipped = sum((l.records_skipped or 0) for l in new_logs)
+
+            # Ο locked-period guard παρέκαμψε ΟΛΟΚΛΗΡΟ τον συγχρονισμό (κλειδωμένη
+            # / υποβεβλημένη περίοδος). ΜΗΝ αναφέρεις ψεύτικη επιτυχία — δώσε
+            # καθαρό σήμα ώστε το frontend να ενημερώσει σωστά τον χρήστη.
+            if skipped and not (fetched or created or updated):
+                detail = ' · '.join(
+                    (l.error_message or '').strip()
+                    for l in new_logs
+                    if (l.records_skipped or 0) > 0 and l.error_message
+                )
+                return Response({
+                    'success': False,
+                    'skipped': True,
+                    'locked': True,
+                    'message': (
+                        'Ο συγχρονισμός παραλείφθηκε: η περίοδος είναι '
+                        'κλειδωμένη. Ξεκλειδώστε την για επανασυγχρονισμό.'
+                    ),
+                    'detail': detail or out.getvalue(),
+                })
 
             return Response({
                 'success': True,
+                'skipped': False,
+                'records_created': created,
+                'records_updated': updated,
+                'records_fetched': fetched,
                 'message': out.getvalue(),
             })
 

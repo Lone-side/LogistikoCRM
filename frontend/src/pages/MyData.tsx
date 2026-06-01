@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
   Users,
   BarChart3,
@@ -68,6 +69,7 @@ export default function MyData() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [clientData, setClientData] = useState<ClientVATDetailResponse | null>(null);
 
   // Fetch clients on mount
@@ -137,10 +139,20 @@ export default function MyData() {
     setSyncing(true);
     setError(null);
     setSuccessMessage(null);
+    setWarningMessage(null);
 
     try {
-      await mydataApi.credentials.sync(credentialsId, year, month);
-      setSuccessMessage('Ο συγχρονισμός ολοκληρώθηκε επιτυχώς');
+      const res = await mydataApi.credentials.sync(credentialsId, year, month);
+      // Ο συγχρονισμός μπορεί να παραλείφθηκε επειδή η περίοδος είναι κλειδωμένη
+      // (υποβεβλημένη). Μην δείχνεις ψεύτικη «επιτυχία» — δείξε προειδοποίηση.
+      if (res?.skipped) {
+        setWarningMessage(
+          res.message ||
+            'Ο συγχρονισμός παραλείφθηκε: η περίοδος είναι κλειδωμένη.'
+        );
+      } else {
+        setSuccessMessage('Ο συγχρονισμός ολοκληρώθηκε επιτυχώς');
+      }
       // Refresh data after sync
       await fetchClientData();
     } catch (err: unknown) {
@@ -282,6 +294,14 @@ export default function MyData() {
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
               <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
               <p className="text-red-700">{error}</p>
+            </div>
+          )}
+
+          {/* Warning Message (π.χ. κλειδωμένη/υποβεβλημένη περίοδος) */}
+          {warningMessage && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
+              <AlertTriangle size={20} className="text-amber-500 flex-shrink-0" />
+              <p className="text-amber-800">{warningMessage}</p>
             </div>
           )}
 
