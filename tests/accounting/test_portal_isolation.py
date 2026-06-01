@@ -159,21 +159,43 @@ class PortalDataIsolationTest(APITestCase):
         resp = self.client.get('/accounting/api/client/me/profile/')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    # ----- write isolation (cross-client mutations blocked) -----
+    # ----- write isolation: ο πελάτης είναι read-only (403 σε ΟΛΑ τα writes) -----
     def test_client_cannot_update_other_client(self):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.patch(
             f'/accounting/api/v1/clients/{self.client_b.id}/',
             {'eponimia': 'HACKED'}, format='json',
         )
-        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        # Read-only για πελάτες → 403 (ισχυρότερο από 404).
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
         self.client_b.refresh_from_db()
         self.assertNotEqual(self.client_b.eponimia, 'HACKED')
+
+    def test_client_cannot_update_own_client(self):
+        # Ακόμα και το ΔΙΚΟ του προφίλ δεν επιτρέπεται να το μεταβάλει (read-only).
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.patch(
+            f'/accounting/api/v1/clients/{self.client_a.id}/',
+            {'eponimia': 'SELF EDIT'}, format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_client_cannot_create_obligation(self):
+        # Πελάτης δεν μπορεί να δημιουργήσει υποχρέωση (ούτε για τον εαυτό του).
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/v1/obligations/',
+            {'client': self.client_b.id, 'obligation_type': self.otype.id,
+             'year': 2027, 'month': 5, 'deadline': '2027-05-31'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_client_cannot_delete_other_obligation(self):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.delete(f'/accounting/api/v1/obligations/{self.obl_b.id}/')
-        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        # Read-only → 403 (η υποχρέωση παραμένει).
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(MonthlyObligation.objects.filter(id=self.obl_b.id).exists())
 
     # ----- password set flow -----

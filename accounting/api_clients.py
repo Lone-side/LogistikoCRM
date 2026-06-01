@@ -72,11 +72,31 @@ class ClientListSerializer(serializers.ModelSerializer):
         ]
 
 
+# Πεδία διαπιστευτηρίων που ΔΕΝ πρέπει ποτέ να επιστρέφονται σε client portal user
+# (κωδικοί TaxisNet/ΕΦΚΑ/ΓΕΜΗ που κρατά το λογιστικό γραφείο).
+CREDENTIAL_FIELDS = (
+    'onoma_xristi_taxisnet', 'kodikos_taxisnet',
+    'onoma_xristi_ika_ergodoti', 'kodikos_ika_ergodoti',
+    'onoma_xristi_gemi', 'kodikos_gemi',
+)
+
+
 class ClientDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for single client view"""
     obligations_count = serializers.SerializerMethodField()
     documents_count = serializers.SerializerMethodField()
     pending_obligations_count = serializers.SerializerMethodField()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Αν ο requester είναι client portal user, αφαίρεσε τα διαπιστευτήρια.
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is not None:
+            from accounting.portal import is_client_user
+            if is_client_user(user):
+                for field in CREDENTIAL_FIELDS:
+                    self.fields.pop(field, None)
 
     class Meta:
         model = ClientProfile
