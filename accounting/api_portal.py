@@ -11,8 +11,10 @@ Endpoints:
     GET /accounting/api/client/me/documents/   - Τα έγγραφά του
     GET /accounting/api/client/me/calls/       - Οι κλήσεις του
 """
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_decode
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -130,3 +132,65 @@ def me_calls(request):
         'duration_seconds': getattr(c, 'duration_seconds', 0),
     } for c in qs]
     return Response({'count': len(data), 'results': data})
+
+
+# =============================================================================
+# PASSWORD SET / RESET — για clients που δημιουργήθηκαν χωρίς usable password
+# =============================================================================
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def set_password(request):
+    """
+    POST /api/client/me/set-password/
+
+    Ορισμός κωδικού μέσω one-time token (Django default_token_generator).
+    Το staff δημιουργεί τον λογαριασμό· ο πελάτης λαμβάνει uid+token (μέσω
+    email/SMS) και ορίζει κωδικό εδώ. Δεν απαιτεί authentication.
+
+    Body: { "uid": "<base64 user id>", "token": "<token>", "password": "<new>" }
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    uid = request.data.get('uid')
+    token = request.data.get('token')
+    password = request.data.get('password')
+
+    if not all([uid, token, password]):
+        return Response(
+            {'detail': 'Απαιτούνται uid, token και password.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(password) < 8:
+        return Response(
+            {'detail': 'Ο κωδικός πρέπει να έχει τουλάχιστον 8 χαρακτήρες.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user_id = urlsafe_base64_decode(uid).decode()
+        user = User.objects.get(pk=user_id)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response(
+            {'detail': 'Μη έγκυρος σύνδεσμος.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Ασφάλεια: μόνο client users μπορούν να ορίσουν κωδικό από αυτό το endpoint.
+    if not is_client_user(user):
+        return Response(
+            {'detail': 'Μη έγκυρος σύνδεσμος.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not default_token_generator.check_token(user, token):
+        return Response(
+            {'detail': 'Ο σύνδεσμος έληξε ή είναι άκυρος. Ζητήστε νέο.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user.set_password(password)
+    user.save(update_fields=['password'])
+    return Response({'detail': 'Ο κωδικός ορίστηκε επιτυχώς.'})

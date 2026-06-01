@@ -77,6 +77,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
         'is_active',
         'obligations_status',
         'documents_count',
+        'portal_status',
         'created_at',
         'folder_link',
         'pdf_report_link',
@@ -168,7 +169,57 @@ class ClientProfileAdmin(admin.ModelAdmin):
         'export_to_csv',
         'mark_active',
         'mark_inactive',
+        'create_portal_account',
     ]
+
+    @admin.display(description='🔑 Portal')
+    def portal_status(self, obj):
+        """Δείχνει αν ο πελάτης έχει λογαριασμό portal."""
+        if obj.user_id:
+            return format_html(
+                '<span style="background:#28a745;color:#fff;padding:2px 8px;'
+                'border-radius:10px;font-size:11px;">✅ {}</span>',
+                obj.user.username
+            )
+        return format_html(
+            '<span style="background:#6c757d;color:#fff;padding:2px 8px;'
+            'border-radius:10px;font-size:11px;">— Χωρίς</span>'
+        )
+
+    @admin.action(description='🔑 Δημιουργία λογαριασμού Portal')
+    def create_portal_account(self, request, queryset):
+        """
+        Δημιουργεί portal λογαριασμό (username = ΑΦΜ) για τους επιλεγμένους
+        πελάτες. Ο λογαριασμός δημιουργείται χωρίς usable password — ο πελάτης
+        ορίζει κωδικό μέσω reset. Παραλείπει όσους έχουν ήδη λογαριασμό.
+        """
+        created, skipped = 0, 0
+        for client in queryset:
+            if client.user_id:
+                skipped += 1
+                continue
+            try:
+                client.create_portal_user()
+                created += 1
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f'Σφάλμα για {client.afm}: {e}',
+                    level=messages.ERROR,
+                )
+        if created:
+            self.message_user(
+                request,
+                f'Δημιουργήθηκαν {created} λογαριασμοί portal. '
+                f'Οι πελάτες πρέπει να ορίσουν κωδικό μέσω reset link.',
+                level=messages.SUCCESS,
+            )
+        if skipped:
+            self.message_user(
+                request,
+                f'{skipped} πελάτες είχαν ήδη λογαριασμό (παραλείφθηκαν).',
+                level=messages.WARNING,
+            )
 
     fieldsets = (
         ('Βασικά Στοιχεία', {

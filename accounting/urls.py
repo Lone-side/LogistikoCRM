@@ -318,6 +318,7 @@ urlpatterns = [
     path("api/client/me/obligations/", api_portal.me_obligations, name="portal_me_obligations"),
     path("api/client/me/documents/", api_portal.me_documents, name="portal_me_documents"),
     path("api/client/me/calls/", api_portal.me_calls, name="portal_me_calls"),
+    path("api/client/set-password/", api_portal.set_password, name="portal_set_password"),
 
     # ==================================================
     # JWT AUTHENTICATION ENDPOINTS

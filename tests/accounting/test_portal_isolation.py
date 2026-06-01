@@ -158,3 +158,64 @@ class PortalDataIsolationTest(APITestCase):
     def test_me_endpoints_require_auth(self):
         resp = self.client.get('/accounting/api/client/me/profile/')
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # ----- write isolation (cross-client mutations blocked) -----
+    def test_client_cannot_update_other_client(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.patch(
+            f'/accounting/api/v1/clients/{self.client_b.id}/',
+            {'eponimia': 'HACKED'}, format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.client_b.refresh_from_db()
+        self.assertNotEqual(self.client_b.eponimia, 'HACKED')
+
+    def test_client_cannot_delete_other_obligation(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.delete(f'/accounting/api/v1/obligations/{self.obl_b.id}/')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(MonthlyObligation.objects.filter(id=self.obl_b.id).exists())
+
+    # ----- password set flow -----
+    def test_set_password_flow(self):
+        # Νέος πελάτης χωρίς usable password.
+        client_c = ClientProfile.objects.create(
+            afm="111111114", eponimia="Πελάτης Γ", eidos_ipoxreou="company"
+        )
+        user_c = client_c.create_portal_user()  # χωρίς password
+        self.assertFalse(user_c.has_usable_password())
+
+        link = client_c.get_password_set_link()
+        resp = self.client.post(
+            '/accounting/api/client/set-password/',
+            {'uid': link['uid'], 'token': link['token'], 'password': 'NewPass123!'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.content[:200])
+
+        # Τώρα μπορεί να συνδεθεί.
+        login = self.client.post(
+            '/accounting/api/auth/login/',
+            {'username': user_c.username, 'password': 'NewPass123!'},
+            format='json',
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+        self.assertTrue(login.data['user']['is_client'])
+
+    def test_set_password_rejects_bad_token(self):
+        link = self.client_a.get_password_set_link()
+        resp = self.client.post(
+            '/accounting/api/client/set-password/',
+            {'uid': link['uid'], 'token': 'invalid-token', 'password': 'NewPass123!'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_set_password_rejects_short_password(self):
+        link = self.client_a.get_password_set_link()
+        resp = self.client.post(
+            '/accounting/api/client/set-password/',
+            {'uid': link['uid'], 'token': link['token'], 'password': 'short'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

@@ -157,6 +157,26 @@ class ClientProfile(models.Model):
         self.save(update_fields=['user'])
         return user
 
+    def get_password_set_link(self, base_url=''):
+        """
+        Επιστρέφει (uid, token) για το set-password flow του portal user.
+        Ο πελάτης τα χρησιμοποιεί στο POST /api/client/set-password/.
+        Αν δοθεί base_url, επιστρέφει και πλήρες URL.
+        """
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+
+        if not self.user_id:
+            return None
+
+        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        token = default_token_generator.make_token(self.user)
+        result = {'uid': uid, 'token': token}
+        if base_url:
+            result['url'] = f"{base_url.rstrip('/')}/set-password?uid={uid}&token={token}"
+        return result
+
 
 class ObligationGroup(models.Model):
     """Ομάδα αλληλοαποκλειόμενων υποχρεώσεων"""
