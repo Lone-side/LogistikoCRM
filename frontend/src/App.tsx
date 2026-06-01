@@ -30,6 +30,7 @@ import FilingSettings from './pages/FilingSettings';
 import SharedLinkPortal from './pages/SharedLinkPortal';
 import AccountantDashboard from './pages/AccountantDashboard';
 import ClientPortal from './pages/ClientPortal';
+import SetPassword from './pages/SetPassword';
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -120,6 +121,7 @@ function App() {
           <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/set-password" element={<SetPassword />} />
           <Route path="/share/:token" element={<SharedLinkPortal />} />
 
           {/* Full-bleed showcase dashboard — no Layout wrapper */}
