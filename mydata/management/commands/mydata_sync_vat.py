@@ -27,7 +27,7 @@ from calendar import monthrange
 import logging
 
 from accounting.models import ClientProfile
-from mydata.models import MyDataCredentials, VATRecord, VATSyncLog
+from mydata.models import MyDataCredentials, VATRecord, VATSyncLog, VATPeriodResult
 from mydata.client import (
     MyDataClient,
     MyDataCredentialsNotFoundError,
@@ -106,11 +106,18 @@ class Command(BaseCommand):
             action='store_true',
             help='Να μην διαγράψει τα παλιά records'
         )
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            help='Παράκαμψη του ελέγχου κλειδωμένων περιόδων (ΠΡΟΣΟΧΗ: '
+                 'μπορεί να διαγράψει records υποβεβλημένης περιόδου)'
+        )
 
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
         self.verbose = options['verbose']
         self.clear_before_sync = options['clear'] and not options['no_clear']
+        self.force = options['force']
 
         # Validate arguments
         if not options['client'] and not options['all']:
@@ -229,6 +236,23 @@ class Command(BaseCommand):
         except ClientProfile.DoesNotExist:
             raise CommandError(f"Δεν βρέθηκε πελάτης με ΑΦΜ: {afm}")
 
+    def _locked_periods_overlapping(self, client, date_from, date_to) -> list:
+        """
+        Επιστρέφει τις κλειδωμένες VATPeriodResult του πελάτη των οποίων το
+        [period_start_date, period_end_date] επικαλύπτει το [date_from, date_to].
+
+        Καλύπτει monthly ΚΑΙ quarterly (μέσω των model properties) και μερική
+        επικάλυψη μήνα (αρκεί έστω μία κοινή ημέρα). Το σύνολο κλειδωμένων ανά
+        πελάτη είναι μικρό, οπότε το intersection γίνεται σε Python.
+        """
+        locked = VATPeriodResult.objects.filter(client=client, is_locked=True)
+        overlapping = []
+        for period in locked:
+            # Intersection: start <= date_to AND end >= date_from
+            if period.period_start_date <= date_to and period.period_end_date >= date_from:
+                overlapping.append(period)
+        return overlapping
+
     def _sync_client_vat(
         self,
         client: ClientProfile,
@@ -263,6 +287,29 @@ class Command(BaseCommand):
                 )
             )
             return 0, 0, 1
+
+        # === GUARD: μην καταστρέφεις records ΚΛΕΙΔΩΜΕΝΗΣ (υποβεβλημένης) περιόδου ===
+        # Το sync κάνει delete+reinsert των records στο εύρος. Αν υπάρχει
+        # κλειδωμένη VATPeriodResult που επικαλύπτει το εύρος, το delete θα
+        # κατέστρεφε τα δεδομένα πίσω από μια οριστικοποιημένη δήλωση.
+        if self.clear_before_sync and not self.dry_run and not self.force:
+            locked = self._locked_periods_overlapping(client, date_from, date_to)
+            if locked:
+                labels = ', '.join(p.get_period_display() for p in locked)
+                msg = (f"Παράλειψη: υπάρχουν κλειδωμένες περίοδοι που "
+                       f"επικαλύπτουν το εύρος ({labels}). "
+                       f"Χρησιμοποίησε --force για παράκαμψη.")
+                self.stdout.write(self.style.WARNING(f"  {msg}"))
+                VATSyncLog.objects.create(
+                    client=client,
+                    sync_type='VAT_INFO',
+                    status='PARTIAL',
+                    date_from=date_from,
+                    date_to=date_to,
+                    records_skipped=len(locked),
+                    error_message=msg,
+                )
+                return 0, 0, 0
 
         # Create sync log
         sync_log = None
