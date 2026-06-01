@@ -642,3 +642,90 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 'open_tickets': open_tickets,
             }
         })
+
+    # =========================================================================
+    # PORTAL ACCOUNT MANAGEMENT (STAFF ONLY)
+    # Ώστε ο λογιστής να μη χρειάζεται ποτέ το Django admin.
+    # =========================================================================
+
+    def _deny_non_staff(self, request):
+        """Επιστρέφει 403 Response αν ο χρήστης δεν είναι staff, αλλιώς None."""
+        user = request.user
+        if not (user and user.is_authenticated and (user.is_staff or user.is_superuser)):
+            return Response(
+                {'detail': 'Απαιτούνται δικαιώματα προσωπικού.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def _portal_status_payload(self, client):
+        return {
+            'client_id': client.id,
+            'has_portal_account': bool(client.user_id),
+            'portal_username': client.user.username if client.user_id else None,
+            'has_email': bool(client.email),
+            'email': client.email or None,
+        }
+
+    @action(detail=True, methods=['get'], url_path='portal-status')
+    def portal_status(self, request, pk=None):
+        """GET /api/clients/{id}/portal-status/ — κατάσταση πρόσβασης portal."""
+        denied = self._deny_non_staff(request)
+        if denied:
+            return denied
+        client = self.get_object()
+        return Response(self._portal_status_payload(client))
+
+    @action(detail=True, methods=['post'], url_path='create-portal-account')
+    def create_portal_account(self, request, pk=None):
+        """
+        POST /api/clients/{id}/create-portal-account/
+        Δημιουργεί λογαριασμό portal (username = ΑΦΜ) και στέλνει πρόσκληση.
+        Idempotent: αν υπάρχει ήδη, δεν δημιουργεί διπλό.
+        """
+        denied = self._deny_non_staff(request)
+        if denied:
+            return denied
+
+        from accounting.services.email_service import EmailService
+
+        client = self.get_object()
+        already = bool(client.user_id)
+        client.create_portal_user()  # idempotent (επιστρέφει υπάρχοντα)
+        invite_sent = EmailService.send_portal_invite(client)
+
+        payload = self._portal_status_payload(client)
+        payload['invite_sent'] = invite_sent
+        payload['detail'] = (
+            'Ο λογαριασμός υπήρχε ήδη.' if already
+            else 'Δημιουργήθηκε λογαριασμός portal.'
+        )
+        if not invite_sent:
+            payload['detail'] += ' (Δεν στάλθηκε email — ελλιπές email πελάτη.)'
+        return Response(
+            payload,
+            status=status.HTTP_200_OK if already else status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='resend-portal-invite')
+    def resend_portal_invite(self, request, pk=None):
+        """POST /api/clients/{id}/resend-portal-invite/ — νέα πρόσκληση (νέος σύνδεσμος)."""
+        denied = self._deny_non_staff(request)
+        if denied:
+            return denied
+
+        from accounting.services.email_service import EmailService
+
+        client = self.get_object()
+        if not client.user_id:
+            return Response(
+                {'detail': 'Δεν υπάρχει λογαριασμός portal για αυτόν τον πελάτη.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        sent = EmailService.send_portal_invite(client)
+        if not sent:
+            return Response(
+                {'detail': 'Αποτυχία αποστολής — ο πελάτης δεν έχει email.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({'detail': 'Η πρόσκληση στάλθηκε ξανά.', 'invite_sent': True})
