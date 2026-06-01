@@ -15,16 +15,18 @@ vi.mock('../stores/authStore', () => ({
   useAuthStore: (selector: (s: typeof authState) => unknown) => selector(authState),
 }))
 
-// Stub Navigate so we can assert the redirect target without a real router.
+// Stub Navigate + useLocation so we can assert redirects without a real router.
 vi.mock('react-router-dom', () => ({
   Navigate: ({ to }: { to: string }) => <div data-testid="navigate">{to}</div>,
+  useLocation: () => ({ pathname: '/test' }),
 }))
 
-// Stub Layout (from the components barrel) so staff content renders bare.
+// Stub Layout + ErrorBoundary (passthrough) from the components barrel.
 vi.mock('../components', () => ({
   Layout: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="layout">{children}</div>
   ),
+  ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 
 import { ProtectedRoute, ClientRoute } from './guards'

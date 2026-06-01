@@ -2,6 +2,13 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
+  /** Compact (in-page) fallback instead of full-screen — use per-route. */
+  compact?: boolean;
+  /**
+   * When any value in this array changes, the boundary resets and re-renders
+   * children. Pass the route path so navigating away clears a page crash.
+   */
+  resetKeys?: ReadonlyArray<unknown>;
 }
 
 interface State {
@@ -24,14 +31,36 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Error info:', errorInfo.componentStack);
   }
 
+  componentDidUpdate(prevProps: Props): void {
+    // Reset the error when resetKeys change (e.g. route navigation).
+    if (this.state.hasError && this.props.resetKeys !== prevProps.resetKeys) {
+      const prev = prevProps.resetKeys ?? [];
+      const next = this.props.resetKeys ?? [];
+      const changed =
+        prev.length !== next.length || next.some((k, i) => k !== prev[i]);
+      if (changed) {
+        this.setState({ hasError: false, error: null });
+      }
+    }
+  }
+
   handleReload = (): void => {
-    window.location.reload();
+    if (this.props.compact) {
+      // In-page recovery: clear the error and re-render children.
+      this.setState({ hasError: false, error: null });
+    } else {
+      window.location.reload();
+    }
   };
 
   render(): ReactNode {
     if (this.state.hasError) {
+      const compact = this.props.compact;
+      const wrapperClass = compact
+        ? 'flex items-center justify-center p-8'
+        : 'min-h-screen flex items-center justify-center bg-gray-50';
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className={wrapperClass} role="alert">
           <div className="text-center p-8 bg-white rounded-lg shadow-lg max-w-md">
             <div className="text-red-500 mb-4">
               <svg
@@ -39,6 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -58,7 +88,7 @@ export class ErrorBoundary extends Component<Props, State> {
               onClick={this.handleReload}
               className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
-              Επαναφόρτωση
+              {compact ? 'Δοκιμάστε ξανά' : 'Επαναφόρτωση'}
             </button>
           </div>
         </div>

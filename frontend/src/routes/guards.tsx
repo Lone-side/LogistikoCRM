@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { Layout } from '../components';
+import { Layout, ErrorBoundary } from '../components';
 
 // Κοινό spinner όσο ελέγχεται το auth state.
 function AuthChecking() {
@@ -37,11 +37,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const isChecking = useAuthCheck();
+  const location = useLocation();
 
   if (isChecking) return <AuthChecking />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (user?.is_client) return <Navigate to="/portal" replace />;
-  return <Layout>{children}</Layout>;
+  // Per-route boundary: a page crash shows a fallback (Layout/nav survive) and
+  // clears on navigation (resetKeys=[path]).
+  return (
+    <Layout>
+      <ErrorBoundary compact resetKeys={[location.pathname]}>
+        {children}
+      </ErrorBoundary>
+    </Layout>
+  );
 }
 
 /**
@@ -52,9 +61,14 @@ export function ClientRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const isChecking = useAuthCheck();
+  const location = useLocation();
 
   if (isChecking) return <AuthChecking />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (!user?.is_client) return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
+  return (
+    <ErrorBoundary compact resetKeys={[location.pathname]}>
+      {children}
+    </ErrorBoundary>
+  );
 }
