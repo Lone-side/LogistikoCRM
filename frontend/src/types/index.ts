@@ -7,6 +7,11 @@ export interface User {
   last_name: string;
   is_staff: boolean;
   is_superuser?: boolean;
+  // Client Portal fields (από το login response)
+  is_client?: boolean;
+  client_id?: number | null;
+  client_afm?: string | null;
+  client_name?: string | null;
 }
 
 // Client/Customer types (ClientProfile in Django)

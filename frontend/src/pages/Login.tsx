@@ -16,7 +16,9 @@ export default function Login() {
 
     try {
       await login(username, password, rememberMe);
-      navigate('/dashboard');
+      // Route ανάλογα με τον ρόλο: πελάτες στην πύλη, staff στο dashboard.
+      const user = useAuthStore.getState().user;
+      navigate(user?.is_client ? '/portal' : '/dashboard');
     } catch {
       // Error is handled in the store
     }

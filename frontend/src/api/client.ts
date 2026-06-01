@@ -119,6 +119,26 @@ export const obligationsApi = {
   },
 };
 
+// Client Portal API — δεδομένα του συνδεδεμένου πελάτη (/api/client/me/)
+export const portalApi = {
+  getProfile: async () => {
+    const response = await apiClient.get('api/client/me/profile/');
+    return response.data;
+  },
+  getObligations: async () => {
+    const response = await apiClient.get('api/client/me/obligations/');
+    return response.data;
+  },
+  getDocuments: async () => {
+    const response = await apiClient.get('api/client/me/documents/');
+    return response.data;
+  },
+  getCalls: async () => {
+    const response = await apiClient.get('api/client/me/calls/');
+    return response.data;
+  },
+};
+
 // Global Search API
 export interface SearchResultItem {
   id: number;
