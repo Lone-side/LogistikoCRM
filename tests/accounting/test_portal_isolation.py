@@ -288,3 +288,136 @@ class PortalDataIsolationTest(APITestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+# =============================================================================
+# /me/vat — απομόνωση δεδομένων ΦΠΑ
+# =============================================================================
+
+class PortalVATIsolationTest(APITestCase):
+    def setUp(self):
+        from decimal import Decimal
+        from datetime import date
+        from mydata.models import VATRecord, VATPeriodResult
+
+        self.client_a = ClientProfile.objects.create(
+            afm='123456783', eponimia='A', eidos_ipoxreou='company'
+        )
+        self.client_b = ClientProfile.objects.create(
+            afm='094160855', eponimia='B', eidos_ipoxreou='company'
+        )
+        self.user_a = self.client_a.create_portal_user(password='PassA123!')
+        self.user_b = self.client_b.create_portal_user(password='PassB123!')
+
+        # VAT data: ένα record + period για κάθε πελάτη
+        VATRecord.objects.create(
+            client=self.client_a, mark=1001, is_cancelled=False,
+            issue_date=date(2026, 5, 10), rec_type=1, inv_type='1.1',
+            vat_category=1, net_value=Decimal('100'), vat_amount=Decimal('24'),
+        )
+        VATRecord.objects.create(
+            client=self.client_b, mark=2001, is_cancelled=False,
+            issue_date=date(2026, 5, 10), rec_type=1, inv_type='1.1',
+            vat_category=1, net_value=Decimal('999'), vat_amount=Decimal('239'),
+        )
+        VATPeriodResult.objects.create(
+            client=self.client_a, period_type='monthly', year=2026, period=5,
+            vat_output=Decimal('24'), vat_input=Decimal('0'),
+            vat_difference=Decimal('24'), final_result=Decimal('24'),
+        )
+        VATPeriodResult.objects.create(
+            client=self.client_b, period_type='monthly', year=2026, period=5,
+            vat_output=Decimal('239'), vat_input=Decimal('0'),
+            vat_difference=Decimal('239'), final_result=Decimal('239'),
+        )
+
+    def test_client_sees_only_own_vat(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.get('/accounting/api/client/me/vat/')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        # Μόνο τα δικά του records (mark=1001), όχι το 2001
+        marks = {r['mark'] for r in resp.data['records']}
+        self.assertEqual(marks, {1001})
+        # Μόνο το δικό του period
+        period_finals = {p['final_result'] for p in resp.data['periods']}
+        self.assertEqual(period_finals, {'24.00'})
+
+    def test_staff_forbidden_on_me_vat(self):
+        staff = User.objects.create_user(username='s', password='x', is_staff=True)
+        self.client.force_authenticate(user=staff)
+        resp = self.client.get('/accounting/api/client/me/vat/')
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+
+# =============================================================================
+# /me/documents/upload — ο πελάτης ανεβάζει ΑΛΛΑ πάντα στον εαυτό του
+# =============================================================================
+
+class PortalUploadIsolationTest(APITestCase):
+    def setUp(self):
+        self.client_a = ClientProfile.objects.create(
+            afm='123456783', eponimia='A', eidos_ipoxreou='company'
+        )
+        self.client_b = ClientProfile.objects.create(
+            afm='094160855', eponimia='B', eidos_ipoxreou='company'
+        )
+        self.user_a = self.client_a.create_portal_user(password='PassA123!')
+
+    def _file(self, name='doc.pdf', content=b'%PDF-1.4 test', content_type='application/pdf'):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile(name, content, content_type=content_type)
+
+    def test_client_can_upload_for_self(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file(), 'document_category': 'invoices', 'description': 'test'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content[:300])
+        doc = ClientDocument.objects.get(id=resp.data['id'])
+        self.assertEqual(doc.client_id, self.client_a.id)
+        self.assertEqual(doc.uploaded_by_id, self.user_a.id)
+        self.assertEqual(doc.document_category, 'invoices')
+
+    def test_upload_ignores_spoofed_client_id(self):
+        # Ο πελάτης Α προσπαθεί να ανεβάσει για τον Β μέσω client_id στο body.
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file(), 'client_id': self.client_b.id},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        # Παρά το client_id στο body, αποδίδεται στον client_a.
+        doc = ClientDocument.objects.get(id=resp.data['id'])
+        self.assertEqual(doc.client_id, self.client_a.id)
+        self.assertNotEqual(doc.client_id, self.client_b.id)
+
+    def test_upload_rejects_bad_extension(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file(name='hack.exe', content=b'MZ\x90')},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_rejects_missing_file(self):
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'document_category': 'general'},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_staff_forbidden_on_me_upload(self):
+        staff = User.objects.create_user(username='s', password='x', is_staff=True)
+        self.client.force_authenticate(user=staff)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file()},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)

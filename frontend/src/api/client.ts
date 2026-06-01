@@ -137,6 +137,20 @@ export const portalApi = {
     const response = await apiClient.get('api/client/me/calls/');
     return response.data;
   },
+  getVat: async () => {
+    const response = await apiClient.get('api/client/me/vat/');
+    return response.data;
+  },
+  uploadDocument: async (file: File, category: string, description?: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('document_category', category);
+    if (description) form.append('description', description);
+    const response = await apiClient.post('api/client/me/documents/upload/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };
 
 // Global Search API

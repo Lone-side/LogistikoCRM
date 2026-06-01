@@ -15,7 +15,10 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.http import urlsafe_base64_decode
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+import os
+
+from rest_framework.decorators import api_view, permission_classes, throttle_classes, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.response import Response
@@ -146,6 +149,154 @@ def me_calls(request):
         'duration_seconds': getattr(c, 'duration_seconds', 0),
     } for c in qs]
     return Response({'count': len(data), 'results': data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def me_vat(request):
+    """
+    GET /api/client/me/vat/
+
+    Επιστρέφει την κατάσταση ΦΠΑ του πελάτη:
+      - periods: VATPeriodResult ανά περίοδο (output/input/difference/final)
+      - records: τα πιο πρόσφατα VATRecord (50 max) με net/vat ανά παραστατικό
+      - summary: σύνολο εκροών/εισροών για ταχεία επισκόπηση
+    """
+    profile, err = _require_client(request)
+    if err:
+        return err
+
+    # Late import για να μην έχουμε circular dependency στο app startup.
+    from mydata.models import VATPeriodResult, VATRecord
+    from django.db.models import Sum
+
+    periods_qs = (VATPeriodResult.objects
+                  .filter(client=profile)
+                  .order_by('-year', '-period'))
+    periods = [{
+        'id': p.id,
+        'period_type': p.period_type,
+        'year': p.year,
+        'period': p.period,
+        'vat_output': str(p.vat_output),
+        'vat_input': str(p.vat_input),
+        'vat_difference': str(p.vat_difference),
+        'previous_credit': str(p.previous_credit),
+        'final_result': str(p.final_result),
+        'credit_to_next': str(p.credit_to_next),
+        'is_locked': p.is_locked,
+        'last_calculated_at': p.last_calculated_at,
+    } for p in periods_qs]
+
+    records_qs = (VATRecord.objects
+                  .filter(client=profile, is_cancelled=False)
+                  .order_by('-issue_date')[:50])
+    records = [{
+        'id': r.id,
+        'mark': r.mark,
+        'issue_date': r.issue_date,
+        # rec_type 1 = εκροές (έσοδα), 2 = εισροές (έξοδα)
+        'rec_type': r.rec_type,
+        'kind': 'output' if r.rec_type == 1 else 'input',
+        'inv_type': r.inv_type,
+        'net_value': str(r.net_value),
+        'vat_amount': str(r.vat_amount),
+    } for r in records_qs]
+
+    # Aggregate (όλη η ιστορία, όχι μόνο τα 50 records που επιστρέφουμε).
+    agg = (VATRecord.objects
+           .filter(client=profile, is_cancelled=False)
+           .values('rec_type')
+           .annotate(total_net=Sum('net_value'), total_vat=Sum('vat_amount')))
+    summary = {'output': {'net': '0', 'vat': '0'}, 'input': {'net': '0', 'vat': '0'}}
+    for row in agg:
+        key = 'output' if row['rec_type'] == 1 else 'input'
+        summary[key] = {
+            'net': str(row['total_net'] or 0),
+            'vat': str(row['total_vat'] or 0),
+        }
+
+    return Response({
+        'summary': summary,
+        'periods': periods,
+        'records': records,
+        'records_truncated': records_qs.count() == 50,
+    })
+
+
+# =============================================================================
+# DOCUMENT UPLOAD — ο πελάτης ανεβάζει αρχείο, ΠΑΝΤΑ αποδίδεται στον εαυτό του
+# =============================================================================
+
+_ALLOWED_EXTS = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+_ALLOWED_CATEGORIES = {'contracts', 'invoices', 'tax', 'myf', 'vat', 'payroll', 'general'}
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def me_upload_document(request):
+    """
+    POST /api/client/me/documents/  (multipart/form-data)
+
+    Ο πελάτης ανεβάζει αρχείο. Το `client` ΠΑΝΤΑ ορίζεται από τον
+    συνδεδεμένο user (αγνοούμε τυχόν client_id στο body — όχι spoofing).
+
+    Form fields:
+      - file: το αρχείο (απαραίτητο)
+      - document_category: contracts|invoices|tax|myf|vat|payroll|general
+      - description: προαιρετική περιγραφή
+    """
+    profile, err = _require_client(request)
+    if err:
+        return err
+
+    uploaded = request.FILES.get('file')
+    if uploaded is None:
+        return Response({'detail': 'Δεν δόθηκε αρχείο (πεδίο: file).'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    # Έλεγχος επέκτασης
+    ext = os.path.splitext(uploaded.name)[1].lower()
+    if ext not in _ALLOWED_EXTS:
+        return Response(
+            {'detail': f'Μη επιτρεπτός τύπος αρχείου. Επιτρέπονται: '
+                       f'{", ".join(sorted(_ALLOWED_EXTS))}'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Έλεγχος μεγέθους
+    if uploaded.size > _MAX_UPLOAD_BYTES:
+        return Response(
+            {'detail': 'Το αρχείο είναι μεγαλύτερο από 10MB.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    category = (request.data.get('document_category') or 'general').strip()
+    if category not in _ALLOWED_CATEGORIES:
+        category = 'general'
+    description = (request.data.get('description') or '').strip()[:500]
+
+    doc = ClientDocument.objects.create(
+        client=profile,                # ← forced, NEVER from body
+        file=uploaded,
+        original_filename=uploaded.name,
+        filename=uploaded.name,
+        file_size=uploaded.size,
+        document_category=category,
+        description=description,
+        uploaded_by=request.user,
+    )
+
+    return Response({
+        'id': doc.id,
+        'filename': doc.filename,
+        'document_category': doc.document_category,
+        'file_size': doc.file_size,
+        'uploaded_at': doc.uploaded_at,
+        'detail': 'Το αρχείο ανέβηκε επιτυχώς.',
+    }, status=status.HTTP_201_CREATED)
 
 
 # =============================================================================
