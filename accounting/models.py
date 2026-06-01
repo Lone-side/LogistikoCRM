@@ -87,6 +87,18 @@ class ClientProfile(models.Model):
     afm_foreas = models.CharField('Α.Φ.Μ. Φορέας', max_length=20, blank=True, null=True, default='')
     am_klidi = models.CharField('ΑΜ ΚΛΕΙΔΙ', max_length=50, blank=True, null=True, default='')
 
+    # Client Portal: σύνδεση με λογαριασμό χρήστη (1 πελάτης = 1 login).
+    # null=True ώστε υπάρχοντες πελάτες χωρίς portal access να μη σπάνε.
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='client_profile',
+        verbose_name='Λογαριασμός Πελάτη (Portal)',
+        help_text='Ο χρήστης που μπορεί να συνδεθεί στο portal για αυτόν τον πελάτη',
+    )
+
     # PERFORMANCE: Add index for frequently filtered fields
     is_active = models.BooleanField('Ενεργός', default=True, db_index=True)
     created_at = models.DateTimeField('Δημιουργήθηκε', auto_now_add=True)
@@ -103,6 +115,47 @@ class ClientProfile(models.Model):
 
     def __str__(self):
         return f"{self.afm} - {self.eponimia}"
+
+    def create_portal_user(self, username=None, password=None):
+        """
+        Δημιουργεί (ή επιστρέφει) τον χρήστη portal για αυτόν τον πελάτη και τον
+        βάζει στο group 'client'. Επιστρέφει το User instance.
+
+        - username: default το ΑΦΜ του πελάτη
+        - password: αν δοθεί τίθεται· αλλιώς ο λογαριασμός μένει χωρίς usable
+          password (ο πελάτης ορίζει μέσω reset link).
+        """
+        from django.contrib.auth.models import Group
+
+        if self.user_id:
+            return self.user
+
+        username = username or self.afm
+        user = User.objects.create(
+            username=username,
+            email=self.email or '',
+            is_staff=False,
+            is_superuser=False,
+        )
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+
+        client_group, _ = Group.objects.get_or_create(name='client')
+        user.groups.add(client_group)
+
+        # Ο post_save signal (common.signals) βάζει κάθε νέο χρήστη στο
+        # 'co-workers' (staff group). Ο πελάτης portal ΔΕΝ πρέπει να έχει staff
+        # δικαιώματα — αφαίρεσε αυτή τη συμμετοχή.
+        coworkers = Group.objects.filter(name='co-workers').first()
+        if coworkers:
+            user.groups.remove(coworkers)
+
+        self.user = user
+        self.save(update_fields=['user'])
+        return user
 
 
 class ObligationGroup(models.Model):
