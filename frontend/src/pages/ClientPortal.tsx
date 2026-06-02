@@ -398,7 +398,9 @@ export default function ClientPortal() {
                         {vatData.periods.map((p) => (
                           <tr key={p.id} className="hover:bg-gray-50">
                             <td className="px-5 py-3 font-medium text-gray-900">
-                              {MONTH_NAMES[p.period - 1] || p.period} {p.year}
+                              {p.period_type === 'quarterly'
+                                ? `${p.period}ο Τρίμηνο ${p.year}`
+                                : `${MONTH_NAMES[p.period - 1] || p.period} ${p.year}`}
                             </td>
                             <td className="px-4 py-3 text-right text-emerald-600">€{p.vat_output}</td>
                             <td className="px-4 py-3 text-right text-amber-600">€{p.vat_input}</td>
