@@ -349,26 +349,32 @@ export default function MyData() {
                 </div>
               </div>
 
-              {/* VAT Breakdown */}
+              {/* VAT Breakdown — accent cards (ίδιο visual language με το portal) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Income VAT */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                  <p className="text-sm text-gray-500 mb-2">ΦΠΑ Εκροών</p>
-                  <p className="text-3xl font-bold text-green-600 mb-1">
+                {/* Income VAT — Εκροές */}
+                <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-emerald-500 shadow-sm p-6">
+                  <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    <TrendingUp size={16} className="text-emerald-500" />
+                    ΦΠΑ Εκροών
+                  </p>
+                  <p className="text-3xl font-bold text-emerald-600 mt-2">
                     {formatCurrency(clientData.summary.income_vat)}
                   </p>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-gray-400 mt-1">
                     {clientData.summary.income_count} εγγραφές
                   </p>
                 </div>
 
-                {/* Expense VAT */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                  <p className="text-sm text-gray-500 mb-2">ΦΠΑ Εισροών</p>
-                  <p className="text-3xl font-bold text-red-600 mb-1">
+                {/* Expense VAT — Εισροές */}
+                <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm p-6">
+                  <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    <TrendingDown size={16} className="text-amber-500" />
+                    ΦΠΑ Εισροών
+                  </p>
+                  <p className="text-3xl font-bold text-amber-600 mt-2">
                     {formatCurrency(clientData.summary.expense_vat)}
                   </p>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-gray-400 mt-1">
                     {clientData.summary.expense_count} εγγραφές
                   </p>
                 </div>
@@ -405,10 +411,10 @@ export default function MyData() {
               {/* Category Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Income by Category */}
-                <div className="bg-white rounded-lg border border-gray-200">
-                  <div className="p-4 border-b border-gray-200">
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <div className="p-4 border-b border-gray-100">
                     <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <TrendingUp size={18} className="text-green-500" />
+                      <TrendingUp size={18} className="text-emerald-500" />
                       ΦΠΑ Εκροών ανά Κατηγορία
                     </h3>
                   </div>
@@ -418,14 +424,14 @@ export default function MyData() {
                         {clientData.income_by_category.map((cat) => (
                           <div key={cat.vat_category} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                              <span className="px-2 py-1 bg-emerald-100 text-emerald-800 text-xs font-medium rounded">
                                 {cat.vat_rate_display}
                               </span>
                               <span className="text-sm text-gray-600">
                                 ({cat.count} εγγρ.)
                               </span>
                             </div>
-                            <span className="font-semibold text-green-600">
+                            <span className="font-semibold text-emerald-600">
                               {formatCurrency(cat.vat_amount)}
                             </span>
                           </div>
@@ -438,10 +444,10 @@ export default function MyData() {
                 </div>
 
                 {/* Expense by Category */}
-                <div className="bg-white rounded-lg border border-gray-200">
-                  <div className="p-4 border-b border-gray-200">
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <div className="p-4 border-b border-gray-100">
                     <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <TrendingDown size={18} className="text-red-500" />
+                      <TrendingDown size={18} className="text-amber-500" />
                       ΦΠΑ Εισροών ανά Κατηγορία
                     </h3>
                   </div>
@@ -451,14 +457,14 @@ export default function MyData() {
                         {clientData.expense_by_category.map((cat) => (
                           <div key={cat.vat_category} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+                              <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
                                 {cat.vat_rate_display}
                               </span>
                               <span className="text-sm text-gray-600">
                                 ({cat.count} εγγρ.)
                               </span>
                             </div>
-                            <span className="font-semibold text-red-600">
+                            <span className="font-semibold text-amber-600">
                               {formatCurrency(cat.vat_amount)}
                             </span>
                           </div>
