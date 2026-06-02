@@ -137,6 +137,42 @@ export default function ClientPortal() {
     }
   };
 
+  // Client self-sync ΦΠΑ από myDATA (τρέχων μήνας). Το backend επιβάλλει
+  // throttle + locked-period guard· εδώ μόνο εμφανίζουμε το αποτέλεσμα.
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<
+    { type: 'success' | 'warning' | 'error'; text: string } | null
+  >(null);
+
+  const handleSyncVat = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await portalApi.syncVat();
+      if (res?.skipped) {
+        setSyncMsg({
+          type: 'warning',
+          text: res.message ||
+            'Ο συγχρονισμός παραλείφθηκε: η περίοδος είναι κλειδωμένη.',
+        });
+      } else {
+        setSyncMsg({ type: 'success', text: 'Ο συγχρονισμός ολοκληρώθηκε.' });
+      }
+      queryClient.invalidateQueries({ queryKey: ['portal', 'vat'] });
+    } catch (err: unknown) {
+      const resp = (err as {
+        response?: { status?: number; data?: { detail?: string } };
+      })?.response;
+      const text =
+        resp?.status === 429
+          ? 'Πολλές προσπάθειες συγχρονισμού. Δοκιμάστε αργότερα.'
+          : resp?.data?.detail || 'Σφάλμα συγχρονισμού.';
+      setSyncMsg({ type: 'error', text });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const obligations: PortalObligation[] = obligationsData?.results || [];
   const documents: PortalDocument[] = documentsData?.results || [];
 
@@ -258,26 +294,51 @@ export default function ClientPortal() {
 
         {tab === 'vat' && (
           <div className="space-y-4">
-            {/* Φίλτρο έτους — οδηγεί το ?year= στο backend. */}
-            <div className="flex items-center gap-2">
-              <label htmlFor="vat-year" className="text-sm text-gray-600">
-                Έτος
-              </label>
-              <select
-                id="vat-year"
-                aria-label="Έτος"
-                value={vatYear ?? ''}
-                onChange={(e) =>
-                  setVatYear(e.target.value ? Number(e.target.value) : undefined)
-                }
-                className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
+            {/* Φίλτρο έτους + κουμπί self-sync. */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label htmlFor="vat-year" className="text-sm text-gray-600">
+                  Έτος
+                </label>
+                <select
+                  id="vat-year"
+                  aria-label="Έτος"
+                  value={vatYear ?? ''}
+                  onChange={(e) =>
+                    setVatYear(e.target.value ? Number(e.target.value) : undefined)
+                  }
+                  className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
+                >
+                  <option value="">Όλα τα έτη</option>
+                  {availableYears.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={handleSyncVat}
+                disabled={syncing}
+                className="text-sm bg-blue-600 text-white rounded-md px-3 py-1.5 hover:bg-blue-700 disabled:opacity-60"
               >
-                <option value="">Όλα τα έτη</option>
-                {availableYears.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
+                {syncing ? 'Συγχρονισμός…' : 'Συγχρονισμός από myDATA'}
+              </button>
             </div>
+
+            {syncMsg && (
+              <div
+                role="status"
+                className={
+                  syncMsg.type === 'success'
+                    ? 'rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-700'
+                    : syncMsg.type === 'warning'
+                    ? 'rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800'
+                    : 'rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700'
+                }
+              >
+                {syncMsg.text}
+              </div>
+            )}
 
             {vatError ? (
               <div className="rounded-xl bg-red-50 border border-red-200 p-5 text-sm text-red-700">

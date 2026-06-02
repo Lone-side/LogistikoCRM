@@ -101,6 +101,56 @@ class VATPortalService:
         return qs.order_by('-issue_date')[:limit]
 
 
+def summarize_vat_sync(client, before_id, out) -> Dict:
+    """
+    Εξετάζει τα VATSyncLog που δημιούργησε ένα sync run (id > before_id) για τον
+    client και επιστρέφει ένα Response-ready dict.
+
+    Όταν ο locked-period guard παρέκαμψε ΟΛΟΚΛΗΡΟ τον sync (skipped>0 και τίποτα
+    fetched/created/updated), δίνει καθαρό σήμα skipped/locked αντί για ψεύτικη
+    «επιτυχία», ώστε το frontend να ενημερώσει σωστά τον χρήστη.
+
+    Args:
+        client: ClientProfile
+        before_id: το max VATSyncLog.id πριν τρέξει το command (0 αν κανένα)
+        out: StringIO με το stdout του command (fallback message)
+    Returns:
+        dict έτοιμο για Response(...).
+    """
+    from mydata.models import VATSyncLog
+
+    new_logs = list(VATSyncLog.objects.filter(client=client, id__gt=before_id))
+    fetched = sum((l.records_fetched or 0) for l in new_logs)
+    created = sum((l.records_created or 0) for l in new_logs)
+    updated = sum((l.records_updated or 0) for l in new_logs)
+    skipped = sum((l.records_skipped or 0) for l in new_logs)
+
+    if skipped and not (fetched or created or updated):
+        detail = ' · '.join(
+            (l.error_message or '').strip()
+            for l in new_logs
+            if (l.records_skipped or 0) > 0 and l.error_message
+        )
+        return {
+            'success': False,
+            'skipped': True,
+            'locked': True,
+            'message': (
+                'Ο συγχρονισμός παραλείφθηκε: η περίοδος είναι κλειδωμένη. '
+                'Ξεκλειδώστε την για επανασυγχρονισμό.'
+            ),
+            'detail': detail or out.getvalue(),
+        }
+    return {
+        'success': True,
+        'skipped': False,
+        'records_created': created,
+        'records_updated': updated,
+        'records_fetched': fetched,
+        'message': out.getvalue(),
+    }
+
+
 class MyDataService:
     """
     Service για myDATA operations

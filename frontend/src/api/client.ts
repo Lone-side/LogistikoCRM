@@ -166,6 +166,15 @@ export const portalApi = {
     const response = await apiClient.get('api/client/me/vat/', { params });
     return response.data;
   },
+  // Ο πελάτης τραβάει μόνος του τα δικά του δεδομένα ΦΠΑ (μόνο τρέχων/προηγούμενος
+  // μήνας — το backend επιβάλλει τον περιορισμό). Επιστρέφει VATSyncResult.
+  syncVat: async (month?: number, year?: number): Promise<VATSyncResult> => {
+    const body: Record<string, number> = {};
+    if (month) body.month = month;
+    if (year) body.year = year;
+    const response = await apiClient.post('api/client/me/vat/sync/', body);
+    return response.data;
+  },
   uploadDocument: async (file: File, category: string, description?: string) => {
     const form = new FormData();
     form.append('file', file);

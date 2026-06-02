@@ -36,12 +36,19 @@
 `accounting/api_portal.py`: `/api/client/me/{profile,obligations,documents,vat,calls}/`
 (GET, μέσω `_require_client`), `/api/client/me/documents/upload/` (forced στον
 δικό του πελάτη), `/api/client/set-password/`. Domain logic ΦΠΑ: `mydata/services.py::VATPortalService`.
+- **Client self-sync ΦΠΑ** (scoped write-action, όπως το upload):
+  `POST /api/client/me/vat/sync/` (`me_sync_vat`) — ο πελάτης τραβάει ΜΟΝΟ τα δικά
+  του δεδομένα myDATA. Guardrails: `VatSyncThrottle 3/hour`, **μόνο τρέχων/προηγούμενος
+  μήνας**, αγνοεί `client_id` στο body, και σέβεται locked περιόδους μέσω του
+  locked-period guard του `mydata_sync_vat`. Επιστρέφει `skipped/locked` αντί για
+  ψεύτικη επιτυχία (κοινός helper `mydata/services.py::summarize_vat_sync`,
+  μοιράζεται με το staff `MyDataCredentialsViewSet.sync`).
 
 ### Auth & ασφάλεια
 - JWT (SimpleJWT): **access 15min**, refresh 7d με rotation+blacklist.
 - **Throttling** (`SimpleRateThrottle`, ΟΧΙ `ScopedRateThrottle` — η τελευταία
   κάνει no-op σε function/JWT views): `login 5/min`, `set_password 3/hour`,
-  `vat_read 120/hour`. Keyed by IP.
+  `vat_read 120/hour`, `vat_sync 3/hour`. Keyed by IP (ή per-user στα portal endpoints).
 - `set_password`: constant-time token check (no enumeration oracle).
 - **Production guards** (`webcrm/settings.py`, όταν `DEBUG=False`): raise
   `ImproperlyConfigured` αν λείπει `SECRET_KEY`/`FRITZ_API_TOKEN`.

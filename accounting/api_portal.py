@@ -15,7 +15,10 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.http import urlsafe_base64_decode
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 from rest_framework.decorators import api_view, permission_classes, throttle_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -163,6 +166,18 @@ class VatReadThrottle(SimpleRateThrottle):
         return self.cache_format % {'scope': self.scope, 'ident': ident}
 
 
+class VatSyncThrottle(SimpleRateThrottle):
+    # Client self-sync ΦΠΑ: αυστηρό (κόστος/όρια myDATA + anti-abuse). Keyed per
+    # authenticated user. Ίδιο μοτίβο με VatReadThrottle (SimpleRateThrottle, όχι
+    # ScopedRateThrottle που κάνει no-op σε @api_view function views).
+    scope = 'vat_sync'
+
+    def get_cache_key(self, request, view):
+        ident = (request.user.pk if request.user and request.user.is_authenticated
+                 else self.get_ident(request))
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @throttle_classes([VatReadThrottle])
@@ -244,6 +259,90 @@ def me_vat(request):
         'records': records,
         'records_truncated': len(records) == RECORD_LIMIT,
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([VatSyncThrottle])
+def me_sync_vat(request):
+    """
+    POST /api/client/me/vat/sync/
+
+    Ο πελάτης τραβάει ΜΟΝΟΣ του τα δεδομένα ΦΠΑ του από το myDATA (self-service).
+    Scoped: συγχρονίζει ΜΟΝΟ τον συνδεδεμένο πελάτη (αγνοεί τυχόν client_id στο
+    body — όχι spoofing). Αυστηρά guardrails:
+      - throttle 3/hour ανά πελάτη (VatSyncThrottle)
+      - μόνο τρέχων ή προηγούμενος μήνας (όχι αυθαίρετα/παλιά εύρη)
+      - σέβεται κλειδωμένες (υποβληθείσες) περιόδους μέσω του locked-period guard
+        του mydata_sync_vat — επιστρέφει καθαρό skipped/locked αντί για ψεύτικη
+        επιτυχία.
+
+    Optional body: {year, month} — αν δοθούν, πρέπει να ανήκουν στο επιτρεπτό
+    σύνολο {τρέχων μήνας, προηγούμενος μήνας}· αλλιώς 400.
+    """
+    from django.core.management import call_command
+    from django.db.models import Max
+    from django.utils import timezone
+    from io import StringIO
+    from mydata.models import MyDataCredentials, VATSyncLog
+    from mydata.services import summarize_vat_sync
+
+    profile, err = _require_client(request)
+    if err:
+        return err
+
+    # Credentials ορισμένα από το λογιστήριο — απαραίτητα.
+    try:
+        creds = profile.mydata_credentials
+    except MyDataCredentials.DoesNotExist:
+        creds = None
+    if creds is None or not creds.has_credentials or not creds.is_active:
+        return Response(
+            {'detail': 'Δεν έχουν ρυθμιστεί στοιχεία myDATA. '
+                       'Επικοινωνήστε με το λογιστήριο.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Period restriction (STRICT): μόνο τρέχων ή προηγούμενος μήνας.
+    today = timezone.localdate()
+    current = (today.year, today.month)
+    previous = (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
+    allowed = {current, previous}
+
+    raw_year = request.data.get('year')
+    raw_month = request.data.get('month')
+    if raw_year is not None or raw_month is not None:
+        try:
+            year, month = int(raw_year), int(raw_month)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'Μη έγκυρα year/month.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if (year, month) not in allowed:
+            return Response(
+                {'detail': 'Επιτρέπεται συγχρονισμός μόνο για τον τρέχοντα ή '
+                           'τον προηγούμενο μήνα.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        year, month = current
+
+    before_id = (VATSyncLog.objects.filter(client=profile)
+                 .aggregate(m=Max('id'))['m'] or 0)
+
+    out = StringIO()
+    try:
+        call_command('mydata_sync_vat', '--client', profile.afm,
+                     '--year', str(year), '--month', str(month), stdout=out)
+    except Exception:
+        logger.exception('Client self-sync VAT failed for %s', profile.afm)
+        return Response(
+            {'detail': 'Σφάλμα συγχρονισμού. Δοκιμάστε ξανά αργότερα.'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response(summarize_vat_sync(profile, before_id, out))
 
 
 # =============================================================================

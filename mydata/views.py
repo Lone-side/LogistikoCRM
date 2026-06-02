@@ -318,6 +318,7 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
         from django.db.models import Max
         from io import StringIO
         from mydata.models import VATSyncLog
+        from mydata.services import summarize_vat_sync
 
         credentials = self.get_object()
 
@@ -355,44 +356,8 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 
             call_command('mydata_sync_vat', *args, stdout=out)
 
-            new_logs = list(
-                VATSyncLog.objects.filter(
-                    client=credentials.client, id__gt=before_id
-                )
-            )
-            fetched = sum((l.records_fetched or 0) for l in new_logs)
-            created = sum((l.records_created or 0) for l in new_logs)
-            updated = sum((l.records_updated or 0) for l in new_logs)
-            skipped = sum((l.records_skipped or 0) for l in new_logs)
-
-            # Ο locked-period guard παρέκαμψε ΟΛΟΚΛΗΡΟ τον συγχρονισμό (κλειδωμένη
-            # / υποβεβλημένη περίοδος). ΜΗΝ αναφέρεις ψεύτικη επιτυχία — δώσε
-            # καθαρό σήμα ώστε το frontend να ενημερώσει σωστά τον χρήστη.
-            if skipped and not (fetched or created or updated):
-                detail = ' · '.join(
-                    (l.error_message or '').strip()
-                    for l in new_logs
-                    if (l.records_skipped or 0) > 0 and l.error_message
-                )
-                return Response({
-                    'success': False,
-                    'skipped': True,
-                    'locked': True,
-                    'message': (
-                        'Ο συγχρονισμός παραλείφθηκε: η περίοδος είναι '
-                        'κλειδωμένη. Ξεκλειδώστε την για επανασυγχρονισμό.'
-                    ),
-                    'detail': detail or out.getvalue(),
-                })
-
-            return Response({
-                'success': True,
-                'skipped': False,
-                'records_created': created,
-                'records_updated': updated,
-                'records_fetched': fetched,
-                'message': out.getvalue(),
-            })
+            # Skip/locked detection — κοινή λογική με το client self-sync.
+            return Response(summarize_vat_sync(credentials.client, before_id, out))
 
         except Exception as e:
             logger.error(f"Sync error for {credentials.client.afm}: {e}")

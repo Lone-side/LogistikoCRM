@@ -450,6 +450,7 @@ REST_FRAMEWORK = {
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'set_password': '3/hour',   # Client portal password-set: brute-force guard (tight)
         'vat_read': '120/hour',     # Client portal VAT read: anti-scraping guard
+        'vat_sync': '3/hour',       # Client portal VAT self-sync: tight (myDATA cost/abuse guard)
         'login': '5/min',           # Login: brute-force / credential-stuffing guard (per IP)
     },
     # Exception handling

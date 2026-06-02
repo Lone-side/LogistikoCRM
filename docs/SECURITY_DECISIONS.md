@@ -85,3 +85,38 @@ keyed by client IP. Behind a reverse proxy, ensure `X-Forwarded-For` is handled
 correctly (DRF `get_ident` uses `REMOTE_ADDR` unless `NUM_PROXIES` is configured)
 so the throttle keys on the real client IP, not the proxy. **Verify proxy/IP
 config at deploy time** (see GOLIVE.md).
+
+---
+
+## SD-004 — Client self-sync ΦΠΑ (scoped write-action breaks read-only portal)
+
+### Context
+The client portal is read-mostly: `ClientScopedQuerysetMixin` is fail-closed and
+write methods return 403. One deliberate exception already exists — document
+upload (`me_upload_document`), forced to the caller's own client. We add a second:
+clients may trigger their **own** myDATA VAT sync from the portal
+(`POST /api/client/me/vat/sync/`, `me_sync_vat`).
+
+### Decision
+Allow it, tightly scoped and guarded — clients sync their own data without the
+accountant, but cannot abuse the myDATA integration or touch finalized data.
+
+### Mitigations in place
+- **Scope:** the target client is forced from the authenticated user via
+  `_require_client`; any `client_id` in the body is ignored (no spoofing / no
+  cross-tenant sync).
+- **Throttle:** `VatSyncThrottle` `3/hour` per user (myDATA cost / abuse guard) —
+  `SimpleRateThrottle` with fixed scope (not `ScopedRateThrottle`, which no-ops on
+  function views).
+- **Period restriction:** only the current or previous month; arbitrary/old ranges
+  → 400.
+- **Locked-period protection:** reuses the `mydata_sync_vat` locked-period guard;
+  a submitted/locked period is never destroyed — the endpoint returns
+  `skipped/locked` instead of a fake success (shared helper
+  `mydata/services.py::summarize_vat_sync`).
+- **No credential exposure:** uses the credentials the accountant already stored;
+  they are never returned to the client.
+
+### Note
+Future portal write-actions (e-invoicing, ΕΦΚΑ debts) must follow the same pattern:
+forced-own-scope + dedicated throttle + respect any finalized/locked state.
