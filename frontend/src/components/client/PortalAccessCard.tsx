@@ -16,6 +16,8 @@ interface Props {
 export function PortalAccessCard({ clientId }: Props) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState<string>('');
+  const [pw, setPw] = useState<string>('');
+  const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const { data: status, isLoading, isError } = useQuery({
     queryKey: ['portal-status', clientId],
@@ -38,6 +40,19 @@ export function PortalAccessCard({ clientId }: Props) {
     mutationFn: () => clientsApi.resendPortalInvite(clientId),
     onSuccess: (data) => setMessage(data.detail || 'Η πρόσκληση στάλθηκε ξανά.'),
     onError: () => setMessage('Σφάλμα κατά την αποστολή πρόσκλησης.'),
+  });
+
+  const setPwMutation = useMutation({
+    mutationFn: () => clientsApi.setPortalPassword(clientId, pw),
+    onSuccess: (data) => {
+      setPwMessage({ ok: true, text: data.detail || 'Ο κωδικός ορίστηκε.' });
+      setPw('');
+    },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })
+        ?.response?.data?.detail;
+      setPwMessage({ ok: false, text: detail || 'Σφάλμα κατά τον ορισμό κωδικού.' });
+    },
   });
 
   const busy = createMutation.isPending || resendMutation.isPending;
@@ -106,6 +121,48 @@ export function PortalAccessCard({ clientId }: Props) {
             <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md p-2">
               {message}
             </p>
+          )}
+
+          {/* Ορισμός κωδικού από τον λογιστή (χωρίς email) */}
+          {status.has_portal_account && (
+            <div className="border-t border-gray-100 pt-3 mt-1 space-y-2">
+              <label htmlFor="portal-pw" className="block text-sm font-medium text-gray-700">
+                Ορισμός κωδικού από εσάς (χωρίς email)
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id="portal-pw"
+                  type="text"
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                  placeholder="Νέος κωδικός πελάτη"
+                  className="flex-1 min-w-[180px] text-sm border border-gray-300 rounded-md px-2 py-1.5"
+                  autoComplete="off"
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => setPwMutation.mutate()}
+                  disabled={setPwMutation.isPending || pw.length === 0}
+                >
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  {setPwMutation.isPending ? 'Ορισμός…' : 'Ορισμός κωδικού'}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Δώστε τον κωδικό στον πελάτη (π.χ. τηλεφωνικά). Δεν στέλνεται email.
+              </p>
+              {pwMessage && (
+                <p
+                  className={
+                    pwMessage.ok
+                      ? 'text-sm text-green-700 bg-green-50 border border-green-200 rounded-md p-2'
+                      : 'text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-2'
+                  }
+                >
+                  {pwMessage.text}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

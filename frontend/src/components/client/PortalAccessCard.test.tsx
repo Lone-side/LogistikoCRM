@@ -8,6 +8,7 @@ const { api } = vi.hoisted(() => ({
     getPortalStatus: vi.fn(),
     createPortalAccount: vi.fn(),
     resendPortalInvite: vi.fn(),
+    setPortalPassword: vi.fn(),
   },
 }))
 vi.mock('../../api/client', () => ({ clientsApi: api }))
@@ -28,6 +29,7 @@ describe('PortalAccessCard', () => {
     api.getPortalStatus.mockReset()
     api.createPortalAccount.mockReset()
     api.resendPortalInvite.mockReset()
+    api.setPortalPassword.mockReset()
   })
 
   it('shows "no account" state with a create button', async () => {
@@ -87,5 +89,21 @@ describe('PortalAccessCard', () => {
     await user.click(await screen.findByRole('button', { name: /Επαναποστολή/i }))
     await waitFor(() => expect(api.resendPortalInvite).toHaveBeenCalledWith(1))
     expect(await screen.findByText(/στάλθηκε ξανά/i)).toBeInTheDocument()
+  })
+
+  it('lets staff set the portal password directly', async () => {
+    const user = userEvent.setup()
+    api.getPortalStatus.mockResolvedValue({
+      client_id: 1, has_portal_account: true, portal_username: '123456783',
+      has_email: true, email: 'c@e.gr',
+    })
+    api.setPortalPassword.mockResolvedValue({ detail: 'Ο κωδικός ορίστηκε. Δώστε τον στον πελάτη.' })
+    renderCard()
+    const input = await screen.findByPlaceholderText(/Νέος κωδικός/i)
+    await user.type(input, 'Sup3rStr0ng!pw')
+    await user.click(screen.getByRole('button', { name: /Ορισμός κωδικού/i }))
+    await waitFor(() =>
+      expect(api.setPortalPassword).toHaveBeenCalledWith(1, 'Sup3rStr0ng!pw'))
+    expect(await screen.findByText(/Ο κωδικός ορίστηκε/i)).toBeInTheDocument()
   })
 })

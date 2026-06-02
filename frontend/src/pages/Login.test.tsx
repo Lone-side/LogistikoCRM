@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 
 // --- Mocks -------------------------------------------------------------
 // vi.mock factories are hoisted, so shared state must be created via vi.hoisted.
-const { navigate, authState } = vi.hoisted(() => ({
+const { navigate, authState, requestPasswordReset } = vi.hoisted(() => ({
   navigate: vi.fn(),
   authState: {
     user: null as { is_client?: boolean } | null,
@@ -13,10 +13,15 @@ const { navigate, authState } = vi.hoisted(() => ({
     login: vi.fn(),
     clearError: vi.fn(),
   },
+  requestPasswordReset: vi.fn(),
 }))
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
+}))
+
+vi.mock('../api/client', () => ({
+  portalApi: { requestPasswordReset: (...a: unknown[]) => requestPasswordReset(...a) },
 }))
 
 // useAuthStore is used both as a hook (returns the state) and statically
@@ -104,5 +109,21 @@ describe('Login', () => {
     authState.isLoading = true
     render(<Login />)
     expect(screen.getByRole('button', { name: /Σύνδεση/ })).toBeDisabled()
+  })
+
+  it('self-service password reset: requests a link and shows confirmation', async () => {
+    const user = userEvent.setup()
+    requestPasswordReset.mockReset()
+    requestPasswordReset.mockResolvedValue({
+      detail: 'Αν υπάρχει λογαριασμός, στάλθηκε σύνδεσμος.',
+    })
+    render(<Login />)
+    await user.click(screen.getByRole('button', { name: /Ξέχασα τον κωδικό/i }))
+    await user.type(screen.getByPlaceholderText(/Email ή ΑΦΜ/i), 'c@example.gr')
+    await user.click(screen.getByRole('button', { name: /Αποστολή/i }))
+
+    await waitFor(() =>
+      expect(requestPasswordReset).toHaveBeenCalledWith('c@example.gr'))
+    expect(await screen.findByText(/Αν υπάρχει λογαριασμός/i)).toBeInTheDocument()
   })
 })

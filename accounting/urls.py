@@ -322,6 +322,7 @@ urlpatterns = [
     path("api/client/me/vat/sync/", api_portal.me_sync_vat, name="portal_me_vat_sync"),
     path("api/client/me/documents/upload/", api_portal.me_upload_document, name="portal_me_upload"),
     path("api/client/set-password/", api_portal.set_password, name="portal_set_password"),
+    path("api/client/request-password-reset/", api_portal.request_password_reset, name="portal_request_password_reset"),
 
     # ==================================================
     # JWT AUTHENTICATION ENDPOINTS

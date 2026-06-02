@@ -729,3 +729,42 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response({'detail': 'Η πρόσκληση στάλθηκε ξανά.', 'invite_sent': True})
+
+    @action(detail=True, methods=['post'], url_path='set-portal-password')
+    def set_portal_password(self, request, pk=None):
+        """
+        POST /api/clients/{id}/set-portal-password/
+
+        Ο λογιστής ορίζει/αλλάζει ΑΠΕΥΘΕΙΑΣ τον κωδικό portal του πελάτη (χωρίς
+        email). Χρήσιμο για onboarding/reset όταν δεν υπάρχει SMTP — ο λογιστής
+        δίνει τον κωδικό στον πελάτη (τηλεφωνικά/από κοντά). Staff-only.
+
+        Body: { "password": "<νέος κωδικός>" }
+        """
+        denied = self._deny_non_staff(request)
+        if denied:
+            return denied
+
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        client = self.get_object()
+        if not client.user_id:
+            return Response(
+                {'detail': 'Δεν υπάρχει λογαριασμός portal. Δημιουργήστε πρώτα λογαριασμό.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        password = request.data.get('password') or ''
+        try:
+            validate_password(password, user=client.user)
+        except DjangoValidationError as e:
+            return Response(
+                {'detail': ' '.join(e.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = client.user
+        user.set_password(password)
+        user.save(update_fields=['password'])
+        return Response({'detail': 'Ο κωδικός ορίστηκε. Δώστε τον στον πελάτη.'})

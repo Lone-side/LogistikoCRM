@@ -55,10 +55,20 @@
 - **CSP**: `common/utils/csp_middleware.py` (`script-src 'self'`).
 - **JWT σε localStorage**: αποδεκτό ρίσκο με mitigations — βλ. SD-001.
 
-### Email προσκλήσεις
+### Email προσκλήσεις & ανάκτηση κωδικού
 `EmailService.send_portal_invite(client)` στέλνει set-password link στο
 `PORTAL_URL`. Admin actions: «Δημιουργία λογαριασμού Portal + αποστολή πρόσκλησης»
 και «Επαναποστολή πρόσκλησης». `seed_demo` command για demo δεδομένα.
+- **Δύο διαδρομές κωδικού** (ώστε ο λογιστής να μη χρειάζεται backend, ΚΑΙ να
+  δουλεύει χωρίς SMTP):
+  1. **Staff ορίζει κωδικό απευθείας** (χωρίς email):
+     `POST /api/clients/{id}/set-portal-password/` (`ClientViewSet.set_portal_password`,
+     staff-only μέσω `_deny_non_staff`, `validate_password`). UI: κάρτα Portal
+     (`PortalAccessCard`).
+  2. **Self-service «ξέχασα κωδικό»** (πελάτης): `POST /api/client/request-password-reset/`
+     (`request_password_reset`, `AllowAny`, throttle `password_reset 5/hour`,
+     **no enumeration oracle** — πάντα γενική απάντηση, match σε email/ΑΦΜ με portal
+     user). UI: link στη σελίδα `Login`. Απαιτεί SMTP για παράδοση.
 
 ### Frontend
 - **Tests:** Vitest + React Testing Library (`npm test`), Playwright E2E

@@ -128,6 +128,11 @@ export const clientsApi = {
     const response = await apiClient.post(`api/v1/clients/${id}/resend-portal-invite/`);
     return response.data;
   },
+  // Ο λογιστής ορίζει απευθείας τον κωδικό portal του πελάτη (χωρίς email).
+  setPortalPassword: async (id: number, password: string): Promise<{ detail: string }> => {
+    const response = await apiClient.post(`api/v1/clients/${id}/set-portal-password/`, { password });
+    return response.data;
+  },
 };
 
 // Obligations API functions
@@ -173,6 +178,11 @@ export const portalApi = {
     if (month) body.month = month;
     if (year) body.year = year;
     const response = await apiClient.post('api/client/me/vat/sync/', body);
+    return response.data;
+  },
+  // Self-service «ξέχασα τον κωδικό» — δημόσιο (χωρίς auth). Πάντα γενική απάντηση.
+  requestPasswordReset: async (identifier: string): Promise<{ detail: string }> => {
+    const response = await apiClient.post('api/client/request-password-reset/', { identifier });
     return response.data;
   },
   uploadDocument: async (file: File, category: string, description?: string) => {

@@ -504,3 +504,54 @@ def set_password(request):
     user.set_password(password)
     user.save(update_fields=['password'])
     return Response({'detail': 'Ο κωδικός ορίστηκε επιτυχώς.'})
+
+
+class PasswordResetThrottle(SimpleRateThrottle):
+    # Self-service αίτημα reset: keyed by IP (ο χρήστης δεν είναι authenticated).
+    scope = 'password_reset'
+
+    def get_cache_key(self, request, view):
+        return self.cache_format % {'scope': self.scope, 'ident': self.get_ident(request)}
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def request_password_reset(request):
+    """
+    POST /api/client/request-password-reset/
+
+    Self-service «ξέχασα τον κωδικό»: ο πελάτης δίνει email ή ΑΦΜ και λαμβάνει
+    σύνδεσμο ορισμού κωδικού (το ίδιο email με την πρόσκληση).
+
+    ΠΑΝΤΑ επιστρέφει το ίδιο γενικό μήνυμα (no enumeration oracle — δεν προδίδει
+    αν υπάρχει λογαριασμός). Απαιτεί ρυθμισμένο SMTP για να παραδοθεί το email·
+    αλλιώς ο λογιστής μπορεί να ορίσει κωδικό απευθείας από την κάρτα Portal.
+
+    Body: { "identifier": "<email ή ΑΦΜ>" }
+    """
+    from django.db.models import Q
+    from accounting.models import ClientProfile
+    from accounting.services.email_service import EmailService
+
+    generic = Response({
+        'detail': 'Αν υπάρχει λογαριασμός, στάλθηκε σύνδεσμος ορισμού κωδικού στο '
+                  'email του πελάτη.'
+    })
+
+    identifier = (request.data.get('identifier') or '').strip()
+    if not identifier:
+        return generic
+
+    # Πελάτης με αυτό το email ή ΑΦΜ που ΕΧΕΙ portal user.
+    profile = (ClientProfile.objects
+               .filter(Q(email__iexact=identifier) | Q(afm=identifier))
+               .exclude(user__isnull=True)
+               .first())
+    if profile is not None:
+        try:
+            EmailService.send_portal_invite(profile)
+        except Exception:
+            logger.exception('Self-service password reset email failed for %s',
+                             getattr(profile, 'afm', '?'))
+    return generic
