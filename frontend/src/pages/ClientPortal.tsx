@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 import { portalApi } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import {
@@ -319,8 +320,9 @@ export default function ClientPortal() {
                 type="button"
                 onClick={handleSyncVat}
                 disabled={syncing}
-                className="text-sm bg-blue-600 text-white rounded-md px-3 py-1.5 hover:bg-blue-700 disabled:opacity-60"
+                className="inline-flex items-center gap-2 text-sm bg-blue-600 text-white rounded-md px-3 py-1.5 hover:bg-blue-700 disabled:opacity-60 shadow-sm"
               >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
                 {syncing ? 'Συγχρονισμός…' : 'Συγχρονισμός από myDATA'}
               </button>
             </div>
@@ -349,54 +351,70 @@ export default function ClientPortal() {
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <p className="text-sm text-gray-500">Εκροές (Έσοδα)</p>
-                    <p className="text-xs text-gray-500 mt-2">Καθαρή Αξία</p>
-                    <p className="text-2xl font-bold text-gray-900">€{vatData.summary.output.net}</p>
-                    <p className="text-xs text-gray-500 mt-2">ΦΠΑ</p>
-                    <p className="text-lg font-semibold text-blue-600">€{vatData.summary.output.vat}</p>
+                  {/* Εκροές — αριστερό accent πράσινο + trend icon */}
+                  <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-emerald-500 shadow-sm p-5">
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+                      Εκροές (Έσοδα)
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">€{vatData.summary.output.net}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      ΦΠΑ <span className="font-semibold text-emerald-600">€{vatData.summary.output.vat}</span>
+                    </p>
                   </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <p className="text-sm text-gray-500">Εισροές (Έξοδα)</p>
-                    <p className="text-xs text-gray-500 mt-2">Καθαρή Αξία</p>
-                    <p className="text-2xl font-bold text-gray-900">€{vatData.summary.input.net}</p>
-                    <p className="text-xs text-gray-500 mt-2">ΦΠΑ</p>
-                    <p className="text-lg font-semibold text-blue-600">€{vatData.summary.input.vat}</p>
+                  {/* Εισροές — αριστερό accent κεχριμπάρι + trend icon */}
+                  <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm p-5">
+                    <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                      <TrendingDown className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                      Εισροές (Έξοδα)
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">€{vatData.summary.input.net}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      ΦΠΑ <span className="font-semibold text-amber-600">€{vatData.summary.input.vat}</span>
+                    </p>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100 font-medium text-gray-900">
-                    Περίοδοι ΦΠΑ
+                <div className="grid gap-4 lg:grid-cols-2">
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100">
+                    <h3 className="text-lg font-medium text-gray-900">Περίοδοι ΦΠΑ</h3>
                   </div>
                   {vatData.periods.length === 0 ? (
                     <p className="p-6 text-gray-500">Δεν υπάρχουν υπολογισμένες περίοδοι.</p>
                   ) : (
-                    <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
-                      <thead className="bg-gray-50 text-gray-600">
+                    <div className="overflow-x-auto"><table className="w-full text-sm min-w-[520px]">
+                      <thead className="text-gray-500 border-b border-gray-100">
                         <tr>
-                          <th className="text-left px-4 py-3 font-medium">Περίοδος</th>
+                          <th className="text-left px-5 py-3 font-medium">Περίοδος</th>
                           <th className="text-right px-4 py-3 font-medium">ΦΠΑ Εκροών</th>
                           <th className="text-right px-4 py-3 font-medium">ΦΠΑ Εισροών</th>
                           <th className="text-right px-4 py-3 font-medium">Διαφορά</th>
                           <th className="text-right px-4 py-3 font-medium">Τελικό</th>
+                          <th className="text-center px-4 py-3 font-medium">Κατάσταση</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {vatData.periods.map((p) => (
                           <tr key={p.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-900">
+                            <td className="px-5 py-3 font-medium text-gray-900">
                               {MONTH_NAMES[p.period - 1] || p.period} {p.year}
-                              {p.is_locked && (
-                                <span className="ml-2 text-xs px-2 py-0.5 bg-gray-200 rounded text-gray-700">
-                                  κλειδωμένο
+                            </td>
+                            <td className="px-4 py-3 text-right text-emerald-600">€{p.vat_output}</td>
+                            <td className="px-4 py-3 text-right text-amber-600">€{p.vat_input}</td>
+                            <td className="px-4 py-3 text-right text-gray-700">€{p.vat_difference}</td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-900">€{p.final_result}</td>
+                            <td className="px-4 py-3 text-center">
+                              {p.is_locked ? (
+                                <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800">
+                                  Κλειδωμένο
+                                </span>
+                              ) : (
+                                <span className="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                                  Πρόχειρο
                                 </span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-right text-gray-700">€{p.vat_output}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">€{p.vat_input}</td>
-                            <td className="px-4 py-3 text-right text-gray-700">€{p.vat_difference}</td>
-                            <td className="px-4 py-3 text-right font-semibold text-gray-900">€{p.final_result}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -404,17 +422,19 @@ export default function ClientPortal() {
                   )}
                 </div>
 
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-gray-100 font-medium text-gray-900">
-                    Πρόσφατα παραστατικά{vatData.records_truncated && ' (πρώτα 50)'}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-100">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      Πρόσφατα παραστατικά{vatData.records_truncated && ' (πρώτα 50)'}
+                    </h3>
                   </div>
                   {vatData.records.length === 0 ? (
                     <p className="p-6 text-gray-500">Δεν υπάρχουν παραστατικά.</p>
                   ) : (
-                    <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
-                      <thead className="bg-gray-50 text-gray-600">
+                    <div className="overflow-x-auto"><table className="w-full text-sm min-w-[520px]">
+                      <thead className="text-gray-500 border-b border-gray-100">
                         <tr>
-                          <th className="text-left px-4 py-3 font-medium">Ημερομηνία</th>
+                          <th className="text-left px-5 py-3 font-medium">Ημερομηνία</th>
                           <th className="text-left px-4 py-3 font-medium">Τύπος</th>
                           <th className="text-left px-4 py-3 font-medium">MARK</th>
                           <th className="text-right px-4 py-3 font-medium">Καθαρή</th>
@@ -424,22 +444,25 @@ export default function ClientPortal() {
                       <tbody className="divide-y divide-gray-100">
                         {vatData.records.map((r) => (
                           <tr key={r.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-gray-700">{r.issue_date}</td>
+                            <td className="px-5 py-3 text-gray-700">{r.issue_date}</td>
                             <td className="px-4 py-3">
-                              <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                r.kind === 'output' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                              <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${
+                                r.kind === 'output' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                               }`}>
                                 {r.kind === 'output' ? 'Εκροή' : 'Εισροή'}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-gray-600 font-mono text-xs">{r.mark}</td>
+                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">{r.mark}</td>
                             <td className="px-4 py-3 text-right text-gray-700">€{r.net_value}</td>
-                            <td className="px-4 py-3 text-right text-gray-900 font-medium">€{r.vat_amount}</td>
+                            <td className={`px-4 py-3 text-right font-medium ${
+                              r.kind === 'output' ? 'text-emerald-600' : 'text-amber-600'
+                            }`}>€{r.vat_amount}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table></div>
                   )}
+                </div>
                 </div>
               </>
             )}
