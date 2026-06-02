@@ -375,7 +375,7 @@ export default function ClientPortal() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-2">
+                <div className="space-y-4">
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100">
                     <h3 className="text-lg font-medium text-gray-900">Περίοδοι ΦΠΑ</h3>
