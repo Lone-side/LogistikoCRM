@@ -253,6 +253,29 @@ class Command(BaseCommand):
                 overlapping.append(period)
         return overlapping
 
+    def _recalc_overlapping_periods(self, client, date_from, date_to) -> int:
+        """
+        Ξαναϋπολογίζει τα ΜΗ κλειδωμένα VATPeriodResult του πελάτη που
+        επικαλύπτουν το [date_from, date_to], ώστε οι αποθηκευμένες τιμές να
+        συμφωνούν με τα μόλις συγχρονισμένα records.
+
+        Οι ΚΛΕΙΔΩΜΕΝΕΣ (υποβληθείσες) περίοδοι ΔΕΝ αγγίζονται — κρατούν τις
+        οριστικοποιημένες τιμές τους. Επιστρέφει πόσες ξαναϋπολογίστηκαν.
+        """
+        recalced = 0
+        for period in VATPeriodResult.objects.filter(client=client, is_locked=False):
+            try:
+                if (period.period_start_date <= date_to
+                        and period.period_end_date >= date_from):
+                    period.calculate_from_records(save=True)
+                    recalced += 1
+            except Exception as e:
+                logger.warning(
+                    "Recalc απέτυχε για period %s (%s): %s",
+                    period.id, period.get_period_display(), e
+                )
+        return recalced
+
     def _sync_client_vat(
         self,
         client: ClientProfile,
@@ -391,6 +414,15 @@ class Command(BaseCommand):
 
                 # Update credentials last sync
                 credentials.mark_vat_sync_completed()
+
+                # Ξαναϋπολογισμός των ΜΗ κλειδωμένων περιόδων που επικαλύπτουν το
+                # εύρος, ώστε οι αποθηκευμένες τιμές να συμφωνούν με τα μόλις
+                # συγχρονισμένα records (αλλιώς οι γραμμές περιόδων μένουν stale).
+                recalced = self._recalc_overlapping_periods(client, date_from, date_to)
+                if recalced:
+                    self.stdout.write(
+                        self.style.SUCCESS(f"  Επαναϋπολογίστηκαν {recalced} περίοδοι")
+                    )
 
         except MyDataAuthError as e:
             self.stdout.write(
