@@ -11,6 +11,9 @@ import {
   Euro,
   ArrowRight,
   Save,
+  TrendingUp,
+  TrendingDown,
+  Scale,
 } from 'lucide-react';
 import { Button } from './Button';
 import { mydataApi, clientsApi } from '../api/client';
@@ -190,7 +193,7 @@ export default function VATPeriodCalculator() {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center gap-3">
@@ -332,12 +335,12 @@ export default function VATPeriodCalculator() {
             </div>
             <div className="flex items-center gap-3">
               {result.is_locked ? (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 text-red-700 text-sm rounded-full">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-800 text-sm rounded-full">
                   <Lock size={14} />
                   Κλειδωμένο
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full">
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 text-sm rounded-full">
                   <Unlock size={14} />
                   Ανοιχτό
                 </span>
@@ -363,24 +366,33 @@ export default function VATPeriodCalculator() {
             </div>
           </div>
 
-          {/* VAT Calculation Display */}
+          {/* VAT Calculation Display — accent cards (ίδιο visual language με portal) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* ΦΠΑ Εκροών */}
-            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-              <p className="text-sm text-green-600 mb-1">ΦΠΑ Εκροών (Πωλήσεις)</p>
-              <p className="text-2xl font-bold text-green-700">{formatCurrency(result.vat_output)}</p>
+            <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-emerald-500 shadow-sm p-4">
+              <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                <TrendingUp size={16} className="text-emerald-500" />
+                ΦΠΑ Εκροών (Πωλήσεις)
+              </p>
+              <p className="text-2xl font-bold text-emerald-600 mt-2">{formatCurrency(result.vat_output)}</p>
             </div>
 
             {/* ΦΠΑ Εισροών */}
-            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-              <p className="text-sm text-red-600 mb-1">ΦΠΑ Εισροών (Αγορές)</p>
-              <p className="text-2xl font-bold text-red-700">{formatCurrency(result.vat_input)}</p>
+            <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm p-4">
+              <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                <TrendingDown size={16} className="text-amber-500" />
+                ΦΠΑ Εισροών (Αγορές)
+              </p>
+              <p className="text-2xl font-bold text-amber-600 mt-2">{formatCurrency(result.vat_input)}</p>
             </div>
 
             {/* Διαφορά */}
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <p className="text-sm text-blue-600 mb-1">Διαφορά (Εκροές - Εισροές)</p>
-              <p className={`text-2xl font-bold ${result.vat_difference >= 0 ? 'text-blue-700' : 'text-purple-700'}`}>
+            <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-blue-500 shadow-sm p-4">
+              <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                <Scale size={16} className="text-blue-500" />
+                Διαφορά (Εκροές − Εισροές)
+              </p>
+              <p className={`text-2xl font-bold mt-2 ${result.vat_difference >= 0 ? 'text-gray-900' : 'text-emerald-600'}`}>
                 {formatCurrency(result.vat_difference)}
               </p>
             </div>
