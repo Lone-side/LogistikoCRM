@@ -12,6 +12,7 @@ Django REST Framework Views για myDATA module.
 from datetime import date, timedelta
 from calendar import monthrange
 from decimal import Decimal, InvalidOperation
+from collections import defaultdict
 import logging
 
 from django.db import transaction
@@ -612,13 +613,63 @@ class MyDataDashboardView(APIView):
             total_vat=Sum('vat_amount'),
         )
 
-        # Per-client summaries
+        # Per-client summaries — grouped aggregation instead of 4 queries/client.
+        # Two queries over period_records (already filtered by year/month/active),
+        # then pivoted in Python keyed by client_id. Equivalent output to the old
+        # per-client build_period_summary/build_category_breakdown helpers.
+        summary_by_client = defaultdict(dict)  # client_id -> {rec_type: {net, vat, count}}
+        for row in period_records.values('client_id', 'rec_type').annotate(
+            total_net=Sum('net_value'),
+            total_vat=Sum('vat_amount'),
+            record_count=Count('id'),
+        ):
+            summary_by_client[row['client_id']][row['rec_type']] = {
+                'net': row['total_net'] or Decimal('0.00'),
+                'vat': row['total_vat'] or Decimal('0.00'),
+                'count': row['record_count'] or 0,
+            }
+
+        # client_id -> {rec_type: [breakdown dicts ordered by vat_category]}
+        cat_by_client = defaultdict(lambda: defaultdict(list))
+        for row in period_records.values('client_id', 'rec_type', 'vat_category').annotate(
+            total_net=Sum('net_value'),
+            total_vat=Sum('vat_amount'),
+            record_count=Count('id'),
+        ).order_by('vat_category'):
+            cat_by_client[row['client_id']][row['rec_type']].append({
+                'vat_category': row['vat_category'],
+                'vat_rate': get_vat_rate_for_category(row['vat_category']),
+                'vat_rate_display': get_vat_rate_display(row['vat_category']),
+                'net_value': row['total_net'] or Decimal('0.00'),
+                'vat_amount': row['total_vat'] or Decimal('0.00'),
+                'count': row['record_count'] or 0,
+            })
+
         clients_data = []
         for creds in credentials_qs:
             client = creds.client
-            summary = build_period_summary(client, year, month)
-            income_breakdown = build_category_breakdown(client, year, month, 1)
-            expense_breakdown = build_category_breakdown(client, year, month, 2)
+            per_type = summary_by_client.get(client.id, {})
+            inc = per_type.get(1, {})
+            exp = per_type.get(2, {})
+            inc_net = inc.get('net', Decimal('0.00'))
+            inc_vat = inc.get('vat', Decimal('0.00'))
+            exp_net = exp.get('net', Decimal('0.00'))
+            exp_vat = exp.get('vat', Decimal('0.00'))
+
+            summary = {
+                'year': year,
+                'month': month,
+                'income_net': inc_net,
+                'income_vat': inc_vat,
+                'income_gross': inc_net + inc_vat,
+                'income_count': inc.get('count', 0),
+                'expense_net': exp_net,
+                'expense_vat': exp_vat,
+                'expense_gross': exp_net + exp_vat,
+                'expense_count': exp.get('count', 0),
+                'net_difference': inc_net - exp_net,
+                'vat_difference': inc_vat - exp_vat,
+            }
 
             clients_data.append({
                 'client_afm': client.afm,
@@ -627,8 +678,8 @@ class MyDataDashboardView(APIView):
                 'is_verified': creds.is_verified,
                 'last_sync': creds.last_vat_sync_at,
                 'current_period': summary,
-                'income_by_category': income_breakdown,
-                'expense_by_category': expense_breakdown,
+                'income_by_category': cat_by_client.get(client.id, {}).get(1, []),
+                'expense_by_category': cat_by_client.get(client.id, {}).get(2, []),
             })
 
         return Response({
