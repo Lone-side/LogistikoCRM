@@ -377,12 +377,20 @@ class StockMovementAdmin(admin.ModelAdmin):
     search_fields = ['product__code', 'product__name']
     date_hierarchy = 'date'
 
+    def get_queryset(self, request):
+        # Avoid N+1 on the product/counterpart/invoice FK columns per row.
+        return super().get_queryset(request).select_related('product', 'counterpart', 'invoice')
+
 
 @admin.register(InvoiceItem)
 class InvoiceItemAdmin(admin.ModelAdmin):
     list_display = ['invoice', 'line_number', 'description', 'quantity', 'unit_price', 'net_value']
     list_filter = ['invoice__issue_date']
     search_fields = ['description', 'invoice__number']
+
+    def get_queryset(self, request):
+        # Avoid an N+1 on the invoice FK column per row.
+        return super().get_queryset(request).select_related('invoice')
 
 
 @admin.register(MyDataSyncLog)

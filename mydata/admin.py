@@ -63,6 +63,10 @@ class MyDataCredentialsAdmin(admin.ModelAdmin):
         }),
     )
 
+    def get_queryset(self, request):
+        # Avoid an N+1 on client_display (obj.client) per changelist row.
+        return super().get_queryset(request).select_related('client')
+
     def client_display(self, obj):
         return f"{obj.client.eponimia} ({obj.client.afm})"
     client_display.short_description = 'Πελάτης'
@@ -213,6 +217,10 @@ class VATRecordAdmin(admin.ModelAdmin):
         }),
     )
 
+    def get_queryset(self, request):
+        # Avoid an N+1 on client_afm (obj.client) per changelist row.
+        return super().get_queryset(request).select_related('client')
+
     def client_afm(self, obj):
         return obj.client.afm
     client_afm.short_description = 'ΑΦΜ'
@@ -283,6 +291,10 @@ class VATSyncLogAdmin(admin.ModelAdmin):
         'details',
         'duration_display',
     ]
+
+    def get_queryset(self, request):
+        # Avoid an N+1 on client_display (obj.client) per changelist row.
+        return super().get_queryset(request).select_related('client')
 
     def has_add_permission(self, request):
         return False
