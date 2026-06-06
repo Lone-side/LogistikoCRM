@@ -353,6 +353,34 @@ _ALLOWED_EXTS = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.pn
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 _ALLOWED_CATEGORIES = {'contracts', 'invoices', 'tax', 'myf', 'vat', 'payroll', 'general'}
 
+# Magic-byte υπογραφές ανά επέκταση — defense-in-depth content check χωρίς
+# εξάρτηση από python-magic/libmagic (το οποίο είναι native/αναξιόπιστο).
+_FILE_SIGNATURES = {
+    '.pdf': (b'%PDF',),
+    '.png': (b'\x89PNG\r\n\x1a\n',),
+    '.jpg': (b'\xff\xd8\xff',),
+    '.jpeg': (b'\xff\xd8\xff',),
+    '.docx': (b'PK\x03\x04',),   # OOXML = zip
+    '.xlsx': (b'PK\x03\x04',),
+    '.doc': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),   # legacy OLE
+    '.xls': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
+}
+
+
+def _content_matches_extension(uploaded, ext):
+    """True αν τα leading bytes ταιριάζουν με την επέκταση. Επεκτάσεις χωρίς
+    γνωστή υπογραφή επιτρέπονται (το extension allowlist έχει ήδη τρέξει)."""
+    signatures = _FILE_SIGNATURES.get(ext)
+    if not signatures:
+        return True
+    try:
+        uploaded.seek(0)
+        header = uploaded.read(8)
+        uploaded.seek(0)
+    except Exception:
+        return True
+    return any(header.startswith(sig) for sig in signatures)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -391,6 +419,15 @@ def me_upload_document(request):
     if uploaded.size > _MAX_UPLOAD_BYTES:
         return Response(
             {'detail': 'Το αρχείο είναι μεγαλύτερο από 10MB.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # SECURITY (defense-in-depth): magic-bytes έλεγχος περιεχομένου ώστε ένα
+    # εκτελέσιμο μετονομασμένο σε .pdf να μην περνά μόνο με το extension.
+    # Χωρίς εξάρτηση από python-magic/libmagic (που είναι αναξιόπιστο/native).
+    if not _content_matches_extension(uploaded, ext):
+        return Response(
+            {'detail': 'Το περιεχόμενο του αρχείου δεν ταιριάζει με τον τύπο του.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

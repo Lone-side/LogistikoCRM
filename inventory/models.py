@@ -5,8 +5,10 @@ Inventory & Invoicing Models για Django CRM
 """
 
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.core.validators import MinValueValidator
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.utils import timezone
 
 
@@ -147,9 +149,9 @@ class Product(models.Model):
         verbose_name = 'Προϊόν'
         verbose_name_plural = 'Προϊόντα'
         ordering = ['code']
-        # Declared to match migration 9999_add_performance_indexes (these indexes
+        # Declared to match migration 0003_add_performance_indexes (these indexes
         # already exist in the DB). Keeps model state in sync so makemigrations
-        # does NOT try to drop them. See also CLEANUP: 9999/10000 migration drift.
+        # does NOT try to drop them.
         indexes = [
             models.Index(fields=['active', 'code'], name='prod_active_code_idx'),
             models.Index(fields=['category', 'active'], name='prod_cat_active_idx'),
@@ -244,7 +246,7 @@ class StockMovement(models.Model):
         verbose_name = 'Κίνηση Αποθήκης'
         verbose_name_plural = 'Κινήσεις Αποθήκης'
         ordering = ['-date']
-        # Declared to match migration 9999_add_performance_indexes (already in DB).
+        # Declared to match migration 0003_add_performance_indexes (already in DB).
         indexes = [
             models.Index(fields=['product', 'date'], name='stock_prod_date_idx'),
             models.Index(fields=['movement_type', 'date'], name='stock_type_date_idx'),
@@ -282,17 +284,21 @@ class StockMovement(models.Model):
 
                 product.save()
             else:
-                # Undo old movement
+                # Undo old movement (ADJ must be reversed too, like the create path)
                 if old_movement.movement_type == 'IN':
                     product.current_stock -= old_movement.quantity
                 elif old_movement.movement_type == 'OUT':
                     product.current_stock += old_movement.quantity
+                elif old_movement.movement_type == 'ADJ':
+                    product.current_stock -= old_movement.quantity
 
                 # Apply new movement
                 if self.movement_type == 'IN':
                     product.current_stock += self.quantity
                 elif self.movement_type == 'OUT':
                     product.current_stock -= self.quantity
+                elif self.movement_type == 'ADJ':
+                    product.current_stock += self.quantity
 
                 product.save()
     
@@ -372,7 +378,7 @@ class Invoice(models.Model):
         verbose_name_plural = 'Τιμολόγια'
         ordering = ['-issue_date', '-number']
         unique_together = [['series', 'number']]
-        # Declared to match migration 9999_add_performance_indexes (already in DB).
+        # Declared to match migration 0003_add_performance_indexes (already in DB).
         indexes = [
             models.Index(fields=['issue_date', 'counterpart'], name='inv_issue_cpty_idx'),
             models.Index(fields=['mydata_mark'], name='inv_mydata_idx'),
@@ -453,17 +459,34 @@ class InvoiceItem(models.Model):
     
     def save(self, *args, **kwargs):
         """Auto-calculate values"""
-        self.net_value = self.quantity * self.unit_price
-        
+        cents = Decimal('0.01')
+        # Quantize at the line level so the in-memory value matches what gets
+        # stored (DecimalField, 2dp). Otherwise calculate_totals() sums the
+        # unrounded values and the invoice total drifts from the line amounts.
+        self.net_value = (self.quantity * self.unit_price).quantize(cents, rounding=ROUND_HALF_UP)
+
         # Calculate VAT
         vat_rates = {1: 24, 2: 13, 3: 6, 4: 17, 5: 9, 6: 4, 7: 0}
         vat_rate = vat_rates.get(self.vat_category, 24)
-        self.vat_amount = (self.net_value * vat_rate) / 100
-        
+        self.vat_amount = (self.net_value * vat_rate / 100).quantize(cents, rounding=ROUND_HALF_UP)
+
         super().save(*args, **kwargs)
-        
+
         # Update invoice totals
         self.invoice.calculate_totals()
+
+
+@receiver(post_delete, sender=InvoiceItem)
+def _recalc_invoice_totals_on_item_delete(sender, instance, **kwargs):
+    """Όταν διαγράφεται γραμμή (admin inline / API / bulk delete), ξαναϋπολόγισε
+    τα σύνολα του τιμολογίου. Guard: αν το ίδιο το Invoice διαγράφεται (cascade),
+    δεν υπάρχει πια — no-op."""
+    invoice_id = instance.invoice_id
+    if not invoice_id:
+        return
+    invoice = Invoice.objects.filter(pk=invoice_id).first()
+    if invoice is not None:
+        invoice.calculate_totals()
 
 
 # =====================================================

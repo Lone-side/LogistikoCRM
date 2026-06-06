@@ -1216,7 +1216,9 @@ class VATPeriodCalculatorView(APIView):
             # Status flags
             'is_locked': period_result.is_locked,
             'is_payable': final_result > 0,
-            'is_credit': final_result < 0,
+            # Πιστωτικό υπόλοιπο αποθηκεύεται στο credit_to_next (το final_result
+            # δεν γίνεται ποτέ αρνητικό), όπως και η model property is_credit.
+            'is_credit': float(period_result.credit_to_next) > 0,
             'locked_at': period_result.locked_at.isoformat() if period_result.locked_at else None,
             'last_calculated_at': period_result.last_calculated_at.isoformat() if period_result.last_calculated_at else None,
             'months_synced': period_result.months_synced,

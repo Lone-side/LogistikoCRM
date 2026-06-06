@@ -486,6 +486,27 @@ class PortalUploadIsolationTest(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_upload_rejects_content_extension_mismatch(self):
+        # SECURITY: εκτελέσιμο μετονομασμένο σε .pdf — σωστή επέκταση αλλά
+        # περιεχόμενο 'MZ' (PE). Πρέπει να απορρίπτεται από τον magic-bytes έλεγχο.
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file(name='evil.pdf', content=b'MZ\x90\x00\x03')},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_accepts_matching_pdf_content(self):
+        # Σωστό PDF περιεχόμενο (%PDF) με .pdf → περνά τον έλεγχο.
+        self.client.force_authenticate(user=self.user_a)
+        resp = self.client.post(
+            '/accounting/api/client/me/documents/upload/',
+            {'file': self._file(name='ok.pdf', content=b'%PDF-1.7 ok')},
+            format='multipart',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.content[:200])
+
     def test_upload_rejects_missing_file(self):
         self.client.force_authenticate(user=self.user_a)
         resp = self.client.post(

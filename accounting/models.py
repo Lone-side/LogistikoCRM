@@ -273,8 +273,12 @@ class ObligationType(models.Model):
             return timezone.datetime(next_year, next_month, last_day).date()
         
         elif self.deadline_type == 'specific_day' and self.deadline_day:
-            return timezone.datetime(year, month, self.deadline_day).date()
-        
+            # Clamp στην τελευταία ημέρα του μήνα ώστε deadline_day=31 να μη ρίχνει
+            # ValueError σε Φεβρουάριο / 30-ήμερους μήνες (που θα ακύρωνε όλο το batch).
+            last_day = monthrange(year, month)[1]
+            day = min(self.deadline_day, last_day)
+            return timezone.datetime(year, month, day).date()
+
         return None
     
     def applies_to_month(self, month):
