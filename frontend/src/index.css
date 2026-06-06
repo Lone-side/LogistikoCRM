@@ -1,14 +1,44 @@
 @import "tailwindcss";
 
+/* =========================================================================
+   DESIGN TOKENS (η «υπογραφή» του UI) — Tailwind v4 @theme
+   Άλλαξε ΕΔΩ και αλλάζει παντού. Τα data-semantics (emerald=εκροές,
+   amber=εισροές) μένουν ως έχουν· το brand είναι το χρώμα ταυτότητας/ενεργειών.
+   ========================================================================= */
+@theme {
+  /* Signature typography — Manrope (modern, ευανάγνωστο, υποστηρίζει ελληνικά) */
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Brand / signature accent — refined indigo (διακριτό από emerald/amber) */
+  --color-brand-50: #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  /* Ελαφρώς πιο στρογγυλές γωνίες για φρέσκο/φιλικό αίσθημα */
+  --radius: 0.625rem;
+}
+
 :root {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: var(--font-sans);
 }
 
 #root {
