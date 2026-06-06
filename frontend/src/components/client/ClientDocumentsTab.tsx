@@ -149,8 +149,9 @@ export default function ClientDocumentsTab({
                         onClick={() => setPreviewDoc(doc)}
                         className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                         title="Προεπισκόπηση"
+                        aria-label={`Προεπισκόπηση: ${doc.filename}`}
                       >
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-4 h-4" aria-hidden="true" />
                       </button>
                     )}
 
@@ -161,8 +162,9 @@ export default function ClientDocumentsTab({
                         download={doc.filename}
                         className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
                         title="Λήψη"
+                        aria-label={`Λήψη: ${doc.filename}`}
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className="w-4 h-4" aria-hidden="true" />
                       </a>
                     )}
 
@@ -171,8 +173,9 @@ export default function ClientDocumentsTab({
                       onClick={() => onDelete(doc.id)}
                       className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                       title="Διαγραφή"
+                      aria-label={`Διαγραφή: ${doc.filename}`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </button>
                   </div>
                 </div>

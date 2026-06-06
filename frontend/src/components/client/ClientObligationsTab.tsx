@@ -60,11 +60,13 @@ export default function ClientObligationsTab({
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Κατάσταση:</label>
+          <label htmlFor="obl-status-filter" className="text-sm text-gray-600">Κατάσταση:</label>
           <select
+            id="obl-status-filter"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+            aria-label="Φίλτρο κατάστασης υποχρεώσεων"
           >
             <option value="">Όλες</option>
             <option value="pending">Εκκρεμείς</option>

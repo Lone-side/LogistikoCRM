@@ -95,8 +95,9 @@ export function FilePreviewModal({
             <button
               onClick={onClose}
               className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Κλείσιμο προεπισκόπησης"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         </div>

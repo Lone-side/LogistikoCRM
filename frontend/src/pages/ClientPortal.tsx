@@ -270,10 +270,10 @@ export default function ClientPortal() {
               <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium">Υποχρέωση</th>
-                    <th className="text-left px-4 py-3 font-medium">Περίοδος</th>
-                    <th className="text-left px-4 py-3 font-medium">Προθεσμία</th>
-                    <th className="text-left px-4 py-3 font-medium">Κατάσταση</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Υποχρέωση</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Περίοδος</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Προθεσμία</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Κατάσταση</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -320,6 +320,7 @@ export default function ClientPortal() {
                 type="button"
                 onClick={handleSyncVat}
                 disabled={syncing}
+                aria-busy={syncing}
                 className="inline-flex items-center gap-2 text-sm bg-blue-600 text-white rounded-md px-3 py-1.5 hover:bg-blue-700 disabled:opacity-60 shadow-sm"
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
@@ -386,12 +387,12 @@ export default function ClientPortal() {
                     <div className="overflow-x-auto"><table className="w-full text-sm min-w-[520px]">
                       <thead className="text-gray-500 border-b border-gray-100">
                         <tr>
-                          <th className="text-left px-5 py-3 font-medium">Περίοδος</th>
-                          <th className="text-right px-4 py-3 font-medium">ΦΠΑ Εκροών</th>
-                          <th className="text-right px-4 py-3 font-medium">ΦΠΑ Εισροών</th>
-                          <th className="text-right px-4 py-3 font-medium">Διαφορά</th>
-                          <th className="text-right px-4 py-3 font-medium">Τελικό</th>
-                          <th className="text-center px-4 py-3 font-medium">Κατάσταση</th>
+                          <th className="text-left px-5 py-3 font-medium" scope="col">Περίοδος</th>
+                          <th className="text-right px-4 py-3 font-medium" scope="col">ΦΠΑ Εκροών</th>
+                          <th className="text-right px-4 py-3 font-medium" scope="col">ΦΠΑ Εισροών</th>
+                          <th className="text-right px-4 py-3 font-medium" scope="col">Διαφορά</th>
+                          <th className="text-right px-4 py-3 font-medium" scope="col">Τελικό</th>
+                          <th className="text-center px-4 py-3 font-medium" scope="col">Κατάσταση</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -436,11 +437,11 @@ export default function ClientPortal() {
                     <div className="overflow-x-auto"><table className="w-full text-sm min-w-[520px]">
                       <thead className="text-gray-500 border-b border-gray-100">
                         <tr>
-                          <th className="text-left px-5 py-3 font-medium">Ημερομηνία</th>
-                          <th className="text-left px-4 py-3 font-medium">Τύπος</th>
-                          <th className="text-left px-4 py-3 font-medium">MARK</th>
-                          <th className="text-right px-4 py-3 font-medium">Καθαρή</th>
-                          <th className="text-right px-4 py-3 font-medium">ΦΠΑ</th>
+                          <th className="text-left px-5 py-3 font-medium" scope="col">Ημερομηνία</th>
+                          <th className="text-left px-4 py-3 font-medium" scope="col">Τύπος</th>
+                          <th className="text-left px-4 py-3 font-medium" scope="col">MARK</th>
+                          <th className="text-right px-4 py-3 font-medium" scope="col">Καθαρή</th>
+                          <th className="text-right px-4 py-3 font-medium" scope="col">ΦΠΑ</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -486,6 +487,7 @@ export default function ClientPortal() {
                     onChange={(e) => setUploadCategory(e.target.value)}
                     className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
                     disabled={uploading}
+                    aria-label="Κατηγορία εγγράφου"
                   >
                     <option value="general">Γενικά</option>
                     <option value="invoices">Τιμολόγια</option>
@@ -499,6 +501,7 @@ export default function ClientPortal() {
                     ref={fileInputRef}
                     type="file"
                     className="hidden"
+                    aria-label="Επιλογή αρχείου για μεταφόρτωση"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       if (f) handleUpload(f);
@@ -536,10 +539,10 @@ export default function ClientPortal() {
               <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium">Αρχείο</th>
-                    <th className="text-left px-4 py-3 font-medium">Υποχρέωση</th>
-                    <th className="text-left px-4 py-3 font-medium">Ημερομηνία</th>
-                    <th className="text-right px-4 py-3 font-medium">Λήψη</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Αρχείο</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Υποχρέωση</th>
+                    <th className="text-left px-4 py-3 font-medium" scope="col">Ημερομηνία</th>
+                    <th className="text-right px-4 py-3 font-medium" scope="col">Λήψη</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
