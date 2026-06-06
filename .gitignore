@@ -147,8 +147,11 @@ redis.msi
 NewFile
 .py
 
-# Test files
-test_*.py
+# Test files (root-level scratch scripts only — the real suite under tests/ stays tracked)
+/test_*.py
+
+# Demo credentials helper (local convenience, must never reach the repo/prod)
+DEMO_LOGIN.txt
 
 # Documentation exports
 admin_*.txt

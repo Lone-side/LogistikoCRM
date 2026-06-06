@@ -9,10 +9,15 @@ import logging
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# Physical door control must never be reachable by client-portal users.
+# Restrict the legacy (session-based) endpoints to staff/superusers; the
+# React frontend uses the hardened DRF path in accounting/api_door.py.
+staff_required = user_passes_test(lambda u: u.is_staff or u.is_superuser)
 
 # SECURITY: Load IP from settings instead of hardcoding
 TASMOTA_IP = getattr(settings, 'TASMOTA_IP', '192.168.1.100')
@@ -21,6 +26,7 @@ TIMEOUT = 2  # 2 seconds
 
 
 @login_required
+@staff_required
 @require_http_methods(["GET"])
 def door_status(request):
     """Check door status - ON or OFF"""
@@ -71,6 +77,7 @@ def door_status(request):
 
 
 @login_required
+@staff_required
 @require_http_methods(["POST"])
 def open_door(request):
     """
@@ -125,6 +132,7 @@ def open_door(request):
 
 
 @login_required
+@staff_required
 @require_http_methods(["GET", "POST"])
 def door_control(request):
     """Unified door control endpoint - requires authentication"""

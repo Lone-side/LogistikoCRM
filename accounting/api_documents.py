@@ -17,6 +17,7 @@ import os
 
 from .models import ClientDocument, ClientProfile, MonthlyObligation
 from .portal_mixins import ClientScopedQuerysetMixin
+from .permissions import IsStaffUser
 
 
 class DocumentPagination(PageNumberPagination):
@@ -341,7 +342,7 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def attach_document_to_obligation(request, obligation_id):
     """
     POST /api/v1/obligations/{id}/attach-document/
@@ -441,7 +442,7 @@ def attach_document_to_obligation(request, obligation_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def obligation_documents(request, obligation_id):
     """
     GET /api/v1/obligations/{id}/documents/

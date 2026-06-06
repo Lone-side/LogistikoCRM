@@ -17,7 +17,6 @@ Endpoints:
 from rest_framework import status, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import transaction
@@ -30,6 +29,7 @@ from .models import (
     ObligationProfile,
     MonthlyObligation,
 )
+from .permissions import IsStaffUser
 
 
 # ============================================
@@ -69,7 +69,7 @@ class ClientObligationProfileSerializer(serializers.Serializer):
 # ============================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def clients_obligation_status(request):
     """
     GET /api/v1/clients/obligation-status/
@@ -167,7 +167,7 @@ def clients_obligation_status(request):
 # ============================================
 
 @api_view(['GET', 'PUT'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def client_obligation_profile(request, client_id):
     """
     GET /api/v1/clients/{id}/obligation-profile/
@@ -237,7 +237,7 @@ def client_obligation_profile(request, client_id):
 # ============================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def obligation_types_grouped(request):
     """
     GET /api/v1/obligation-types/grouped/
@@ -295,7 +295,7 @@ def obligation_types_grouped(request):
 # ============================================
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def obligation_profiles_list(request):
     """
     GET /api/v1/obligation-profiles/
@@ -311,7 +311,7 @@ def obligation_profiles_list(request):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def generate_month_obligations(request):
     """
     POST /api/v1/obligations/generate-month/
@@ -457,7 +457,7 @@ def generate_month_obligations(request):
 # ============================================
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def bulk_assign_obligations(request):
     """
     POST /api/v1/obligations/bulk-assign/

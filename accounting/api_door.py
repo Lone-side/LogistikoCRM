@@ -60,7 +60,7 @@ def log_door_access(request, action, result, response_data=None):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsAdminUser])
 @throttle_classes([DoorStatusThrottle])
 def door_status(request):
     """

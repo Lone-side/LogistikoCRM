@@ -7,17 +7,17 @@ Description: REST API endpoints για GSIS (αναζήτηση στοιχείω
 
 import logging
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
 from .gsis_client import lookup_afm, get_gsis_client, GSISError
+from .permissions import IsStaffUser
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def afm_lookup(request):
     """
     POST /api/v1/afm-lookup/
@@ -103,7 +103,7 @@ def afm_lookup(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def gsis_settings_status(request):
     """
     GET /api/v1/gsis/status/
@@ -136,7 +136,7 @@ def gsis_settings_status(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def gsis_settings_update(request):
     """
     POST /api/v1/gsis/settings/
@@ -211,7 +211,7 @@ def gsis_settings_update(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaffUser])
 def gsis_test_connection(request):
     """
     POST /api/v1/gsis/test/

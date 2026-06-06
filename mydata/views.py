@@ -763,10 +763,11 @@ class ClientVATDetailView(APIView):
 
             return Response(response_data)
 
-        except Exception as e:
-            import traceback
+        except Exception:
+            # Log full traceback server-side; do not leak internals to the client.
+            logger.exception("ClientVATDetailView failed")
             return Response(
-                {'error': str(e), 'traceback': traceback.format_exc()},
+                {'error': 'Σφάλμα κατά την επεξεργασία των δεδομένων ΦΠΑ.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
