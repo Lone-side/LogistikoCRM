@@ -167,6 +167,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # 2FA (SD-002): models/middleware πάντα φορτωμένα· η ΕΠΙΒΟΛΗ στο admin
+    # ελέγχεται από το ENABLE_ADMIN_2FA (βλ. παρακάτω + webcrm/urls.py).
+    'django_otp',
+    'django_otp.plugins.otp_totp',
+    'django_otp.plugins.otp_static',
     'crm.apps.CrmConfig',
     'massmail.apps.MassmailConfig',
     'analytics.apps.AnalyticsConfig',
@@ -196,6 +201,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',  # 2FA — μετά το AuthenticationMiddleware
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'common.utils.csp_middleware.ContentSecurityPolicyMiddleware',  # CSP (SD-001)
@@ -276,6 +282,15 @@ X_FRAME_OPTIONS = "SAMEORIGIN"
 SECRET_CRM_PREFIX = '123/'
 SECRET_ADMIN_PREFIX = '456-admin/'
 SECRET_LOGIN_PREFIX = '789-login/'
+
+# 2FA enforcement on the admin (SD-002). Default OFF ώστε να ΜΗΝ κλειδωθεί
+# κανείς κατά λάθος: ενεργοποίησέ το ΑΦΟΥ οι staff εγγράψουν TOTP device.
+# Ροή ενεργοποίησης (no lockout):
+#   1) Άφησε ENABLE_ADMIN_2FA=False, μπες στο admin, κάθε staff προσθέτει
+#      «TOTP device» (OTP_TOTP) και το επιβεβαιώνει με QR/κωδικό.
+#   2) (συνιστάται) Δημιούργησε εφεδρικούς κωδικούς: manage.py addstatictoken <user>
+#   3) Θέσε ENABLE_ADMIN_2FA=True. Πλέον το admin απαιτεί OTP verification.
+ENABLE_ADMIN_2FA = os.getenv('ENABLE_ADMIN_2FA', 'False').lower() in ('1', 'true', 'yes')
 
 # Specify ip of host to avoid importing emails sent by CRM
 CRM_IP = "127.0.0.1"

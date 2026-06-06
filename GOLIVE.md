@@ -21,8 +21,9 @@ These are implemented, tested, and gated in CI — no action needed, listed for 
 - ✅ **Tests** — backend 88+ (incl. security suites), frontend 36 unit + 1 E2E (login→portal→VAT→upload), all green in CI.
 
 ### Recommended code hardening before go-live (small, from the security audit)
-- ⬜ **Shorten access-token lifetime.** `webcrm/settings.py` → `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']` is currently `timedelta(hours=5)`. Set to **15–30 minutes** for financial data (refresh rotation makes this seamless). See `docs/SECURITY_DECISIONS.md` SD-001.
-- ⬜ **Add a Content-Security-Policy** (defence-in-depth vs XSS token theft). Either `pip install django-csp` + middleware, or set the header at the reverse proxy: `Content-Security-Policy: default-src 'self'`. SD-001.
+- ✅ **Access-token lifetime** is `timedelta(minutes=15)` (`webcrm/settings.py` `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']`); refresh rotation + blacklist enabled. SD-001.
+- ✅ **Content-Security-Policy** active via `common/utils/csp_middleware.py` (`script-src 'self'`). SD-001.
+- ⬜ **Enable admin 2FA (TOTP).** Implemented & gated (`ENABLE_ADMIN_2FA`, OFF by default — no lockout). To turn on: each staff enrolls a TOTP device in the admin, *(optional)* `manage.py addstatictoken <user>` for backup codes, then set `ENABLE_ADMIN_2FA=True`. See `docs/SECURITY_DECISIONS.md` SD-002.
 
 ---
 

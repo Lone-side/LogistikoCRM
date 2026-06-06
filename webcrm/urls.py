@@ -18,6 +18,14 @@ from drf_spectacular.views import (
 # Health check endpoints
 from common.api_health import health_check, health_check_detailed, health_ready, health_live
 
+# 2FA (SD-002): όταν είναι ενεργό, το default admin site απαιτεί verified OTP
+# device (django-otp). Gated από το ENABLE_ADMIN_2FA ώστε να μην κλειδώνει
+# κανέναν by default. Ο swap αλλάζει μόνο την κλάση του υπάρχοντος site, οπότε
+# όλες οι @admin.register καταχωρήσεις παραμένουν.
+if getattr(settings, 'ENABLE_ADMIN_2FA', False):
+    from django_otp.admin import OTPAdminSite
+    admin.site.__class__ = OTPAdminSite
+
 # Main URL patterns (no language prefix)
 urlpatterns = [
     path('accounting/', include('accounting.urls')),

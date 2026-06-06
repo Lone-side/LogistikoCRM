@@ -72,9 +72,25 @@ hardening step (tracked, not a launch blocker for a small, trusted client base).
 
 Admin is mounted at `SECRET_ADMIN_PREFIX` (not `/admin/`) and the CRM at
 `SECRET_CRM_PREFIX`. This reduces automated scanning noise but is **not** a
-substitute for strong staff passwords + (recommended) 2FA. Treat the prefix as
-obscurity only; the real control is authentication. Consider admin 2FA before
-go-live if staff accounts are high-value.
+substitute for strong staff passwords + 2FA. Treat the prefix as obscurity only;
+the real control is authentication.
+
+**2FA (TOTP) is now implemented** via `django-otp` (`OTPAdminSite`), gated by the
+`ENABLE_ADMIN_2FA` setting. It is **OFF by default** so it can never lock staff
+out unexpectedly. Enablement flow (no lockout):
+
+1. Leave `ENABLE_ADMIN_2FA=False`. In the admin, each staff user adds a
+   **TOTP device** (OTP_TOTP) and confirms it by scanning the QR with an
+   authenticator app (Google Authenticator / Aegis / 1Password).
+2. *(Recommended)* generate emergency backup codes per user:
+   `python manage.py addstatictoken <username>`.
+3. Set `ENABLE_ADMIN_2FA=True` (env var). The admin now requires OTP
+   verification at login. Non-staff/clients are unaffected (they use the React
+   portal, not the admin).
+
+Wiring: `django_otp` + `otp_totp` + `otp_static` in `INSTALLED_APPS`,
+`OTPMiddleware` after `AuthenticationMiddleware`, and the gated `OTPAdminSite`
+swap in `webcrm/urls.py`. Tests: `tests/test_admin_2fa.py`.
 
 ---
 
