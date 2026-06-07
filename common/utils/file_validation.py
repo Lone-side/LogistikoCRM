@@ -3,7 +3,6 @@ File Upload Security Validation
 SECURITY FIX: Prevent malware uploads, verify file types
 """
 import os
-import mimetypes
 from django.core.exceptions import ValidationError
 from django.conf import settings
 
@@ -18,23 +17,49 @@ ALLOWED_EXTENSIONS = {
     '.txt', '.csv',  # Text files
 }
 
-# Allowed MIME types
-ALLOWED_MIMES = {
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  # xlsx
-    'application/vnd.ms-excel',  # xls
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # docx
-    'application/msword',  # doc
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'application/zip',
-    'text/plain',
-    'text/csv',
-}
-
 # Maximum file size (10MB default)
 MAX_FILE_SIZE = getattr(settings, 'MAX_UPLOAD_SIZE', 10 * 1024 * 1024)
+
+
+# Magic-byte υπογραφές ανά επέκταση — dependency-free content check.
+#
+# SECURITY/PORTABILITY: ΔΕΝ χρησιμοποιούμε python-magic/libmagic. Η native
+# libmagic μπορεί να κάνει hard **segfault** τη διεργασία (exit 139), κάτι που
+# ΔΕΝ πιάνεται από try/except — οπότε ένα απλό `import magic` ρίσκαρε να ρίξει
+# τον worker σε κάθε upload. Αντ' αυτού ελέγχουμε τα leading bytes του αρχείου.
+# Επεκτάσεις χωρίς αξιόπιστη υπογραφή (π.χ. .txt/.csv) δεν ελέγχονται εδώ.
+FILE_SIGNATURES = {
+    '.pdf': (b'%PDF',),
+    '.png': (b'\x89PNG\r\n\x1a\n',),
+    '.gif': (b'GIF87a', b'GIF89a'),
+    '.jpg': (b'\xff\xd8\xff',),
+    '.jpeg': (b'\xff\xd8\xff',),
+    '.zip': (b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'),  # zip (incl. empty/spanned)
+    '.docx': (b'PK\x03\x04',),   # OOXML = zip container
+    '.xlsx': (b'PK\x03\x04',),
+    '.doc': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),   # legacy OLE compound file
+    '.xls': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
+}
+
+
+def content_matches_extension(uploaded_file, ext):
+    """True αν τα leading bytes του αρχείου ταιριάζουν με την επέκταση `ext`.
+
+    Επεκτάσεις χωρίς γνωστή υπογραφή επιστρέφουν True (το extension allowlist
+    έχει ήδη τρέξει). Σε σφάλμα ανάγνωσης δίνουμε το benefit of the doubt
+    (True) ώστε ο έλεγχος να μη σπάει legitimate uploads — η επέκταση + το
+    μέγεθος έχουν ήδη ελεγχθεί από τον caller.
+    """
+    signatures = FILE_SIGNATURES.get(ext)
+    if not signatures:
+        return True
+    try:
+        uploaded_file.seek(0)
+        header = uploaded_file.read(8)
+        uploaded_file.seek(0)
+    except Exception:
+        return True
+    return any(header.startswith(sig) for sig in signatures)
 
 
 def validate_file_upload(uploaded_file):
@@ -44,8 +69,8 @@ def validate_file_upload(uploaded_file):
     Checks:
     1. File extension
     2. File size
-    3. MIME type (if python-magic available)
-    
+    3. Content signature (magic bytes) matches the extension
+
     Raises ValidationError if file is invalid
     """
     # Check if file exists
@@ -70,25 +95,16 @@ def validate_file_upload(uploaded_file):
             f'Maximum size: {max_mb:.1f}MB'
         )
     
-    # Check MIME type (best effort)
-    try:
-        import magic
-        uploaded_file.seek(0)
-        file_type = magic.from_buffer(uploaded_file.read(2048), mime=True)
-        uploaded_file.seek(0)
-        
-        if file_type not in ALLOWED_MIMES:
-            raise ValidationError(
-                f'Invalid file type detected: {file_type}. '
-                f'File may be corrupted or dangerous.'
-            )
-    except ImportError:
-        # python-magic not installed, skip MIME check
-        # Use mimetypes as fallback
-        guessed_type, _ = mimetypes.guess_type(filename)
-        if guessed_type and guessed_type not in ALLOWED_MIMES:
-            raise ValidationError(f'File type {guessed_type} not allowed')
-    
+    # SECURITY (defense-in-depth): magic-bytes έλεγχος περιεχομένου ώστε ένα
+    # εκτελέσιμο μετονομασμένο σε .pdf (ή άλλη επιτρεπτή επέκταση) να μην περνά
+    # μόνο με βάση το extension. Dependency-free — δεν χρησιμοποιεί
+    # python-magic/libmagic (που μπορεί να κάνει segfault τη διεργασία).
+    if not content_matches_extension(uploaded_file, ext):
+        raise ValidationError(
+            f'Το περιεχόμενο του αρχείου δεν ταιριάζει με τον τύπο του ({ext}). '
+            f'Το αρχείο μπορεί να είναι κατεστραμμένο ή επικίνδυνο.'
+        )
+
     return True
 
 

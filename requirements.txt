@@ -35,7 +35,9 @@ tendo>=0.3.0  # Singleton instance control
 # File Processing
 openpyxl>=3.1.2  # Excel export/import
 Pillow>=10.1.0  # Image processing
-python-magic>=0.4.27  # File type validation (SECURITY)
+# NOTE: python-magic/libmagic deliberately removed — its native libmagic can
+# hard-segfault the worker (uncatchable). File-type validation now uses a
+# dependency-free magic-bytes check (common/utils/file_validation.py).
 xhtml2pdf>=0.2.11  # PDF report generation (Windows compatible)
 XlsxWriter>=3.2.0  # Excel writing
 pandas>=2.0.0  # Data analysis
@@ -88,6 +90,5 @@ django-import-export>=3.3.5  # Better import/export (optional)
 # Notes:
 # - Install: pip install -r requirements.txt
 # - Για PostgreSQL: apt-get install libpq-dev python3-dev
-# - Για python-magic: apt-get install libmagic1
 # - Για production: pip freeze > requirements-lock.txt για version pinning
 # ============================================================================
