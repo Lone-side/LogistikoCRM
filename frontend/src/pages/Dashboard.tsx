@@ -4,7 +4,7 @@ import {
   Users, FileText, AlertCircle, RefreshCw, ArrowRight, Clock, TrendingUp,
   Calendar, CheckCircle, Plus, Activity
 } from 'lucide-react';
-import { Button, DeadlineListSkeleton } from '../components';
+import { Button, Card, DeadlineListSkeleton } from '../components';
 import VoIPWidget from '../components/dashboard/VoIPWidget';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
@@ -121,7 +121,7 @@ export default function Dashboard() {
 
       {/* Quick Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-lg bg-brand-100">
               <Users className="w-6 h-6 text-brand-600" />
@@ -133,9 +133,9 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-lg bg-yellow-100">
               <Clock className="w-6 h-6 text-yellow-600" />
@@ -147,9 +147,9 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-lg bg-green-100">
               <TrendingUp className="w-6 h-6 text-green-600" />
@@ -161,9 +161,9 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-lg bg-red-100">
               <AlertCircle className="w-6 h-6 text-red-600" />
@@ -175,13 +175,13 @@ export default function Dashboard() {
               </p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Status Breakdown Pie Chart */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Κατανομή Υποχρεώσεων</h3>
           {isLoading ? (
             <div className="h-64 flex items-center justify-center">
@@ -229,10 +229,10 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-        </div>
+        </Card>
 
         {/* Top Obligation Types Bar Chart */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Τύποι Υποχρεώσεων</h3>
           {isLoading ? (
             <div className="h-64 flex items-end justify-around gap-2 animate-pulse">
@@ -266,7 +266,7 @@ export default function Dashboard() {
               Δεν υπάρχουν δεδομένα
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* VoIP Widget and Calendar Row */}
@@ -275,7 +275,7 @@ export default function Dashboard() {
         <VoIPWidget />
 
         {/* Mini Calendar */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Calendar className="w-5 h-5 text-brand-600" />
@@ -344,10 +344,10 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Activity className="w-5 h-5 text-green-600" />
@@ -407,13 +407,13 @@ export default function Dashboard() {
               </>
             )}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Upcoming Deadlines and Quick Actions Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Upcoming Deadlines */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Clock className="w-5 h-5 text-yellow-600" />
@@ -464,10 +464,10 @@ export default function Dashboard() {
               Δεν υπάρχουν επερχόμενες προθεσμίες τις επόμενες 7 ημέρες.
             </p>
           )}
-        </div>
+        </Card>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Γρήγορες Ενέργειες</h3>
           <div className="grid grid-cols-1 gap-3">
             <Link
@@ -511,7 +511,7 @@ export default function Dashboard() {
               <ArrowRight className="w-5 h-5 text-purple-600 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

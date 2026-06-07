@@ -19,6 +19,7 @@ import {
   Info,
   ChevronLeft,
 } from 'lucide-react';
+import { Card } from '../components';
 import { MiniTreePreview } from '../components/FolderTreeView';
 import { useFilingSettings, useFolderPreview } from '../hooks/useFilingSettings';
 import type { FilingSystemSettings } from '../types/filingSettings';
@@ -461,7 +462,7 @@ const FilingSettingsPage: React.FC = () => {
               <MiniTreePreview structure={structure} maxHeight="500px" />
 
               {/* Quick Info */}
-              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+              <Card className="dark:bg-gray-900 dark:border-gray-700 p-4">
                 <h3 className="font-semibold mb-3">Σύνοψη Ρυθμίσεων</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -485,7 +486,7 @@ const FilingSettingsPage: React.FC = () => {
                     <span className="font-medium">{formData.max_file_size_mb} MB</span>
                   </div>
                 </div>
-              </div>
+              </Card>
 
               {/* Help */}
               <div className="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-4">

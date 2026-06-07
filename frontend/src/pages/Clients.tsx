@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useClients, useCreateClient, useDeleteClient, useDebounce } from '../hooks';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
-import { Modal, ConfirmDialog, ClientForm, Button, TableSkeleton } from '../components';
+import { Modal, ConfirmDialog, ClientForm, Button, TableSkeleton, Card } from '../components';
 import { useToast } from '../components/Toast';
 import { Users, Search, AlertCircle, RefreshCw, Plus, Edit2, Trash2, Eye, Download, Upload, FileDown, FileUp } from 'lucide-react';
 import type { Client, ClientFormData } from '../types';
@@ -152,7 +152,7 @@ export default function Clients() {
               Εξαγωγή/Εισαγωγή
             </Button>
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <Card className="absolute right-0 mt-2 w-56 shadow-lg py-1 z-50">
                 <button
                   onClick={async () => {
                     try {
@@ -194,7 +194,7 @@ export default function Clients() {
                   <FileUp className="w-4 h-4" />
                   Εισαγωγή πελατών (Excel)
                 </button>
-              </div>
+              </Card>
             )}
           </div>
           <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -205,7 +205,7 @@ export default function Clients() {
       </div>
 
       {/* Search Box */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card className="p-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
@@ -216,7 +216,7 @@ export default function Clients() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           />
         </div>
-      </div>
+      </Card>
 
       {/* Error Banner */}
       {isError && (
@@ -243,7 +243,7 @@ export default function Clients() {
 
       {/* Clients Table */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <Card className="overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
             <p className="text-sm text-gray-600">
               {filteredClients.length} από {totalCount} πελάτες
@@ -350,7 +350,7 @@ export default function Clients() {
               )}
             </>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Create Modal */}

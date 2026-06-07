@@ -27,7 +27,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Modal, ConfirmDialog, Button } from '../components';
+import { Modal, ConfirmDialog, Button, Card } from '../components';
 import {
   useEmailTemplates,
   useCreateEmailTemplate,
@@ -207,7 +207,7 @@ function EmailHistoryTab() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card className="p-4">
         <div className="flex flex-wrap gap-4 items-center">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">
@@ -258,11 +258,11 @@ function EmailHistoryTab() {
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Stats Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-brand-100 rounded-lg">
               <Send className="w-5 h-5 text-brand-600" />
@@ -272,8 +272,8 @@ function EmailHistoryTab() {
               <p className="text-sm text-gray-500">Συνολικά Email</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-green-100 rounded-lg">
               <CheckCircle className="w-5 h-5 text-green-600" />
@@ -285,8 +285,8 @@ function EmailHistoryTab() {
               <p className="text-sm text-gray-500">Επιτυχή</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-red-100 rounded-lg">
               <XCircle className="w-5 h-5 text-red-600" />
@@ -298,8 +298,8 @@ function EmailHistoryTab() {
               <p className="text-sm text-gray-500">Αποτυχημένα</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-100 rounded-lg">
               <Clock className="w-5 h-5 text-amber-600" />
@@ -311,7 +311,7 @@ function EmailHistoryTab() {
               <p className="text-sm text-gray-500">Σε αναμονή</p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Error */}
@@ -334,15 +334,15 @@ function EmailHistoryTab() {
 
       {/* Loading */}
       {isLoading && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+        <Card className="p-8 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-4"></div>
           <p className="text-gray-500">Φόρτωση ιστορικού...</p>
-        </div>
+        </Card>
       )}
 
       {/* Email List */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <Card className="overflow-hidden">
           {filteredEmails?.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -459,7 +459,7 @@ function EmailHistoryTab() {
               )}
             </>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Email Detail Modal */}
@@ -689,15 +689,15 @@ function EmailTemplatesTab() {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+        <Card className="p-8 text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-4"></div>
           <p className="text-gray-500">Φόρτωση προτύπων...</p>
-        </div>
+        </Card>
       )}
 
       {/* Templates List */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200">
+        <Card>
           {templates?.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -784,11 +784,11 @@ function EmailTemplatesTab() {
               ))}
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Variables Reference */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Διαθέσιμες Μεταβλητές
         </h3>
@@ -807,7 +807,7 @@ function EmailTemplatesTab() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Create Modal */}
       <Modal

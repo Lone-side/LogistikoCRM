@@ -16,7 +16,7 @@ import {
   AlertCircle,
   User,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import {
   useTickets,
   useCreateTicket,
@@ -119,7 +119,7 @@ export default function Tickets() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
               <Ticket size={20} className="text-purple-600" />
@@ -129,8 +129,8 @@ export default function Tickets() {
               <p className="text-xl font-bold text-gray-900">{data?.stats?.total || 0}</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
               <AlertCircle size={20} className="text-brand-600" />
@@ -140,8 +140,8 @@ export default function Tickets() {
               <p className="text-xl font-bold text-gray-900">{data?.stats?.open || 0}</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
               <Clock size={20} className="text-yellow-600" />
@@ -151,8 +151,8 @@ export default function Tickets() {
               <p className="text-xl font-bold text-gray-900">{data?.stats?.in_progress || 0}</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
               <Check size={20} className="text-green-600" />
@@ -162,8 +162,8 @@ export default function Tickets() {
               <p className="text-xl font-bold text-gray-900">{data?.stats?.resolved || 0}</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
               <X size={20} className="text-gray-600" />
@@ -173,11 +173,11 @@ export default function Tickets() {
               <p className="text-xl font-bold text-gray-900">{data?.stats?.closed || 0}</p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -270,10 +270,10 @@ export default function Tickets() {
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Tickets Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <Card className="overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
@@ -366,7 +366,7 @@ export default function Tickets() {
             )}
           </>
         )}
-      </div>
+      </Card>
 
       {/* Create Ticket Modal */}
       {createModalOpen && (

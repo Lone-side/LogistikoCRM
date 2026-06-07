@@ -20,7 +20,7 @@ import {
   TestTube,
   Save,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import {
   useEmailSettings,
   useUpdateEmailSettings,
@@ -242,7 +242,7 @@ export default function EmailSettings() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* SMTP Settings Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center gap-2 mb-6">
             <Server className="w-5 h-5 text-gray-600" />
             <h2 className="text-lg font-semibold text-gray-900">Ρυθμίσεις SMTP</h2>
@@ -401,11 +401,11 @@ export default function EmailSettings() {
               </Button>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Sender Info Section */}
         <div className="space-y-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <Card className="p-6">
             <div className="flex items-center gap-2 mb-6">
               <User className="w-5 h-5 text-gray-600" />
               <h2 className="text-lg font-semibold text-gray-900">Στοιχεία Αποστολέα</h2>
@@ -457,10 +457,10 @@ export default function EmailSettings() {
                 />
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Company Info Section */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <Card className="p-6">
             <div className="flex items-center gap-2 mb-6">
               <Building2 className="w-5 h-5 text-gray-600" />
               <h2 className="text-lg font-semibold text-gray-900">Στοιχεία Εταιρείας</h2>
@@ -536,12 +536,12 @@ export default function EmailSettings() {
                 </div>
               </div>
             </div>
-          </div>
+          </Card>
         </div>
       </div>
 
       {/* Email Signature Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Υπογραφή Email</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Signature Editor */}
@@ -596,10 +596,10 @@ export default function EmailSettings() {
   </p>
 </div>`}</pre>
         </div>
-      </div>
+      </Card>
 
       {/* Test Email Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Δοκιμαστικό Email</h3>
         <p className="text-sm text-gray-600 mb-4">
           Στείλτε ένα δοκιμαστικό email για να επιβεβαιώσετε ότι οι ρυθμίσεις λειτουργούν σωστά.
@@ -626,10 +626,10 @@ export default function EmailSettings() {
             Ενεργοποιήστε τις ρυθμίσεις email για να στείλετε δοκιμαστικό
           </p>
         )}
-      </div>
+      </Card>
 
       {/* Advanced Settings */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Προχωρημένες Ρυθμίσεις</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -689,7 +689,7 @@ export default function EmailSettings() {
             </label>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Last Test Info */}
       {settings?.last_test_at && (

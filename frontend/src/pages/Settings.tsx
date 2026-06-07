@@ -19,7 +19,7 @@ import {
   HardDrive,
   FolderTree,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import { useToast } from '../components/Toast';
 import { useAuthStore } from '../stores/authStore';
 import { gsisApi, authApi } from '../api/client';
@@ -233,7 +233,7 @@ export default function Settings() {
         {/* Content */}
         <div className="flex-1">
           {activeTab === 'profile' && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <Card className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-6">Στοιχεία προφίλ</h3>
 
               {/* Avatar */}
@@ -309,11 +309,11 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-            </div>
+            </Card>
           )}
 
           {activeTab === 'notifications' && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <Card className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-6">Ρυθμίσεις ειδοποιήσεων</h3>
 
               <div className="space-y-4">
@@ -357,12 +357,12 @@ export default function Settings() {
                   )}
                 </Button>
               </div>
-            </div>
+            </Card>
           )}
 
           {activeTab === 'security' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <Card className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Αλλαγή κωδικού</h3>
 
                 <div className="space-y-4 max-w-md">
@@ -389,9 +389,9 @@ export default function Settings() {
                   </div>
                   <Button>Αλλαγή κωδικού</Button>
                 </div>
-              </div>
+              </Card>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <Card className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Συνδεδεμένες συνεδρίες</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -407,7 +407,7 @@ export default function Settings() {
                     <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">Ενεργή</span>
                   </div>
                 </div>
-              </div>
+              </Card>
             </div>
           )}
 
@@ -518,7 +518,7 @@ export default function Settings() {
               </div>
 
               {/* GSIS Integration - Λήψη στοιχείων με ΑΦΜ */}
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <Card className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">ΑΑΔΕ - Λήψη Στοιχείων</h3>
 
                 <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
@@ -546,9 +546,9 @@ export default function Settings() {
                     )}
                   </div>
                 </div>
-              </div>
+              </Card>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <Card className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Άλλες Ενσωματώσεις</h3>
 
                 <div className="space-y-4">
@@ -601,7 +601,7 @@ export default function Settings() {
                   </div>
                 ))}
                 </div>
-              </div>
+              </Card>
             </div>
           )}
         </div>

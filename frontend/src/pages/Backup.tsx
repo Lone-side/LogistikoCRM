@@ -15,7 +15,7 @@ import {
   Settings,
   RefreshCw,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import { useToast } from '../components/Toast';
 import { backupApi, type BackupItem, type BackupSettings } from '../api/client';
 
@@ -227,7 +227,7 @@ export default function Backup() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
               <Database size={20} className="text-brand-600" />
@@ -237,9 +237,9 @@ export default function Backup() {
               <p className="text-sm text-gray-500">Συνολικά Backups</p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
               <Check size={20} className="text-green-600" />
@@ -251,9 +251,9 @@ export default function Backup() {
               <p className="text-sm text-gray-500">Διαθέσιμα</p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
               <HardDrive size={20} className="text-purple-600" />
@@ -265,9 +265,9 @@ export default function Backup() {
               <p className="text-sm text-gray-500">Συνολικό Μέγεθος</p>
             </div>
           </div>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
               <Clock size={20} className="text-orange-600" />
@@ -279,11 +279,11 @@ export default function Backup() {
               <p className="text-sm text-gray-500">Τελευταίο Backup</p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Backup List */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <Card>
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Λίστα Backups</h2>
           <Button variant="secondary" size="sm" onClick={loadData}>
@@ -414,7 +414,7 @@ export default function Backup() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Create Backup Modal */}
       {showCreateModal && (

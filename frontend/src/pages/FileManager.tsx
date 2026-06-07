@@ -13,6 +13,7 @@ import {
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Card } from '../components';
 import {
   useFileManagerDocuments,
   useFileManagerStats,
@@ -62,7 +63,7 @@ function StatCard({ icon: Icon, label, value, color }: {
   color: string;
 }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <Card className="p-4">
       <div className="flex items-center gap-3">
         <div className={`p-2 rounded-lg`} style={{ backgroundColor: `${color}15` }}>
           <Icon size={20} style={{ color }} />
@@ -72,7 +73,7 @@ function StatCard({ icon: Icon, label, value, color }: {
           <p className="text-sm text-gray-500">{label}</p>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -125,7 +126,7 @@ function DocumentCard({
         </button>
 
         {showMenu && (
-          <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 min-w-[150px]">
+          <Card className="absolute right-0 top-8 shadow-lg py-1 z-10 min-w-[150px]">
             {document.can_preview && (
               <button
                 onClick={() => { onPreview(); setShowMenu(false); }}
@@ -160,7 +161,7 @@ function DocumentCard({
             >
               <Trash2 size={14} /> Διαγραφή
             </button>
-          </div>
+          </Card>
         )}
       </div>
 
@@ -1134,7 +1135,7 @@ export default function FileManager() {
         )}
 
         {/* Search and filters bar */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+        <Card className="p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
             {/* Search */}
             <div className="flex-1 min-w-[200px] relative">
@@ -1244,7 +1245,7 @@ export default function FileManager() {
               </div>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Bulk actions bar */}
         {selectedIds.size > 0 && (
@@ -1298,7 +1299,7 @@ export default function FileManager() {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <Card className="overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b">
                 <tr>
@@ -1335,7 +1336,7 @@ export default function FileManager() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </Card>
         )}
 
         {/* Pagination */}

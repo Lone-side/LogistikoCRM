@@ -13,7 +13,7 @@ import {
   FileText,
   Loader2,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import {
   useReportsStats,
   useReportExport,
@@ -131,7 +131,7 @@ export default function Reports() {
               {isExporting ? 'Εξαγωγή...' : 'Εξαγωγή'}
             </Button>
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+              <Card className="absolute right-0 mt-2 w-64 shadow-lg py-2 z-50">
                 <button
                   onClick={() => handleExport('clients')}
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
@@ -164,7 +164,7 @@ export default function Reports() {
                     </div>
                   </div>
                 </button>
-              </div>
+              </Card>
             )}
           </div>
         </div>
@@ -183,7 +183,7 @@ export default function Reports() {
       )}
 
       {/* Date Range Selector */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card className="p-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-center gap-2">
             <Calendar size={18} className="text-gray-400" />
@@ -205,11 +205,11 @@ export default function Reports() {
             ))}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
               <Users size={24} className="text-brand-600" />
@@ -218,9 +218,9 @@ export default function Reports() {
           </div>
           <p className="text-sm text-gray-500 mb-1">Συνολικοί πελάτες</p>
           <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.total_clients)}</p>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
               <ClipboardList size={24} className="text-green-600" />
@@ -229,9 +229,9 @@ export default function Reports() {
           </div>
           <p className="text-sm text-gray-500 mb-1">Ολοκληρωμένες</p>
           <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.completed_obligations)}</p>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
               <ClipboardList size={24} className="text-yellow-600" />
@@ -239,9 +239,9 @@ export default function Reports() {
           </div>
           <p className="text-sm text-gray-500 mb-1">Σε εκκρεμότητα</p>
           <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.pending_obligations)}</p>
-        </div>
+        </Card>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
               <ClipboardList size={24} className="text-red-600" />
@@ -249,13 +249,13 @@ export default function Reports() {
           </div>
           <p className="text-sm text-gray-500 mb-1">Εκπρόθεσμες</p>
           <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.overdue_obligations)}</p>
-        </div>
+        </Card>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Obligations by Type */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Υποχρεώσεις ανά τύπο</h3>
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
@@ -285,10 +285,10 @@ export default function Reports() {
               Δεν υπάρχουν δεδομένα
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Monthly Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Μηνιαία δραστηριότητα</h3>
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
@@ -321,12 +321,12 @@ export default function Reports() {
               Δεν υπάρχουν δεδομένα
             </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Completion Rate Card */}
       {stats && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Card className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Ποσοστό Ολοκλήρωσης</h3>
           <div className="flex items-center gap-4">
             <div className="flex-1">
@@ -343,11 +343,11 @@ export default function Reports() {
             {stats.completed_obligations} ολοκληρωμένες από συνολικά{' '}
             {stats.completed_obligations + stats.pending_obligations + stats.overdue_obligations} υποχρεώσεις
           </p>
-        </div>
+        </Card>
       )}
 
       {/* Reports List */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <Card>
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Διαθέσιμες αναφορές</h3>
         </div>
@@ -396,7 +396,7 @@ export default function Reports() {
             );
           })}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

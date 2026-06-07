@@ -12,7 +12,7 @@ import {
   AlertCircle,
   CheckCircle,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import {
   useObligationTypesList,
   useCreateObligationType,
@@ -933,7 +933,7 @@ export default function ObligationSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <Card>
         <div className="flex border-b border-gray-200">
           {tabs.map((tab) => (
             <button
@@ -1205,7 +1205,7 @@ export default function ObligationSettings() {
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* Modals */}
       <ObligationTypeModal

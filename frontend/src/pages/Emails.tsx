@@ -1,5 +1,5 @@
 import { Mail, Send, Inbox, FileText, Search, Plus } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 
 export default function Emails() {
   return (
@@ -18,7 +18,7 @@ export default function Emails() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
               <Inbox size={20} className="text-brand-600" />
@@ -28,8 +28,8 @@ export default function Emails() {
               <p className="text-xl font-bold text-gray-900">156</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
               <Send size={20} className="text-green-600" />
@@ -39,8 +39,8 @@ export default function Emails() {
               <p className="text-xl font-bold text-gray-900">89</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
               <FileText size={20} className="text-yellow-600" />
@@ -50,8 +50,8 @@ export default function Emails() {
               <p className="text-xl font-bold text-gray-900">3</p>
             </div>
           </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        </Card>
+        <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
               <Mail size={20} className="text-purple-600" />
@@ -61,11 +61,11 @@ export default function Emails() {
               <p className="text-xl font-bold text-gray-900">12</p>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Main Content */}
-      <div className="bg-white rounded-lg border border-gray-200">
+      <Card>
         {/* Search Bar */}
         <div className="p-4 border-b border-gray-200">
           <div className="relative">
@@ -97,10 +97,10 @@ export default function Emails() {
             </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Email Templates Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Πρότυπα Email</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="border border-gray-200 rounded-lg p-4 hover:border-brand-300 transition-colors cursor-pointer">
@@ -116,10 +116,10 @@ export default function Emails() {
             <p className="text-sm text-gray-500">Ειδοποίηση για νέο έγγραφο</p>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Automation Settings */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card className="p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Αυτοματοποιήσεις</h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
@@ -143,7 +143,7 @@ export default function Emails() {
             </label>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

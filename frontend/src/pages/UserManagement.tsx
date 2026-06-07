@@ -12,7 +12,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { Button } from '../components';
+import { Button, Card } from '../components';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
@@ -94,7 +94,7 @@ export default function UserManagement() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search
@@ -120,10 +120,10 @@ export default function UserManagement() {
             />
           </Button>
         </div>
-      </div>
+      </Card>
 
       {/* Users Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <Card className="overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center">
             <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-brand-600" />
@@ -181,7 +181,7 @@ export default function UserManagement() {
             {filteredUsers.length} χρήστ{filteredUsers.length === 1 ? 'ης' : 'ες'}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* User Modal */}
       {isModalOpen && (
