@@ -5,10 +5,10 @@ API views for Backup functionality.
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser
 from django.http import FileResponse
 
+from accounting.permissions import IsStaffUser
 from .models import BackupSettings, BackupHistory
 from .backup_utils import create_backup, restore_backup, get_backup_list, validate_backup_file
 
@@ -24,7 +24,7 @@ class HasBackupPermission:
 
 class BackupSettingsAPIView(APIView):
     """API για ρυθμίσεις backup."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         """Επιστρέφει τις ρυθμίσεις backup."""
@@ -55,7 +55,7 @@ class BackupSettingsAPIView(APIView):
 
 class BackupListAPIView(APIView):
     """API για λίστα backups."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         """Επιστρέφει λίστα με τα διαθέσιμα backups."""
@@ -79,7 +79,7 @@ class BackupListAPIView(APIView):
 
 class BackupCreateAPIView(APIView):
     """API για δημιουργία backup."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def post(self, request):
         """Δημιουργεί νέο backup."""
@@ -111,7 +111,7 @@ class BackupCreateAPIView(APIView):
 
 class BackupDownloadAPIView(APIView):
     """API για download backup."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request, pk):
         """Download backup file."""
@@ -139,7 +139,7 @@ class BackupDownloadAPIView(APIView):
 
 class BackupRestoreAPIView(APIView):
     """API για restore backup."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def post(self, request, pk):
         """Restore backup."""
@@ -176,7 +176,7 @@ class BackupRestoreAPIView(APIView):
 
 class BackupUploadRestoreAPIView(APIView):
     """API για upload και restore από εξωτερικό αρχείο."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
     parser_classes = [MultiPartParser]
 
     def post(self, request):

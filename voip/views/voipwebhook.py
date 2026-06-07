@@ -85,6 +85,10 @@ def is_authenticated(request: HttpRequest, data: str) -> bool:
     if not data:
         return False
     signature = request.headers.get('Signature')
+    if not signature:
+        # Χωρίς header δεν υπάρχει τι να επαληθεύσουμε — fail-closed (αλλιώς
+        # b64decode(None) θα έριχνε TypeError → 500).
+        return False
     backend = next(
         b for b in settings.VOIP 
         if b['PROVIDER'] == 'Zadarma'
@@ -100,7 +104,13 @@ def is_authenticated(request: HttpRequest, data: str) -> bool:
         sha1
     )     
     bts = bytes(hmac_h.hexdigest(), 'utf8')
-    return True if b64decode(signature) == bts else False
+    # Constant-time σύγκριση HMAC (anti-timing). b64decode μπορεί να ρίξει σε
+    # κακοσχηματισμένο signature — fail-closed.
+    try:
+        provided = b64decode(signature)
+    except Exception:
+        return False
+    return hmac.compare_digest(provided, bts)
 
 
 def find_objects_by_phone(phone: str) -> \

@@ -23,22 +23,22 @@ urlpatterns = [
     ),
     path(
         'user-transfer/',
-        login_required(user_transfer),
+        staff_member_required(user_transfer),  # destructive bulk re-assignment → staff only
         name='user_transfer'
     ),
     path(
         'copy-department/',
-        login_required(copy_department),
+        staff_member_required(copy_department),  # creates departments/config → staff only
         name='copy_department'
     ),
     path(
         'debug/',
-        login_required(debug),
+        staff_member_required(debug),  # debug endpoint must not be client-reachable
         name='debug'
     ),
     path(
         "toggle-default-sorting",
-        toggle_default_sorting,
+        staff_member_required(toggle_default_sorting),  # CRM-only helper (was unauthenticated)
         name="toggle_default_sorting"
     ),
     path(

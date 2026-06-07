@@ -4,9 +4,9 @@ API endpoints για τις ρυθμίσεις του συστήματος αρ�
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import serializers
 
+from accounting.permissions import IsStaffUser
 from .models import FilingSystemSettings
 
 
@@ -83,7 +83,7 @@ class FilingSystemSettingsView(APIView):
     GET: Λήψη ρυθμίσεων αρχειοθέτησης
     PUT/PATCH: Ενημέρωση ρυθμίσεων (μόνο admin)
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         settings = FilingSystemSettings.get_settings()
@@ -123,7 +123,7 @@ class FolderStructurePreviewView(APIView):
     """
     GET: Προεπισκόπηση δομής φακέλων για έναν πελάτη.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     def get(self, request):
         from accounting.models import ClientProfile
@@ -237,7 +237,7 @@ class DocumentCategoriesView(APIView):
     """
     GET: Λήψη όλων των κατηγοριών εγγράφων με icons και colors.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]
 
     # Category metadata
     CATEGORY_META = {
