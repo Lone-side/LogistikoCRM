@@ -9,6 +9,7 @@ from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from .permissions import IsStaffUser
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import (
     DjangoFilterBackend, FilterSet, CharFilter,
@@ -820,5 +821,5 @@ class ObligationTypeViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ObligationType.objects.filter(is_active=True).order_by('priority', 'name')
     serializer_class = ObligationTypeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsStaffUser]  # reference catalog· χρησιμοποιείται μόνο από staff UI
     pagination_class = None  # Return all types without pagination
