@@ -164,7 +164,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 type="text"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="π.χ. ΦΠΑ"
                 required
               />
@@ -177,7 +177,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="Φόρος Προστιθέμενης Αξίας"
                 required
               />
@@ -190,7 +190,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
 
@@ -200,7 +200,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               <select
                 value={formData.frequency}
                 onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               >
                 {FREQUENCY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -214,7 +214,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               <select
                 value={formData.deadline_type}
                 onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               >
                 {DEADLINE_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -236,7 +236,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 onChange={(e) =>
                   setFormData({ ...formData, deadline_day: e.target.value ? parseInt(e.target.value) : null })
                 }
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="π.χ. 20"
               />
             </div>
@@ -252,7 +252,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 type="text"
                 value={formData.applicable_months || ''}
                 onChange={(e) => setFormData({ ...formData, applicable_months: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 placeholder="3,6,9,12"
               />
             </div>
@@ -279,7 +279,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                         type="checkbox"
                         checked={(formData.profiles || []).includes(p.id)}
                         onChange={() => toggleProfile(p.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                       />
                       <span className="text-sm text-gray-700">{p.name}</span>
                     </label>
@@ -294,7 +294,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 onChange={(e) =>
                   setFormData({ ...formData, exclusion_group: e.target.value ? parseInt(e.target.value) : null })
                 }
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               >
                 <option value="">-- Χωρίς ομάδα --</option>
                 {groups.map((g) => (
@@ -313,7 +313,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 type="number"
                 value={formData.priority || 0}
                 onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               />
             </div>
             <div className="flex items-center pt-6">
@@ -322,7 +322,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                   type="checkbox"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                 />
                 <span className="text-sm text-gray-700">Ενεργό</span>
               </label>
@@ -493,7 +493,7 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               placeholder="π.χ. Μισθοδοσία"
               required
             />
@@ -505,7 +505,7 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               placeholder="Περιγραφή του προφίλ..."
             />
           </div>
@@ -531,7 +531,7 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
                       type="checkbox"
                       checked={selectedTypeIds.includes(type.id)}
                       onChange={() => toggleType(type.id)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                     />
                     <span className="text-sm text-gray-700">
                       <span className="font-medium text-blue-600">{type.code}</span>
@@ -661,7 +661,7 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               placeholder="π.χ. ΦΠΑ Περίοδος"
               required
             />
@@ -673,7 +673,7 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               placeholder="Υποχρεώσεις που αλληλοαποκλείονται..."
             />
           </div>
@@ -695,7 +695,7 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
                       type="checkbox"
                       checked={formData.obligation_types?.includes(type.id) || false}
                       onChange={() => toggleType(type.id)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                     />
                     <span className="text-sm text-gray-700">
                       <span className="font-medium">{type.code}</span> - {type.name}
@@ -967,7 +967,7 @@ export default function ObligationSettings() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Αναζήτηση..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
         </div>

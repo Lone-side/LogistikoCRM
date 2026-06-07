@@ -238,7 +238,7 @@ export default function Settings() {
 
               {/* Avatar */}
               <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
-                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
+                <div className="w-20 h-20 bg-brand-600 rounded-full flex items-center justify-center">
                   <span className="text-3xl text-white font-bold">
                     {user?.first_name?.charAt(0) || user?.username?.charAt(0) || 'Χ'}
                   </span>
@@ -258,7 +258,7 @@ export default function Settings() {
                       type="text"
                       value={profileForm.first_name}
                       onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                     />
                   </div>
                   <div>
@@ -267,7 +267,7 @@ export default function Settings() {
                       type="text"
                       value={profileForm.last_name}
                       onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                     />
                   </div>
                 </div>
@@ -278,7 +278,7 @@ export default function Settings() {
                     type="email"
                     value={profileForm.email}
                     onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
 
@@ -336,7 +336,7 @@ export default function Settings() {
                         checked={notificationSettings[item.key]}
                         onChange={(e) => setNotificationSettings(prev => ({ ...prev, [item.key]: e.target.checked }))}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                     </label>
                   </div>
                 ))}
@@ -370,21 +370,21 @@ export default function Settings() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Τρέχων κωδικός</label>
                     <input
                       type="password"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Νέος κωδικός</label>
                     <input
                       type="password"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Επιβεβαίωση νέου κωδικού</label>
                     <input
                       type="password"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                     />
                   </div>
                   <Button>Αλλαγή κωδικού</Button>
@@ -639,7 +639,7 @@ export default function Settings() {
                   type="text"
                   value={gsisAfm}
                   onChange={(e) => setGsisAfm(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   placeholder="123456789"
                   maxLength={9}
                 />
@@ -656,7 +656,7 @@ export default function Settings() {
                   type="text"
                   value={gsisUsername}
                   onChange={(e) => setGsisUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   placeholder="Εισάγετε username"
                 />
               </div>
@@ -669,7 +669,7 @@ export default function Settings() {
                   type="password"
                   value={gsisPassword}
                   onChange={(e) => setGsisPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   placeholder={gsisConfigured ? 'Αφήστε κενό για να διατηρηθεί ο υπάρχων' : 'Εισάγετε password'}
                 />
                 {gsisConfigured && (

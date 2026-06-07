@@ -85,7 +85,7 @@ export default function Header({ onMenuClick, onSearchClick }: HeaderProps) {
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-brand-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-sm font-medium">{initials}</span>
               </div>
               <span className="hidden sm:inline text-sm font-medium text-gray-700">

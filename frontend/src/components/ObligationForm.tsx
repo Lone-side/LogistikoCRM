@@ -115,7 +115,7 @@ export function ObligationForm({
           id="client"
           value={formData.client}
           onChange={(e) => handleChange('client', Number(e.target.value))}
-          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
             errors.client ? 'border-red-500' : 'border-gray-300'
           }`}
         >
@@ -139,7 +139,7 @@ export function ObligationForm({
           value={formData.obligation_type}
           onChange={(e) => handleChange('obligation_type', Number(e.target.value))}
           disabled={typesLoading}
-          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
             errors.obligation_type ? 'border-red-500' : 'border-gray-300'
           } ${typesLoading ? 'bg-gray-100' : ''}`}
         >
@@ -171,7 +171,7 @@ export function ObligationForm({
             id="month"
             value={formData.month}
             onChange={(e) => handleChange('month', Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           >
             {MONTHS.map((month) => (
               <option key={month.value} value={month.value}>
@@ -188,7 +188,7 @@ export function ObligationForm({
             id="year"
             value={formData.year}
             onChange={(e) => handleChange('year', Number(e.target.value))}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           >
             {YEARS.map((year) => (
               <option key={year} value={year}>
@@ -209,7 +209,7 @@ export function ObligationForm({
           id="deadline"
           value={formData.deadline}
           onChange={(e) => handleChange('deadline', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
             errors.deadline ? 'border-red-500' : 'border-gray-300'
           }`}
         />
@@ -225,7 +225,7 @@ export function ObligationForm({
           id="status"
           value={formData.status}
           onChange={(e) => handleChange('status', e.target.value as ObligationStatus)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         >
           {STATUS_OPTIONS.map((status) => (
             <option key={status.value} value={status.value}>
@@ -245,7 +245,7 @@ export function ObligationForm({
           value={formData.assigned_to || ''}
           onChange={(e) => handleChange('assigned_to', e.target.value ? Number(e.target.value) : null)}
           disabled={usersLoading}
-          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
             usersLoading ? 'bg-gray-100' : ''
           }`}
         >
@@ -271,7 +271,7 @@ export function ObligationForm({
             id="completed_date"
             value={formData.completed_date || ''}
             onChange={(e) => handleChange('completed_date', e.target.value || null)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           />
         </div>
       )}
@@ -289,7 +289,7 @@ export function ObligationForm({
           step="0.25"
           min="0"
           placeholder="π.χ. 1.5"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         />
       </div>
 
@@ -303,7 +303,7 @@ export function ObligationForm({
           value={formData.notes || ''}
           onChange={(e) => handleChange('notes', e.target.value)}
           rows={3}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
           placeholder="Σημειώσεις για την υποχρέωση..."
         />
       </div>

@@ -131,7 +131,7 @@ export function SendEmailModal({
           <select
             value={selectedTemplate || ''}
             onChange={handleTemplateChange}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
             disabled={templatesLoading}
           >
             <option value="">-- Επιλέξτε πρότυπο --</option>
@@ -151,7 +151,7 @@ export function SendEmailModal({
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Θέμα email..."
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
 
@@ -163,7 +163,7 @@ export function SendEmailModal({
             onChange={(e) => setBody(e.target.value)}
             placeholder="Κείμενο email..."
             rows={8}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"
           />
         </div>
 

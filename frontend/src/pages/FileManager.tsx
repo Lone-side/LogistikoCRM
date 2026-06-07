@@ -373,7 +373,7 @@ function UploadModal({
           <select
             value={clientId || ''}
             onChange={(e) => handleClientChange(e.target.value ? Number(e.target.value) : null)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500"
           >
             <option value="">Επιλέξτε πελάτη...</option>
             {clients.map((client) => (
@@ -390,7 +390,7 @@ function UploadModal({
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as DocumentCategory)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500"
           >
             {DOCUMENT_CATEGORIES.map((cat) => (
               <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -407,7 +407,7 @@ function UploadModal({
             <select
               value={obligationId || ''}
               onChange={(e) => setObligationId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500"
             >
               <option value="">Χωρίς σύνδεση</option>
               {obligations.map((obl) => (
@@ -1145,7 +1145,7 @@ export default function FileManager() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 placeholder="Αναζήτηση αρχείων..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
               />
             </div>
 

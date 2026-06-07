@@ -114,7 +114,7 @@ const FilingSettingsPage: React.FC = () => {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50"
           >
             {saving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -156,7 +156,7 @@ const FilingSettingsPage: React.FC = () => {
                     type="checkbox"
                     checked={formData.use_network_storage || false}
                     onChange={(e) => handleChange('use_network_storage', e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium flex items-center gap-2">

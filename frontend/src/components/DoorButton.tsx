@@ -22,7 +22,7 @@ export default function DoorButton() {
   const isLoading = pulseDoor.isPending || isCheckingStatus;
 
   // Determine button state and styling
-  let buttonStyle = 'bg-blue-600 hover:bg-blue-700 text-white';
+  let buttonStyle = 'bg-brand-600 hover:bg-brand-700 text-white';
   let icon = <DoorOpen size={18} />;
   let label = 'Πόρτα';
 

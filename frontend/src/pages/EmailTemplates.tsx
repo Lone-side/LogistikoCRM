@@ -218,7 +218,7 @@ function EmailHistoryTab() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Αναζήτηση σε email, παραλήπτη, θέμα..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -228,7 +228,7 @@ function EmailHistoryTab() {
             <select
               value={filters.client_id || ''}
               onChange={(e) => handleFilterChange('client_id', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             >
               <option value="">Όλοι οι πελάτες</option>
               {clients?.results.map((client) => (
@@ -244,7 +244,7 @@ function EmailHistoryTab() {
             <select
               value={filters.status || ''}
               onChange={(e) => handleFilterChange('status', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             >
               <option value="">Όλες οι καταστάσεις</option>
               <option value="sent">Απεστάλη</option>
@@ -1010,7 +1010,7 @@ function EmailTemplateForm({
           value={formData.name}
           onChange={handleChange}
           placeholder="π.χ. Ειδοποίηση ολοκλήρωσης ΦΠΑ"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         />
       </div>
 
@@ -1025,7 +1025,7 @@ function EmailTemplateForm({
           value={formData.description}
           onChange={handleChange}
           placeholder="Σύντομη περιγραφή του προτύπου"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         />
       </div>
 
@@ -1043,7 +1043,7 @@ function EmailTemplateForm({
               obligation_type: e.target.value ? Number(e.target.value) : null,
             }))
           }
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         >
           <option value="">-- Κανένας (χειροκίνητη επιλογή) --</option>
           {obligationTypes.map((type) => (
@@ -1068,7 +1068,7 @@ function EmailTemplateForm({
           value={formData.subject}
           onChange={handleChange}
           placeholder="π.χ. Ολοκλήρωση {obligation_type} - {period_display}"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         />
         <div className="flex flex-wrap gap-1 mt-2">
           {['client_name', 'obligation_type', 'period_display'].map((v) => (
@@ -1095,7 +1095,7 @@ function EmailTemplateForm({
           onChange={handleChange}
           rows={10}
           placeholder="Αγαπητέ/ή {client_name},&#10;&#10;Σας ενημερώνουμε ότι η υποχρέωση {obligation_type} για την περίοδο {period_display} ολοκληρώθηκε."
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono text-sm"
         />
         <div className="flex flex-wrap gap-1 mt-2">
           {TEMPLATE_VARIABLES.map((v) => (

@@ -156,7 +156,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
           id="eponimia"
           value={formData.eponimia}
           onChange={(e) => handleChange('eponimia', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
             errors.eponimia ? 'border-red-500' : 'border-gray-300'
           }`}
           placeholder="Εισάγετε επωνυμία"
@@ -173,7 +173,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
           id="eidos_ipoxreou"
           value={formData.eidos_ipoxreou}
           onChange={(e) => handleChange('eidos_ipoxreou', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         >
           {TAXPAYER_TYPES.map((type) => (
             <option key={type.value} value={type.value}>
@@ -205,7 +205,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 setAfmChecksumWarning(false);
               }
             }}
-            className={`flex-1 px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono ${
+            className={`flex-1 px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono ${
               errors.afm ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="123456789"
@@ -282,7 +282,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
           id="email"
           value={formData.email}
           onChange={(e) => handleChange('email', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+          className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
             errors.email ? 'border-red-500' : 'border-gray-300'
           }`}
           placeholder="example@email.com"
@@ -300,7 +300,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
           id="kinito_tilefono"
           value={formData.kinito_tilefono}
           onChange={(e) => handleChange('kinito_tilefono', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           placeholder="69xxxxxxxx"
         />
       </div>
@@ -321,7 +321,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="doy"
                 value={formData.doy}
                 onChange={(e) => handleChange('doy', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="Δ.Ο.Υ."
               />
             </div>
@@ -336,7 +336,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="nomiki_morfi"
                 value={formData.nomiki_morfi}
                 onChange={(e) => handleChange('nomiki_morfi', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="Νομική Μορφή"
               />
             </div>
@@ -351,7 +351,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="diefthinsi_epixeirisis"
                 value={formData.diefthinsi_epixeirisis}
                 onChange={(e) => handleChange('diefthinsi_epixeirisis', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="Οδός"
               />
             </div>
@@ -366,7 +366,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="arithmos_epixeirisis"
                 value={formData.arithmos_epixeirisis}
                 onChange={(e) => handleChange('arithmos_epixeirisis', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="Αριθμός"
               />
             </div>
@@ -381,7 +381,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="poli_epixeirisis"
                 value={formData.poli_epixeirisis}
                 onChange={(e) => handleChange('poli_epixeirisis', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="Πόλη"
               />
             </div>
@@ -396,7 +396,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="tk_epixeirisis"
                 value={formData.tk_epixeirisis}
                 onChange={(e) => handleChange('tk_epixeirisis', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="Τ.Κ."
               />
             </div>
@@ -411,7 +411,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
                 id="imerominia_enarksis"
                 value={formData.imerominia_enarksis ?? ''}
                 onChange={(e) => handleChange('imerominia_enarksis', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent bg-gray-50"
                 placeholder="ΗΗ/ΜΜ/ΕΕΕΕ"
               />
             </div>
@@ -426,7 +426,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
           id="is_active"
           checked={formData.is_active}
           onChange={(e) => handleChange('is_active', e.target.checked)}
-          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+          className="h-4 w-4 text-blue-600 focus:ring-brand-500 border-gray-300 rounded"
         />
         <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
           Ενεργός πελάτης

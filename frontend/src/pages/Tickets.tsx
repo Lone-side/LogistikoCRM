@@ -186,7 +186,7 @@ export default function Tickets() {
               placeholder="Αναζήτηση με τίτλο ή πελάτη..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
           <button
@@ -262,7 +262,7 @@ export default function Tickets() {
                     type="checkbox"
                     checked={filters.open_only || false}
                     onChange={(e) => handleFilterChange('open_only', e.target.checked || undefined)}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-brand-500"
                   />
                   <span className="text-sm text-gray-700">Μόνο ανοιχτά</span>
                 </label>

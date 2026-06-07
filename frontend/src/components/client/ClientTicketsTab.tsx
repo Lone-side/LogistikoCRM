@@ -138,7 +138,7 @@ export default function ClientTicketsTab({
                           value={ticket.status}
                           onChange={(e) => handleStatusChange(ticket.id, e.target.value)}
                           disabled={isUpdating}
-                          className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                          className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-brand-500"
                         >
                           {TICKET_STATUS_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -164,7 +164,7 @@ export default function ClientTicketsTab({
                           value={ticket.priority}
                           onChange={(e) => handlePriorityChange(ticket.id, e.target.value)}
                           disabled={isUpdating}
-                          className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                          className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-brand-500"
                         >
                           {TICKET_PRIORITY_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>

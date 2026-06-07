@@ -367,7 +367,7 @@ export default function ClientProfileTab({
                         type="checkbox"
                         checked={selectedProfileIds.has(profile.id)}
                         onChange={() => toggleProfile(profile.id)}
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                       />
                       <button
                         type="button"
@@ -501,7 +501,7 @@ export default function ClientProfileTab({
                               name={isExclusionGroup ? `exclusion-group-${group.group_id}` : undefined}
                               checked={isSelected}
                               onChange={() => toggleType(type.id)}
-                              className={`h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 ${
+                              className={`h-4 w-4 text-blue-600 border-gray-300 focus:ring-brand-500 ${
                                 isExclusionGroup ? '' : 'rounded'
                               }`}
                             />
@@ -628,7 +628,7 @@ function CopyFromClientModal({ currentClientId, onApply, onClose }: CopyFromClie
               placeholder="Αναζήτηση με επωνυμία ή ΑΦΜ..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
               autoFocus
             />
           </div>

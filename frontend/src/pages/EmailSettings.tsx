@@ -278,7 +278,7 @@ export default function EmailSettings() {
                 value={formData.smtp_host || ''}
                 onChange={handleChange}
                 placeholder="smtp.gmail.com"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               />
             </div>
 
@@ -293,7 +293,7 @@ export default function EmailSettings() {
                   name="smtp_port"
                   value={formData.smtp_port || 587}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
               <div>
@@ -304,7 +304,7 @@ export default function EmailSettings() {
                   name="smtp_security"
                   value={formData.smtp_security || 'tls'}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 >
                   {SECURITY_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -326,7 +326,7 @@ export default function EmailSettings() {
                 value={formData.smtp_username || ''}
                 onChange={handleChange}
                 placeholder="your-email@gmail.com"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
               />
             </div>
 
@@ -348,7 +348,7 @@ export default function EmailSettings() {
                   value={formData.smtp_password || ''}
                   onChange={handleChange}
                   placeholder={settings?.has_password ? 'Νέος κωδικός (προαιρετικά)' : 'Εισάγετε κωδικό'}
-                  className={`w-full px-3 py-2 pr-10 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  className={`w-full px-3 py-2 pr-10 border rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
                     settings?.has_password && !formData.smtp_password
                       ? 'border-green-300 bg-green-50'
                       : 'border-gray-300'
@@ -423,7 +423,7 @@ export default function EmailSettings() {
                   value={formData.from_email || ''}
                   onChange={handleChange}
                   placeholder="info@example.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
 
@@ -438,7 +438,7 @@ export default function EmailSettings() {
                   value={formData.from_name || ''}
                   onChange={handleChange}
                   placeholder="Λογιστικό Γραφείο Παπαδόπουλος"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
 
@@ -453,7 +453,7 @@ export default function EmailSettings() {
                   value={formData.reply_to || ''}
                   onChange={handleChange}
                   placeholder="Αν διαφέρει από το email αποστολέα"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -477,7 +477,7 @@ export default function EmailSettings() {
                     name="company_name"
                     value={formData.company_name || ''}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -489,7 +489,7 @@ export default function EmailSettings() {
                     name="company_phone"
                     value={formData.company_phone || ''}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -504,7 +504,7 @@ export default function EmailSettings() {
                   value={formData.company_website || ''}
                   onChange={handleChange}
                   placeholder="https://www.example.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                 />
               </div>
 
@@ -518,7 +518,7 @@ export default function EmailSettings() {
                     name="accountant_name"
                     value={formData.accountant_name || ''}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -531,7 +531,7 @@ export default function EmailSettings() {
                     value={formData.accountant_title || ''}
                     onChange={handleChange}
                     placeholder="Λογιστής Α' Τάξης"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -555,7 +555,7 @@ export default function EmailSettings() {
               onChange={handleChange}
               rows={10}
               placeholder="HTML υπογραφή που προστίθεται στα emails..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent font-mono text-sm"
             />
             <p className="text-xs text-gray-500 mt-2">
               Μπορείτε να χρησιμοποιήσετε HTML για μορφοποίηση. Η υπογραφή προστίθεται αυτόματα στο τέλος κάθε email.
@@ -610,7 +610,7 @@ export default function EmailSettings() {
             value={testEmail}
             onChange={(e) => setTestEmail(e.target.value)}
             placeholder="test@example.com"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           />
           <Button
             onClick={handleSendTestEmail}
@@ -646,7 +646,7 @@ export default function EmailSettings() {
               step="0.5"
               min="0.5"
               max="10"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
             <p className="text-xs text-gray-500 mt-1">
               Μέγιστα emails ανά δευτερόλεπτο
@@ -665,7 +665,7 @@ export default function EmailSettings() {
               onChange={handleChange}
               min="1"
               max="50"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
             <p className="text-xs text-gray-500 mt-1">
               Μέγιστα emails σε burst
@@ -682,7 +682,7 @@ export default function EmailSettings() {
                 onChange={handleChange}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
               <span className="ml-3 text-sm font-medium text-gray-700">
                 {formData.is_active ? 'Ενεργό' : 'Απενεργοποιημένο'}
               </span>

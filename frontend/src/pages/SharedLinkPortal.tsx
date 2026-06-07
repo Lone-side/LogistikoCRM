@@ -184,7 +184,7 @@ export default function SharedLinkPortal() {
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAuthenticate()}
                     placeholder="Εισάγετε τον κωδικό..."
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
               </div>
@@ -203,7 +203,7 @@ export default function SharedLinkPortal() {
                     onChange={(e) => setEmail(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleAuthenticate()}
                     placeholder="Εισάγετε το email σας..."
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
                   />
                 </div>
               </div>

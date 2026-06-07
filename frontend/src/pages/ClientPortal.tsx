@@ -321,7 +321,7 @@ export default function ClientPortal() {
                 onClick={handleSyncVat}
                 disabled={syncing}
                 aria-busy={syncing}
-                className="inline-flex items-center gap-2 text-sm bg-blue-600 text-white rounded-md px-3 py-1.5 hover:bg-blue-700 disabled:opacity-60 shadow-sm"
+                className="inline-flex items-center gap-2 text-sm bg-brand-600 text-white rounded-md px-3 py-1.5 hover:bg-brand-700 disabled:opacity-60 shadow-sm"
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} aria-hidden="true" />
                 {syncing ? 'Συγχρονισμός…' : 'Συγχρονισμός από myDATA'}
@@ -510,7 +510,7 @@ export default function ClientPortal() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-md hover:bg-brand-700 disabled:opacity-50"
                   >
                     {uploading ? 'Ανέβασμα…' : 'Επιλογή αρχείου'}
                   </button>

@@ -243,7 +243,7 @@ export default function MyData() {
                   <select
                     value={selectedClientId || ''}
                     onChange={(e) => setSelectedClientId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
+                    className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500 appearance-none bg-white"
                   >
                     <option value="">-- Επιλέξτε Πελάτη --</option>
                     {clients.map((client) => (
@@ -386,7 +386,7 @@ export default function MyData() {
                   <Button
                     onClick={handleSync}
                     disabled={syncing || !credentialsId}
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-brand-600 hover:bg-brand-700"
                   >
                     {syncing ? (
                       <>

@@ -23,7 +23,7 @@ export default function ClientNotesTab({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={10}
-          className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 resize-none"
           placeholder="Προσθέστε σημειώσεις για τον πελάτη..."
         />
       ) : (

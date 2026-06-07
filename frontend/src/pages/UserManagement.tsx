@@ -106,7 +106,7 @@ export default function UserManagement() {
               placeholder="Αναζήτηση χρήστη..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
             />
           </div>
           <Button
@@ -461,7 +461,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                   onChange={(e) =>
                     setFormData({ ...formData, username: e.target.value })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
                     errors.username ? 'border-red-500' : 'border-gray-200'
                   }`}
                   required
@@ -482,7 +482,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
                     errors.email ? 'border-red-500' : 'border-gray-200'
                   }`}
                   required
@@ -504,7 +504,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, first_name: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -517,7 +517,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, last_name: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -534,7 +534,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
                       errors.password ? 'border-red-500' : 'border-gray-200'
                     }`}
                     required={!isEdit}
@@ -565,7 +565,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, password_confirm: e.target.value })
                     }
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent ${
                       errors.password_confirm ? 'border-red-500' : 'border-gray-200'
                     }`}
                     required={!isEdit}
@@ -587,7 +587,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, is_staff: e.target.checked })
                     }
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium text-gray-900">Προσωπικό</span>
@@ -604,7 +604,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, is_active: e.target.checked })
                     }
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium text-gray-900">Ενεργός</span>

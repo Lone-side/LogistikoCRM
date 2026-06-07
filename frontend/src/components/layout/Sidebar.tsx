@@ -68,14 +68,14 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <div className={`flex items-center h-16 px-3 border-b border-gray-200 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-sm">LC</span>
               </div>
               <span className="text-lg font-semibold text-gray-900 truncate">LogistikoCRM</span>
             </div>
           )}
           {isCollapsed && (
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-brand-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">LC</span>
             </div>
           )}

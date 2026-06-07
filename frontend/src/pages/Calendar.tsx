@@ -59,7 +59,7 @@ function CalendarDayCell({ day, isCurrentMonth, isToday: isTodayDay, dayData, on
       className={`
         min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-gray-200 text-left transition-colors
         ${isCurrentMonth ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 text-gray-400'}
-        ${isTodayDay ? 'ring-2 ring-blue-500 ring-inset' : ''}
+        ${isTodayDay ? 'ring-2 ring-brand-500 ring-inset' : ''}
         ${hasObligations ? 'cursor-pointer' : 'cursor-default'}
       `}
     >
@@ -628,7 +628,7 @@ export default function Calendar() {
             <Filter size={16} />
             Φίλτρα
             {hasActiveFilters && (
-              <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
+              <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white text-xs rounded-full">
                 !
               </span>
             )}
@@ -664,7 +664,7 @@ export default function Calendar() {
                     client_id: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
               >
                 <option value="">Όλοι οι πελάτες</option>
                 {clientsData?.results?.map((client) => (
@@ -688,7 +688,7 @@ export default function Calendar() {
                     type_id: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
               >
                 <option value="">Όλοι οι τύποι</option>
                 {obligationTypes?.map((type) => (
@@ -712,7 +712,7 @@ export default function Calendar() {
                     status: e.target.value || undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
               >
                 <option value="">Όλες οι καταστάσεις</option>
                 <option value="pending">Εκκρεμεί</option>
@@ -824,7 +824,7 @@ export default function Calendar() {
             <span className="text-sm text-gray-600">Σε εξέλιξη</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded ring-2 ring-blue-500"></span>
+            <span className="w-4 h-4 rounded ring-2 ring-brand-500"></span>
             <span className="text-sm text-gray-600">Σήμερα</span>
           </div>
         </div>

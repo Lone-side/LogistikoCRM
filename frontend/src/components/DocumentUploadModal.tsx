@@ -309,7 +309,7 @@ export function DocumentUploadModal({
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
             >
               {Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -329,7 +329,7 @@ export function DocumentUploadModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Σύντομη περιγραφή του εγγράφου..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
 

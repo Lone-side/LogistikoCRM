@@ -132,7 +132,7 @@ export default function ClientInfoTab({
           type="checkbox"
           checked={!!value}
           onChange={(e) => onFieldChange(field, e.target.checked)}
-          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-brand-500"
         />
       );
     }
@@ -142,7 +142,7 @@ export default function ClientInfoTab({
         <select
           value={stringValue}
           onChange={(e) => onFieldChange(field, e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500"
         >
           <option value="">-- Επιλέξτε --</option>
           {options.map((opt) => (
@@ -159,7 +159,7 @@ export default function ClientInfoTab({
         type={type}
         value={stringValue}
         onChange={(e) => onFieldChange(field, e.target.value)}
-        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500"
       />
     );
   };
@@ -430,7 +430,7 @@ export default function ClientInfoTab({
                   value={myDataUserId}
                   onChange={(e) => setMyDataUserId(e.target.value)}
                   placeholder="Όνομα χρήστη myDATA"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
               </div>
               <div>
@@ -442,7 +442,7 @@ export default function ClientInfoTab({
                   value={myDataSubscriptionKey}
                   onChange={(e) => setMyDataSubscriptionKey(e.target.value)}
                   placeholder="Από το myAADE portal"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
               </div>
             </div>
@@ -452,7 +452,7 @@ export default function ClientInfoTab({
                   type="checkbox"
                   checked={myDataIsSandbox}
                   onChange={(e) => setMyDataIsSandbox(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-brand-500"
                 />
                 <span className="text-sm text-gray-700">
                   Sandbox (Test περιβάλλον)
