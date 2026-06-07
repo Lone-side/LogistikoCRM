@@ -1,4 +1,6 @@
 export { Button } from './Button';
+export { Card, CardHeader, CardTitle, CardContent } from './ui/Card';
+export { Badge, type BadgeTone } from './ui/Badge';
 export { ErrorBoundary } from './ErrorBoundary';
 export { Modal } from './Modal';
 export { ConfirmDialog } from './ConfirmDialog';

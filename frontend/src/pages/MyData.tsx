@@ -15,7 +15,7 @@ import {
   Calculator,
   ChevronDown,
 } from 'lucide-react';
-import { Button, VATPeriodCalculator } from '../components';
+import { Button, Card, CardHeader, CardTitle, CardContent, Badge, VATPeriodCalculator } from '../components';
 import { mydataApi, clientsApi, type ClientVATDetailResponse } from '../api/client';
 
 // Types
@@ -349,10 +349,10 @@ export default function MyData() {
                 </div>
               </div>
 
-              {/* VAT Breakdown — accent cards (ίδιο visual language με το portal) */}
+              {/* VAT Breakdown — accent cards (refined Card primitive) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Income VAT — Εκροές */}
-                <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-emerald-500 shadow-sm p-6">
+                <Card className="border-l-4 border-l-emerald-500 p-6">
                   <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
                     <TrendingUp size={16} className="text-emerald-500" />
                     ΦΠΑ Εκροών
@@ -363,10 +363,10 @@ export default function MyData() {
                   <p className="text-sm text-gray-400 mt-1">
                     {clientData.summary.income_count} εγγραφές
                   </p>
-                </div>
+                </Card>
 
                 {/* Expense VAT — Εισροές */}
-                <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-amber-500 shadow-sm p-6">
+                <Card className="border-l-4 border-l-amber-500 p-6">
                   <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
                     <TrendingDown size={16} className="text-amber-500" />
                     ΦΠΑ Εισροών
@@ -377,7 +377,7 @@ export default function MyData() {
                   <p className="text-sm text-gray-400 mt-1">
                     {clientData.summary.expense_count} εγγραφές
                   </p>
-                </div>
+                </Card>
               </div>
 
               {/* Sync Section */}
@@ -411,22 +411,20 @@ export default function MyData() {
               {/* Category Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Income by Category */}
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-                  <div className="p-4 border-b border-gray-100">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
                       <TrendingUp size={18} className="text-emerald-500" />
                       ΦΠΑ Εκροών ανά Κατηγορία
-                    </h3>
-                  </div>
-                  <div className="p-4">
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     {clientData.income_by_category && clientData.income_by_category.length > 0 ? (
                       <div className="space-y-3">
                         {clientData.income_by_category.map((cat) => (
                           <div key={cat.vat_category} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-emerald-100 text-emerald-800 text-xs font-medium rounded">
-                                {cat.vat_rate_display}
-                              </span>
+                              <Badge tone="success">{cat.vat_rate_display}</Badge>
                               <span className="text-sm text-gray-600">
                                 ({cat.count} εγγρ.)
                               </span>
@@ -440,26 +438,24 @@ export default function MyData() {
                     ) : (
                       <p className="text-gray-400 text-center py-4">Δεν υπάρχουν εγγραφές</p>
                     )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
 
                 {/* Expense by Category */}
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-                  <div className="p-4 border-b border-gray-100">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
                       <TrendingDown size={18} className="text-amber-500" />
                       ΦΠΑ Εισροών ανά Κατηγορία
-                    </h3>
-                  </div>
-                  <div className="p-4">
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     {clientData.expense_by_category && clientData.expense_by_category.length > 0 ? (
                       <div className="space-y-3">
                         {clientData.expense_by_category.map((cat) => (
                           <div key={cat.vat_category} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded">
-                                {cat.vat_rate_display}
-                              </span>
+                              <Badge tone="warning">{cat.vat_rate_display}</Badge>
                               <span className="text-sm text-gray-600">
                                 ({cat.count} εγγρ.)
                               </span>
@@ -473,8 +469,8 @@ export default function MyData() {
                     ) : (
                       <p className="text-gray-400 text-center py-4">Δεν υπάρχουν εγγραφές</p>
                     )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             </>
           )}

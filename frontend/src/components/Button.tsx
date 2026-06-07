@@ -7,10 +7,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 focus:ring-brand-500',
-  secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500',
-  danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-  ghost: 'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-500',
+  // Polished: subtle shadow + active-press, brand focus ring, refined neutrals.
+  primary:
+    'bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800 focus-visible:ring-brand-500',
+  secondary:
+    'border border-gray-300 bg-white text-gray-700 shadow-sm hover:bg-gray-50 active:bg-gray-100 focus-visible:ring-gray-400',
+  danger:
+    'bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800 focus-visible:ring-red-500',
+  ghost:
+    'bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200 focus-visible:ring-gray-400',
 };
 
 const sizeStyles = {
@@ -25,10 +30,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={`
-          inline-flex items-center justify-center font-medium rounded-md
-          focus:outline-none focus:ring-2 focus:ring-offset-2
+          inline-flex items-center justify-center font-medium rounded-lg
+          focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
           disabled:opacity-50 disabled:cursor-not-allowed
-          transition-colors duration-200
+          transition-[background-color,box-shadow,transform] duration-150 active:scale-[0.98]
           ${variantStyles[variant]}
           ${sizeStyles[size]}
           ${className}
