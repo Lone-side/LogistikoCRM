@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { Card } from '../components';
 import { portalApi } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
 import {
@@ -242,24 +243,24 @@ export default function ClientPortal() {
             <p className="text-gray-500">Φόρτωση…</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <Card className="p-5">
                 <p className="text-sm text-gray-500">Εκκρεμείς</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{pending}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
+              </Card>
+              <Card className="p-5">
                 <p className="text-sm text-gray-500">Εκπρόθεσμες</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{overdue}</p>
-              </div>
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
+              </Card>
+              <Card className="p-5">
                 <p className="text-sm text-gray-500">Ολοκληρωμένες</p>
                 <p className="text-3xl font-bold text-green-600 mt-1">{completed}</p>
-              </div>
+              </Card>
             </div>
           )
         )}
 
         {tab === 'obligations' && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <Card className="overflow-hidden">
             {oblError ? (
               <p className="p-6 text-red-700">Σφάλμα φόρτωσης υποχρεώσεων. Δοκιμάστε ξανά.</p>
             ) : oblLoading ? (
@@ -290,7 +291,7 @@ export default function ClientPortal() {
                 </tbody>
               </table></div>
             )}
-          </div>
+          </Card>
         )}
 
         {tab === 'vat' && (
@@ -475,7 +476,7 @@ export default function ClientPortal() {
         {tab === 'documents' && (
           <div className="space-y-4">
             {/* Upload box */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <Card className="p-5">
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <p className="font-medium text-gray-900">Ανέβασμα εγγράφου</p>
@@ -526,9 +527,9 @@ export default function ClientPortal() {
                   {uploadSuccess}
                 </p>
               )}
-            </div>
+            </Card>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <Card className="overflow-hidden">
             {docError ? (
               <p className="p-6 text-red-700">Σφάλμα φόρτωσης εγγράφων. Δοκιμάστε ξανά.</p>
             ) : docLoading ? (
@@ -572,7 +573,7 @@ export default function ClientPortal() {
                 </tbody>
               </table></div>
             )}
-          </div>
+          </Card>
           </div>
         )}
       </main>
