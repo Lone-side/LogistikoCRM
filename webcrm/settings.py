@@ -766,3 +766,28 @@ BLOCKED_UPLOAD_EXTENSIONS = [
     '.exe', '.sh', '.bat', '.cmd', '.com', '.msi',
     '.vbs', '.js', '.jar', '.py', '.php', '.asp',
 ]
+
+
+# ==============================================================================
+# 🛰️ ERROR MONITORING — Sentry (gated by SENTRY_DSN)
+# ==============================================================================
+# Το sentry-sdk ήταν ήδη dependency αλλά ΠΟΤΕ δεν αρχικοποιούνταν (ανενεργό).
+# Ενεργοποιείται ΜΟΝΟ όταν οριστεί SENTRY_DSN (env) — χωρίς DSN είναι no-op,
+# οπότε dev/CI δεν επηρεάζονται. GDPR: send_default_pii=False ώστε να ΜΗ
+# διαρρέουν ΑΦΜ/email/ονόματα πελατών στο Sentry (βλ. docs/GDPR_DATA_HANDLING.md).
+SENTRY_DSN = os.getenv('SENTRY_DSN', '').strip()
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        environment=os.getenv(
+            'SENTRY_ENVIRONMENT', 'development' if DEBUG else 'production'
+        ),
+        release=os.getenv('SENTRY_RELEASE') or None,
+        # Performance tracing: 0 by default (opt-in via env για να μην κοστίζει).
+        traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0') or 0),
+        send_default_pii=False,  # GDPR: μη στέλνεις προσωπικά δεδομένα πελατών
+    )

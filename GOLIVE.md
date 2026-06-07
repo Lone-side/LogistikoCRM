@@ -101,7 +101,7 @@ Portal invites and set-password links are emailed; without working SMTP a client
 - ⬜ Smoke-test in production: log in as the test client, open ΦΠΑ tab, upload a document.
 
 ### 2.7 Monitoring (recommended, not a blocker)
-- ⬜ Error tracking (Sentry) for the backend.
+- ✅ Error tracking (Sentry) is wired (`webcrm/settings.py`) — set `SENTRY_DSN` in `.env` to enable (no-op if empty; PII never sent, GDPR-safe). Optional `SENTRY_ENVIRONMENT`, `SENTRY_TRACES_SAMPLE_RATE`.
 - ⬜ Log aggregation / alert on repeated `429` (throttle hits = possible attack) and `5xx`.
 - ⬜ Uptime check on `/api/health/`.
 
