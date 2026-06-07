@@ -78,10 +78,13 @@ class ObligationAPITest(APITestCase):
     """Test Obligation REST API endpoints"""
 
     def setUp(self):
+        # Staff user: αυτά είναι staff-facing management endpoints (obligations,
+        # obligation-types catalog). Το obligation-types είναι πλέον IsStaffUser.
         self.user = User.objects.create_user(
             username='testuser',
             email='test@test.com',
-            password='testpass123'
+            password='testpass123',
+            is_staff=True,
         )
         self.client_api = APIClient()
 
