@@ -25,6 +25,7 @@ from django.core.management import call_command
 from ..models import (
     ClientProfile,
     ClientDocument,
+    ClientLiability,
     ArchiveConfiguration,
     ClientObligation,
 )
@@ -62,13 +63,13 @@ class HasObligationsFilter(admin.SimpleListFilter):
             return queryset.filter(obligation_settings__is_active=False)
         return queryset
 from ..export_import import export_clients_to_excel, export_clients_summary_to_excel
-from .mixins import VoIPCallInline, TicketInline, ClientProfileDocumentInline
+from .mixins import VoIPCallInline, TicketInline, ClientProfileDocumentInline, ClientLiabilityInline
 
 
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
-    # VoIP Call History, Tickets & Documents Inline
-    inlines = [VoIPCallInline, TicketInline, ClientProfileDocumentInline]
+    # VoIP Call History, Tickets, Documents & Liabilities Inline
+    inlines = [VoIPCallInline, TicketInline, ClientProfileDocumentInline, ClientLiabilityInline]
 
     list_display = [
         'afm',
@@ -786,3 +787,22 @@ class ArchiveConfigurationAdmin(admin.ModelAdmin):
     list_display = ['obligation_type', 'filename_pattern', 'folder_pattern', 'create_subfolder']
     list_filter = ['create_subfolder', 'allow_multiple_files']
     search_fields = ['obligation_type__name', 'obligation_type__code']
+
+
+@admin.register(ClientLiability)
+class ClientLiabilityAdmin(admin.ModelAdmin):
+    """Ενημερωτικές οφειλές ΑΑΔΕ/ΕΦΚΑ (καταχώρηση λογιστή· read-only στο portal)."""
+    list_display = ['client', 'source', 'description', 'amount', 'due_date', 'status', 'created_at']
+    list_filter = ['source', 'status', ('due_date', admin.DateFieldListFilter)]
+    search_fields = ['client__eponimia', 'client__afm', 'description', 'payment_code']
+    date_hierarchy = 'due_date'
+    autocomplete_fields = ['client']
+    readonly_fields = ['created_by', 'created_at', 'updated_at']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('client', 'created_by')
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)

@@ -12,6 +12,7 @@
 | `accounting.ClientProfile` (credentials) | κωδικοί TaxisNet/ΕΦΚΑ/ΓΕΜΗ | **Ευαίσθητα διαπιστευτήρια** |
 | `mydata.MyDataCredentials` | myDATA user_id / subscription key | Διαπιστευτήρια (**κρυπτογραφημένα**, Fernet) |
 | `accounting.ClientDocument` | μεταφορτωμένα παραστατικά/έγγραφα πελάτη | Οικονομικά/φορολογικά |
+| `accounting.ClientLiability` | ενημερωτικές οφειλές ΑΑΔΕ/ΕΦΚΑ (ποσά, ταυτότητα οφειλής) — καταχώρηση λογιστή | Οικονομικά |
 | `mydata.VATRecord` / `VATPeriodResult` | οικονομικά στοιχεία ΦΠΑ ανά πελάτη | Οικονομικά |
 | `accounting.VoIPCall` | αριθμοί τηλεφώνου, ώρες κλήσεων | Επικοινωνία |
 | `common.AuditLog` | user, action, IP, user-agent, timestamp | Δεδομένα ασφαλείας/ελέγχου |

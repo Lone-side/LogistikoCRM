@@ -87,3 +87,17 @@ But now we are also ready to add new features.
 > Otherwise, GitHub will not be able to add you to the list of **project contributors**.
 
 😎👌🔥 We appreciate any contribution and starring ⭐️!
+
+---
+
+## Προτάσεις βελτίωσης / On-demand review
+
+Για προτάσεις βελτίωσης σε αλλαγές, τρέξτε τα ενσωματωμένα reviews:
+
+- `/code-review` — bugs + απλοποιήσεις/efficiency στο τρέχον diff.
+- `/security-review` — εστιασμένος έλεγχος ασφάλειας (auth, isolation, injection).
+- `/simplify` — μόνο cleanups (reuse/altitude), όχι bug-hunt.
+
+Επιπλέον υπάρχει preventive CI guard: `tests/test_endpoint_permissions_guard.py`
+αποτυγχάνει αν ένα νέο DRF endpoint αφεθεί χωρίς `IsStaffUser`/scoping — ώστε το
+recurring «management endpoint προσβάσιμο από πελάτη» να μην ξανασυμβεί.

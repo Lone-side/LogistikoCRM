@@ -12,6 +12,7 @@ from ..models import (
     VoIPCall,
     Ticket,
     ClientDocument,
+    ClientLiability,
     EmailLog,
 )
 
@@ -105,6 +106,22 @@ class ClientProfileDocumentInline(admin.TabularInline):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('obligation', 'obligation__obligation_type')
+
+
+class ClientLiabilityInline(admin.TabularInline):
+    """Inline για ενημερωτικές οφειλές ΑΑΔΕ/ΕΦΚΑ στην καρτέλα πελάτη.
+
+    Ο λογιστής καταχωρεί εδώ· εμφανίζονται read-only στο portal του πελάτη.
+    """
+    model = ClientLiability
+    extra = 0
+    fields = ['source', 'description', 'amount', 'due_date', 'payment_code', 'status']
+    verbose_name = 'Οφειλή'
+    verbose_name_plural = '💶 Οφειλές (ΑΑΔΕ/ΕΦΚΑ)'
+    ordering = ['-due_date']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('client', 'created_by')
 
 
 class ClientDocumentInline(admin.TabularInline):

@@ -10,7 +10,26 @@ import {
   MONTH_NAMES,
 } from '../constants';
 
-type Tab = 'overview' | 'obligations' | 'vat' | 'documents';
+type Tab = 'overview' | 'obligations' | 'vat' | 'documents' | 'liabilities';
+
+interface PortalLiability {
+  id: number;
+  source: 'aade' | 'efka' | 'other';
+  source_display: string;
+  description: string;
+  amount: string;
+  due_date: string | null;
+  payment_code: string;
+  status: string;
+  status_display: string;
+}
+
+interface LiabilitiesData {
+  count: number;
+  results: PortalLiability[];
+  totals: Record<string, string>;
+  links: { aade: string; efka: string };
+}
 
 interface VatPeriod {
   id: number;
@@ -94,6 +113,11 @@ export default function ClientPortal() {
   const { data: documentsData, isLoading: docLoading, isError: docError } = useQuery({
     queryKey: ['portal', 'documents'],
     queryFn: portalApi.getDocuments,
+  });
+
+  const { data: liabilitiesData, isLoading: liabLoading, isError: liabError } = useQuery<LiabilitiesData>({
+    queryKey: ['portal', 'liabilities'],
+    queryFn: portalApi.getLiabilities,
   });
 
   // VAT year filter. undefined = όλα τα έτη (default — αμετάβλητη συμπεριφορά).
@@ -214,6 +238,7 @@ export default function ClientPortal() {
             ['overview', 'Επισκόπηση'],
             ['obligations', 'Υποχρεώσεις'],
             ['vat', 'ΦΠΑ'],
+            ['liabilities', 'Οφειλές'],
             ['documents', 'Έγγραφα'],
           ] as [Tab, string][]).map(([key, label]) => (
             <button
@@ -292,6 +317,76 @@ export default function ClientPortal() {
               </table></div>
             )}
           </Card>
+        )}
+
+        {tab === 'liabilities' && (
+          <div className="space-y-4">
+            {/* Deep-links — ο πελάτης βλέπει τις ζωντανές οφειλές με το δικό του TaxisNet. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <a
+                href={liabilitiesData?.links?.aade || 'https://www1.aade.gr/aadeapps3/myaade/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50"
+              >
+                <span className="font-medium text-gray-900">Οφειλές στην ΑΑΔΕ (myAADE)</span>
+                <span className="text-brand-600 text-sm">Άνοιγμα ↗</span>
+              </a>
+              <a
+                href={liabilitiesData?.links?.efka || 'https://www.e-efka.gov.gr/el/elektronikes-yperesies/ilektronikes-ypiresies-keao'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 hover:bg-gray-50"
+              >
+                <span className="font-medium text-gray-900">Οφειλές ΕΦΚΑ / ΚΕΑΟ</span>
+                <span className="text-brand-600 text-sm">Άνοιγμα ↗</span>
+              </a>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Τα παρακάτω ποσά είναι <strong>ενημερωτικά</strong>, καταχωρημένα από τον λογιστή σου.
+              Για την επίσημη/τρέχουσα εικόνα, δες myAADE / ΕΦΚΑ με το TaxisNet σου (κουμπιά παραπάνω).
+            </p>
+
+            <Card className="overflow-hidden">
+              {liabError ? (
+                <p className="p-6 text-red-700">Σφάλμα φόρτωσης οφειλών. Δοκιμάστε ξανά.</p>
+              ) : liabLoading ? (
+                <p className="p-6 text-gray-500">Φόρτωση…</p>
+              ) : !liabilitiesData || liabilitiesData.results.length === 0 ? (
+                <p className="p-6 text-gray-500">Δεν υπάρχουν καταχωρημένες οφειλές.</p>
+              ) : (
+                <div className="overflow-x-auto"><table className="w-full text-sm min-w-[480px]">
+                  <thead className="bg-gray-50 text-gray-600">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium" scope="col">Φορέας</th>
+                      <th className="text-left px-4 py-3 font-medium" scope="col">Περιγραφή</th>
+                      <th className="text-right px-4 py-3 font-medium" scope="col">Ποσό</th>
+                      <th className="text-left px-4 py-3 font-medium" scope="col">Προθεσμία</th>
+                      <th className="text-left px-4 py-3 font-medium" scope="col">Ταυτότητα Οφειλής</th>
+                      <th className="text-left px-4 py-3 font-medium" scope="col">Κατάσταση</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {liabilitiesData.results.map((l) => (
+                      <tr key={l.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-900">{l.source_display}</td>
+                        <td className="px-4 py-3 text-gray-600">{l.description}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">€{l.amount}</td>
+                        <td className="px-4 py-3 text-gray-600">{l.due_date || '—'}</td>
+                        <td className="px-4 py-3 text-gray-600">{l.payment_code || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700">
+                            {l.status_display}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table></div>
+              )}
+            </Card>
+          </div>
         )}
 
         {tab === 'vat' && (

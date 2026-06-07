@@ -15,6 +15,7 @@ vi.mock('../api/client', () => ({
       summary: { output: { net: '0.00', vat: '0.00' }, input: { net: '0.00', vat: '0.00' } },
       periods: [], records: [], records_truncated: false,
     }),
+    getLiabilities: () => Promise.resolve({ count: 0, results: [], totals: {}, links: { aade: '', efka: '' } }),
     uploadDocument: () => Promise.resolve({}),
   },
 }))
@@ -33,7 +34,7 @@ describe('ClientPortal accessibility', () => {
     renderPortal()
     expect(screen.getByRole('tablist', { name: 'Ενότητες πύλης' })).toBeInTheDocument()
     const tabs = screen.getAllByRole('tab')
-    expect(tabs.length).toBe(4)
+    expect(tabs.length).toBe(5)
   })
 
   it('marks the active tab with aria-selected', () => {

@@ -283,6 +283,14 @@ SECRET_CRM_PREFIX = '123/'
 SECRET_ADMIN_PREFIX = '456-admin/'
 SECRET_LOGIN_PREFIX = '789-login/'
 
+# Deep-links οφειλών ΑΑΔΕ/ΕΦΚΑ για το portal (ΔΕΝ υπάρχει API οφειλών — ο πελάτης
+# μπαίνει με το προσωπικό του TaxisNet). Configurable αν αλλάξουν οι επίσημες URLs.
+AADE_DEBTS_URL = os.getenv('AADE_DEBTS_URL', 'https://www1.aade.gr/aadeapps3/myaade/')
+EFKA_DEBTS_URL = os.getenv(
+    'EFKA_DEBTS_URL',
+    'https://www.e-efka.gov.gr/el/elektronikes-yperesies/ilektronikes-ypiresies-keao',
+)
+
 # 2FA enforcement on the admin (SD-002). Default OFF ώστε να ΜΗΝ κλειδωθεί
 # κανείς κατά λάθος: ενεργοποίησέ το ΑΦΟΥ οι staff εγγράψουν TOTP device.
 # Ροή ενεργοποίησης (no lockout):

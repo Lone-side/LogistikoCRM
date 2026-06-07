@@ -2676,3 +2676,58 @@ class DoorAccessLog(models.Model):
             user_agent=user_agent,
             response_data=response_data
         )
+
+
+class ClientLiability(models.Model):
+    """
+    Οφειλή πελάτη προς ΑΑΔΕ/ΕΦΚΑ — ΕΝΗΜΕΡΩΤΙΚΗ καταχώρηση από τον λογιστή.
+
+    ΔΕΝ συνδέεται με myDATA ούτε υποβάλλεται πουθενά· είναι read-only πληροφόρηση
+    για τον πελάτη στο portal. Οι «ζωντανές» οφειλές βλέπονται στο myAADE/ΚΕΑΟ με
+    το προσωπικό TaxisNet του πελάτη (deep-links στο portal). Δεν υπάρχει επίσημο
+    API οφειλών ΑΑΔΕ/ΕΦΚΑ — βλ. docs/GDPR_DATA_HANDLING.md.
+    """
+    SOURCE_CHOICES = [
+        ('aade', 'ΑΑΔΕ'),
+        ('efka', 'ΕΦΚΑ/ΚΕΑΟ'),
+        ('other', 'Άλλο'),
+    ]
+    STATUS_CHOICES = [
+        ('outstanding', 'Ανεξόφλητη'),
+        ('arranged', 'Σε ρύθμιση'),
+        ('overdue', 'Ληξιπρόθεσμη'),
+        ('paid', 'Εξοφλημένη'),
+    ]
+
+    client = models.ForeignKey(
+        ClientProfile, on_delete=models.CASCADE,
+        related_name='liabilities', verbose_name='Πελάτης',
+    )
+    source = models.CharField('Φορέας', max_length=10, choices=SOURCE_CHOICES, db_index=True)
+    description = models.CharField('Περιγραφή', max_length=200)
+    amount = models.DecimalField('Ποσό', max_digits=12, decimal_places=2, default=0)
+    due_date = models.DateField('Προθεσμία', null=True, blank=True)
+    payment_code = models.CharField('Ταυτότητα Οφειλής / RF', max_length=50, blank=True)
+    status = models.CharField(
+        'Κατάσταση', max_length=12, choices=STATUS_CHOICES,
+        default='outstanding', db_index=True,
+    )
+    notes = models.TextField('Σημειώσεις', blank=True)
+    created_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='created_liabilities', verbose_name='Καταχωρήθηκε από',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-due_date', '-created_at']
+        verbose_name = 'Οφειλή Πελάτη'
+        verbose_name_plural = 'Οφειλές Πελατών'
+        indexes = [
+            models.Index(fields=['client', 'source']),
+            models.Index(fields=['client', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_source_display()} — {self.description} ({self.amount}€) - {self.client.eponimia}"

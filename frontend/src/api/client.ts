@@ -166,6 +166,11 @@ export const portalApi = {
     const response = await apiClient.get('api/client/me/calls/');
     return response.data;
   },
+  // Ενημερωτικές οφειλές ΑΑΔΕ/ΕΦΚΑ (read-only, καταχώρηση λογιστή) + deep-links.
+  getLiabilities: async () => {
+    const response = await apiClient.get('api/client/me/liabilities/');
+    return response.data;
+  },
   getVat: async (year?: number) => {
     const params = year ? { year } : undefined;
     const response = await apiClient.get('api/client/me/vat/', { params });

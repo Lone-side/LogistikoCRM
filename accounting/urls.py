@@ -318,6 +318,7 @@ urlpatterns = [
     path("api/client/me/obligations/", api_portal.me_obligations, name="portal_me_obligations"),
     path("api/client/me/documents/", api_portal.me_documents, name="portal_me_documents"),
     path("api/client/me/calls/", api_portal.me_calls, name="portal_me_calls"),
+    path("api/client/me/liabilities/", api_portal.me_liabilities, name="portal_me_liabilities"),
     path("api/client/me/vat/", api_portal.me_vat, name="portal_me_vat"),
     path("api/client/me/vat/sync/", api_portal.me_sync_vat, name="portal_me_vat_sync"),
     path("api/client/me/documents/upload/", api_portal.me_upload_document, name="portal_me_upload"),

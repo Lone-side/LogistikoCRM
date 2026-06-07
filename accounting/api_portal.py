@@ -27,8 +27,9 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.response import Response
 from rest_framework import status
 
+from django.conf import settings
 from accounting.portal import is_client_user, get_client_profile
-from accounting.models import MonthlyObligation, ClientDocument, VoIPCall
+from accounting.models import MonthlyObligation, ClientDocument, VoIPCall, ClientLiability
 
 
 def _require_client(request):
@@ -152,6 +153,50 @@ def me_calls(request):
         'duration_seconds': getattr(c, 'duration_seconds', 0),
     } for c in qs]
     return Response({'count': len(data), 'results': data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def me_liabilities(request):
+    """GET /api/client/me/liabilities/ — ενημερωτικές οφειλές ΑΑΔΕ/ΕΦΚΑ του πελάτη.
+
+    Read-only: τις καταχωρεί ο λογιστής. Επιστρέφει και τα επίσημα deep-links
+    (myAADE / ΚΕΑΟ) όπου ο πελάτης βλέπει τις ζωντανές οφειλές με το TaxisNet του.
+    Δεν υπάρχει επίσημο API οφειλών — γι' αυτό είναι ενημερωτικά + link-out.
+    """
+    from decimal import Decimal
+
+    profile, err = _require_client(request)
+    if err:
+        return err
+    qs = (ClientLiability.objects
+          .filter(client=profile)
+          .order_by('-due_date', '-created_at'))
+    results = [{
+        'id': o.id,
+        'source': o.source,
+        'source_display': o.get_source_display(),
+        'description': o.description,
+        'amount': str(o.amount),
+        'due_date': o.due_date,
+        'payment_code': o.payment_code,
+        'status': o.status,
+        'status_display': o.get_status_display(),
+    } for o in qs]
+    # Σύνολα ανά φορέα — μόνο μη-εξοφλημένες.
+    totals = {}
+    for o in qs:
+        if o.status != 'paid':
+            totals[o.source] = totals.get(o.source, Decimal('0')) + (o.amount or Decimal('0'))
+    return Response({
+        'count': len(results),
+        'results': results,
+        'totals': {k: str(v) for k, v in totals.items()},
+        'links': {
+            'aade': getattr(settings, 'AADE_DEBTS_URL', ''),
+            'efka': getattr(settings, 'EFKA_DEBTS_URL', ''),
+        },
+    })
 
 
 class VatReadThrottle(SimpleRateThrottle):
@@ -353,33 +398,10 @@ _ALLOWED_EXTS = {'.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.pn
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 _ALLOWED_CATEGORIES = {'contracts', 'invoices', 'tax', 'myf', 'vat', 'payroll', 'general'}
 
-# Magic-byte υπογραφές ανά επέκταση — defense-in-depth content check χωρίς
-# εξάρτηση από python-magic/libmagic (το οποίο είναι native/αναξιόπιστο).
-_FILE_SIGNATURES = {
-    '.pdf': (b'%PDF',),
-    '.png': (b'\x89PNG\r\n\x1a\n',),
-    '.jpg': (b'\xff\xd8\xff',),
-    '.jpeg': (b'\xff\xd8\xff',),
-    '.docx': (b'PK\x03\x04',),   # OOXML = zip
-    '.xlsx': (b'PK\x03\x04',),
-    '.doc': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),   # legacy OLE
-    '.xls': (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',),
-}
-
-
-def _content_matches_extension(uploaded, ext):
-    """True αν τα leading bytes ταιριάζουν με την επέκταση. Επεκτάσεις χωρίς
-    γνωστή υπογραφή επιτρέπονται (το extension allowlist έχει ήδη τρέξει)."""
-    signatures = _FILE_SIGNATURES.get(ext)
-    if not signatures:
-        return True
-    try:
-        uploaded.seek(0)
-        header = uploaded.read(8)
-        uploaded.seek(0)
-    except Exception:
-        return True
-    return any(header.startswith(sig) for sig in signatures)
+# Magic-byte content check — κοινός helper με το staff path, χωρίς εξάρτηση από
+# python-magic/libmagic (το οποίο είναι native/αναξιόπιστο και μπορεί να κάνει
+# segfault τη διεργασία). Βλ. common/utils/file_validation.py.
+from common.utils.file_validation import content_matches_extension as _content_matches_extension
 
 
 @api_view(['POST'])
