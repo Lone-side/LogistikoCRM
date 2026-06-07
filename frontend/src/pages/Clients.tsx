@@ -133,8 +133,8 @@ export default function Clients() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Users className="w-6 h-6 text-blue-600" />
+          <div className="p-2 bg-brand-100 rounded-lg">
+            <Users className="w-6 h-6 text-brand-600" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Πελάτες</h1>
@@ -285,13 +285,13 @@ export default function Clients() {
                       <tr key={client.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Link to={`/clients/${client.id}`} className="flex items-center group">
-                            <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                              <span className="text-blue-600 font-medium text-sm">
+                            <div className="flex-shrink-0 h-10 w-10 bg-brand-100 rounded-full flex items-center justify-center group-hover:bg-brand-200 transition-colors">
+                              <span className="text-brand-600 font-medium text-sm">
                                 {(client.eponimia || 'Π').charAt(0).toUpperCase()}
                               </span>
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                              <div className="text-sm font-medium text-gray-900 group-hover:text-brand-600 transition-colors">
                                 {client.eponimia}
                               </div>
                               {client.is_active === false && (
@@ -321,7 +321,7 @@ export default function Clients() {
                           </Link>
                           <button
                             onClick={() => handleEdit(client)}
-                            className="text-blue-600 hover:text-blue-900 mr-3 p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="text-brand-600 hover:text-brand-900 mr-3 p-1.5 hover:bg-brand-50 rounded-lg transition-colors"
                             title="Επεξεργασία"
                           >
                             <Edit2 className="w-4 h-4" />
@@ -489,7 +489,7 @@ function ImportClientsModal({
           {/* Header */}
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Upload className="w-5 h-5 text-blue-600" />
+              <Upload className="w-5 h-5 text-brand-600" />
               Εισαγωγή Πελατών
             </h3>
           </div>
@@ -506,7 +506,7 @@ function ImportClientsModal({
                 type="file"
                 accept=".xlsx,.xls"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
               />
               {file && (
                 <p className="mt-2 text-sm text-gray-500">
@@ -528,7 +528,7 @@ function ImportClientsModal({
                     value="skip"
                     checked={mode === 'skip'}
                     onChange={() => setMode('skip')}
-                    className="w-4 h-4 text-blue-600"
+                    className="w-4 h-4 text-brand-600"
                   />
                   <span className="text-sm text-gray-700">
                     Παράλειψη υπαρχόντων (μόνο νέοι πελάτες)
@@ -541,7 +541,7 @@ function ImportClientsModal({
                     value="update"
                     checked={mode === 'update'}
                     onChange={() => setMode('update')}
-                    className="w-4 h-4 text-blue-600"
+                    className="w-4 h-4 text-brand-600"
                   />
                   <span className="text-sm text-gray-700">
                     Ενημέρωση υπαρχόντων (αντικατάσταση δεδομένων)

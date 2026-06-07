@@ -132,7 +132,7 @@ export default function ClientDetails() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
         <span className="ml-3 text-gray-500">Φόρτωση στοιχείων πελάτη...</span>
       </div>
     );
@@ -170,8 +170,8 @@ export default function ClientDetails() {
               <ChevronLeft className="w-5 h-5 text-gray-600" />
             </button>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl font-bold text-blue-600">
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center">
+                <span className="text-2xl font-bold text-brand-600">
                   {client.eponimia.charAt(0).toUpperCase()}
                 </span>
               </div>
@@ -239,7 +239,7 @@ export default function ClientDetails() {
         {client.counts && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-200">
             <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">{client.counts.obligations}</p>
+              <p className="text-2xl font-bold text-brand-600">{client.counts.obligations}</p>
               <p className="text-sm text-gray-500">Υποχρεώσεις</p>
             </div>
             <div className="text-center">
@@ -268,7 +268,7 @@ export default function ClientDetails() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                 activeTab === tab.id
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                  ? 'text-brand-600 border-b-2 border-brand-600 bg-brand-50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >

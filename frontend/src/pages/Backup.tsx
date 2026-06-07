@@ -196,7 +196,7 @@ export default function Backup() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-blue-600" size={32} />
+        <Loader2 className="animate-spin text-brand-600" size={32} />
       </div>
     );
   }
@@ -229,8 +229,8 @@ export default function Backup() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Database size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+              <Database size={20} className="text-brand-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{backups.length}</p>
@@ -346,7 +346,7 @@ export default function Backup() {
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         {backup.includes_db && (
-                          <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded">
+                          <span className="px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded">
                             DB
                           </span>
                         )}
@@ -384,7 +384,7 @@ export default function Backup() {
                           <>
                             <button
                               onClick={() => handleDownload(backup)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-2 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
                               title="Download"
                             >
                               <Download size={18} />
@@ -520,7 +520,7 @@ export default function Backup() {
                       value="replace"
                       checked={restoreMode === 'replace'}
                       onChange={() => setRestoreMode('replace')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
                       <p className="font-medium text-gray-900">Αντικατάσταση</p>
@@ -534,7 +534,7 @@ export default function Backup() {
                       value="merge"
                       checked={restoreMode === 'merge'}
                       onChange={() => setRestoreMode('merge')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
                       <p className="font-medium text-gray-900">Συγχώνευση</p>
@@ -633,7 +633,7 @@ export default function Backup() {
                       value="replace"
                       checked={restoreMode === 'replace'}
                       onChange={() => setRestoreMode('replace')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
                       <p className="font-medium text-gray-900">Αντικατάσταση</p>
@@ -647,7 +647,7 @@ export default function Backup() {
                       value="merge"
                       checked={restoreMode === 'merge'}
                       onChange={() => setRestoreMode('merge')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
                       <p className="font-medium text-gray-900">Συγχώνευση</p>

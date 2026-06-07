@@ -201,7 +201,7 @@ export function CompleteObligationModal({
             onClick={() => fileInputRef.current?.click()}
             className={`
               border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-              ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
+              ${isDragging ? 'border-brand-500 bg-brand-50' : 'border-gray-300 hover:border-gray-400'}
             `}
           >
             <input
@@ -272,7 +272,7 @@ export function CompleteObligationModal({
               type="checkbox"
               checked={saveToClientFolder}
               onChange={(e) => setSaveToClientFolder(e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded"
+              className="w-4 h-4 text-brand-600 rounded"
             />
             <FolderPlus className="w-4 h-4 text-gray-500" />
             <span className="text-sm text-gray-700">Αποθήκευση στον φάκελο πελάτη</span>
@@ -292,7 +292,7 @@ export function CompleteObligationModal({
                 }
               }}
               disabled={!clientEmail}
-              className="w-4 h-4 text-blue-600 rounded"
+              className="w-4 h-4 text-brand-600 rounded"
             />
             <Mail className="w-4 h-4 text-gray-400" />
             <span className="font-medium text-gray-900">Αποστολή email στον πελάτη</span>
@@ -310,7 +310,7 @@ export function CompleteObligationModal({
                     type="checkbox"
                     checked={attachToEmail}
                     onChange={(e) => setAttachToEmail(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded"
+                    className="w-4 h-4 text-brand-600 rounded"
                   />
                   <Paperclip className="w-4 h-4 text-gray-400" />
                   <span className="text-sm text-gray-700">Επισύναψη εγγράφου στο email</span>

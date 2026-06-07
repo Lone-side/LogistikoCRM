@@ -98,7 +98,7 @@ export default function VoIPWidget() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Phone className="w-5 h-5 text-blue-600" />
+          <Phone className="w-5 h-5 text-brand-600" />
           <h3 className="text-lg font-semibold text-gray-900">Τηλεφωνία</h3>
         </div>
         <div className="flex items-center gap-2">
@@ -129,11 +129,11 @@ export default function VoIPWidget() {
           <div className="text-xs text-gray-500">Εισερχ.</div>
         </div>
 
-        <div className="text-center p-2 bg-blue-50 rounded-lg">
+        <div className="text-center p-2 bg-brand-50 rounded-lg">
           <div className="flex items-center justify-center mb-1">
-            <PhoneOutgoing className="w-4 h-4 text-blue-600" />
+            <PhoneOutgoing className="w-4 h-4 text-brand-600" />
           </div>
-          <div className="text-xl font-bold text-blue-600">{stats.outgoing}</div>
+          <div className="text-xl font-bold text-brand-600">{stats.outgoing}</div>
           <div className="text-xs text-gray-500">Εξερχ.</div>
         </div>
 
@@ -206,7 +206,7 @@ export default function VoIPWidget() {
       <div className="flex gap-2 mt-4">
         <Link
           to="/calls"
-          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-50 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-100 transition-colors"
+          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-brand-50 text-brand-600 text-sm font-medium rounded-lg hover:bg-brand-100 transition-colors"
         >
           Κλήσεις
           <ArrowRight className="w-4 h-4" />

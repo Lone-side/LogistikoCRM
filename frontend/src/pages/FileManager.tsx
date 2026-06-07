@@ -100,7 +100,7 @@ function DocumentCard({
 
   return (
     <div
-      className={`bg-white rounded-lg border ${isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'}
+      className={`bg-white rounded-lg border ${isSelected ? 'border-brand-500 ring-2 ring-brand-200' : 'border-gray-200'}
         p-4 hover:shadow-md transition-all cursor-pointer group relative`}
     >
       {/* Selection checkbox */}
@@ -109,7 +109,7 @@ function DocumentCard({
         className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         {isSelected ? (
-          <CheckSquare size={20} className="text-blue-500" />
+          <CheckSquare size={20} className="text-brand-500" />
         ) : (
           <Square size={20} className="text-gray-400" />
         )}
@@ -205,7 +205,7 @@ function DocumentCard({
       {/* Status icons */}
       <div className="flex justify-center gap-2 mt-2">
         {document.is_favorite && <Star size={14} className="text-yellow-500" fill="#F59E0B" />}
-        {document.shared_links_count > 0 && <Link2 size={14} className="text-blue-500" />}
+        {document.shared_links_count > 0 && <Link2 size={14} className="text-brand-500" />}
         {document.version > 1 && (
           <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">v{document.version}</span>
         )}
@@ -235,11 +235,11 @@ function DocumentRow({
   onDelete: () => void;
 }) {
   return (
-    <tr className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+    <tr className={`hover:bg-gray-50 ${isSelected ? 'bg-brand-50' : ''}`}>
       <td className="px-4 py-3">
         <button onClick={onSelect}>
           {isSelected ? (
-            <CheckSquare size={18} className="text-blue-500" />
+            <CheckSquare size={18} className="text-brand-500" />
           ) : (
             <Square size={18} className="text-gray-400" />
           )}
@@ -428,7 +428,7 @@ function UploadModal({
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-            ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}`}
+            ${isDragging ? 'border-brand-500 bg-brand-50' : 'border-gray-300 hover:border-gray-400'}`}
           onClick={() => document.getElementById('file-input')?.click()}
         >
           <input
@@ -726,7 +726,7 @@ function FolderBrowserSidebar({
         {/* Header */}
         <div className="p-4 border-b flex items-center justify-between bg-gray-50">
           <div className="flex items-center gap-2">
-            <FolderOpen className="text-blue-500" size={20} />
+            <FolderOpen className="text-brand-500" size={20} />
             <h2 className="font-semibold text-gray-900">Περιήγηση Φακέλων</h2>
           </div>
           <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded">
@@ -741,7 +741,7 @@ function FolderBrowserSidebar({
               {index > 0 && <ChevronRight size={14} className="text-gray-400" />}
               <button
                 onClick={crumb.onClick}
-                className={`hover:text-blue-600 ${index === breadcrumbs.length - 1 ? 'text-blue-600 font-medium' : 'text-gray-600'}`}
+                className={`hover:text-brand-600 ${index === breadcrumbs.length - 1 ? 'text-brand-600 font-medium' : 'text-gray-600'}`}
               >
                 {crumb.label}
               </button>
@@ -754,7 +754,7 @@ function FolderBrowserSidebar({
           <div className="px-4 py-2 border-b">
             <button
               onClick={handleBack}
-              className="flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600"
+              className="flex items-center gap-2 text-sm text-gray-600 hover:text-brand-600"
             >
               <ChevronRight size={16} className="rotate-180" />
               Πίσω
@@ -766,7 +766,7 @@ function FolderBrowserSidebar({
         <div className="flex-1 overflow-y-auto p-4">
           {isBrowsing ? (
             <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500" />
             </div>
           ) : browseData?.type === 'clients' ? (
             <div className="space-y-1">
@@ -778,7 +778,7 @@ function FolderBrowserSidebar({
                   <button
                     key={client.id}
                     onClick={() => handleSelectClient(client.id)}
-                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all"
+                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-brand-50 border border-transparent hover:border-brand-200 transition-all"
                   >
                     <div className="flex items-center gap-3">
                       <FolderOpen size={20} className="text-yellow-500" />
@@ -807,10 +807,10 @@ function FolderBrowserSidebar({
                   <button
                     key={year.year}
                     onClick={() => handleSelectYear(String(year.year))}
-                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all"
+                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-brand-50 border border-transparent hover:border-brand-200 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <FolderOpen size={20} className="text-blue-500" />
+                      <FolderOpen size={20} className="text-brand-500" />
                       <span className="font-medium text-gray-900">{year.year}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -833,7 +833,7 @@ function FolderBrowserSidebar({
                   <button
                     key={m.month}
                     onClick={() => handleSelectMonth(String(m.month))}
-                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all"
+                    className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-brand-50 border border-transparent hover:border-brand-200 transition-all"
                   >
                     <div className="flex items-center gap-3">
                       <FolderOpen size={20} className="text-green-500" />
@@ -1062,7 +1062,7 @@ export default function FileManager() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <FolderOpen className="text-blue-500" />
+              <FolderOpen className="text-brand-500" />
               Διαχείριση Αρχείων
             </h1>
             <p className="text-gray-500 mt-1">
@@ -1084,8 +1084,8 @@ export default function FileManager() {
 
         {/* Active folder filter banner */}
         {hasFolderFilter && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-blue-700">
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-brand-700">
               <FolderOpen size={18} />
               <span>
                 Φίλτρο φακέλου:
@@ -1096,7 +1096,7 @@ export default function FileManager() {
             </div>
             <button
               onClick={clearFolderFilter}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+              className="flex items-center gap-1 text-sm text-brand-600 hover:text-brand-800"
             >
               <X size={16} /> Καθαρισμός
             </button>
@@ -1165,13 +1165,13 @@ export default function FileManager() {
             <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-600' : 'text-gray-500'}`}
+                className={`p-2 ${viewMode === 'grid' ? 'bg-brand-50 text-brand-600' : 'text-gray-500'}`}
               >
                 <Grid size={18} />
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 ${viewMode === 'list' ? 'bg-blue-50 text-blue-600' : 'text-gray-500'}`}
+                className={`p-2 ${viewMode === 'list' ? 'bg-brand-50 text-brand-600' : 'text-gray-500'}`}
               >
                 <List size={18} />
               </button>
@@ -1180,7 +1180,7 @@ export default function FileManager() {
             {/* More filters */}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 border rounded-lg ${showFilters ? 'border-blue-500 text-blue-600' : 'border-gray-300 text-gray-500'}`}
+              className={`flex items-center gap-2 px-3 py-2 border rounded-lg ${showFilters ? 'border-brand-500 text-brand-600' : 'border-gray-300 text-gray-500'}`}
             >
               <Filter size={18} /> Φίλτρα
             </button>
@@ -1248,8 +1248,8 @@ export default function FileManager() {
 
         {/* Bulk actions bar */}
         {selectedIds.size > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center justify-between">
-            <span className="text-blue-700">
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-3 mb-4 flex items-center justify-between">
+            <span className="text-brand-700">
               Επιλεγμένα: {selectedIds.size} αρχεία
             </span>
             <div className="flex items-center gap-2">
@@ -1271,7 +1271,7 @@ export default function FileManager() {
         {/* Documents display */}
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500"></div>
           </div>
         ) : documents.length === 0 ? (
           <div className="text-center py-16 text-gray-500">
@@ -1305,7 +1305,7 @@ export default function FileManager() {
                   <th className="px-4 py-3 text-left">
                     <button onClick={selectAll}>
                       {selectedIds.size === documents.length ? (
-                        <CheckSquare size={18} className="text-blue-500" />
+                        <CheckSquare size={18} className="text-brand-500" />
                       ) : (
                         <Square size={18} className="text-gray-400" />
                       )}

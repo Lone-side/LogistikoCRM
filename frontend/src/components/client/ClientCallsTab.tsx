@@ -31,7 +31,7 @@ export default function ClientCallsTab({
   const getCallIcon = (direction: string, status: string) => {
     if (status === 'missed') return <PhoneMissed className="w-4 h-4 text-red-500" />;
     if (direction === 'incoming') return <PhoneIncoming className="w-4 h-4 text-green-500" />;
-    return <PhoneOutgoing className="w-4 h-4 text-blue-500" />;
+    return <PhoneOutgoing className="w-4 h-4 text-brand-500" />;
   };
 
   return (

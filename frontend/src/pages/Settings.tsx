@@ -219,7 +219,7 @@ export default function Settings() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-blue-50 text-blue-700 border-l-2 border-blue-600'
+                    ? 'bg-brand-50 text-brand-700 border-l-2 border-brand-600'
                     : 'text-gray-600 hover:bg-gray-50'
                 }`}
               >
@@ -418,12 +418,12 @@ export default function Settings() {
                 {/* Obligation Settings */}
                 <Link
                   to="/settings/obligations"
-                  className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-blue-300 hover:shadow-md transition-all"
+                  className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-brand-300 hover:shadow-md transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FileText size={24} className="text-blue-600" />
+                      <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
+                        <FileText size={24} className="text-brand-600" />
                       </div>
                       <div>
                         <h3 className="font-semibold text-gray-900">Υποχρεώσεις</h3>

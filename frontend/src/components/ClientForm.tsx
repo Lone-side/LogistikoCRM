@@ -243,29 +243,29 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
 
       {/* Fetched Data Preview */}
       {fetchedData && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-          <p className="font-medium text-blue-900 mb-2">Στοιχεία από ΑΑΔΕ:</p>
-          <div className="grid grid-cols-2 gap-2 text-blue-800">
+        <div className="bg-brand-50 border border-brand-200 rounded-lg p-3 text-sm">
+          <p className="font-medium text-brand-900 mb-2">Στοιχεία από ΑΑΔΕ:</p>
+          <div className="grid grid-cols-2 gap-2 text-brand-800">
             <div>
-              <span className="text-blue-600">Επωνυμία:</span> {fetchedData.onomasia}
+              <span className="text-brand-600">Επωνυμία:</span> {fetchedData.onomasia}
             </div>
             <div>
-              <span className="text-blue-600">ΔΟΥ:</span> {fetchedData.doy_descr}
+              <span className="text-brand-600">ΔΟΥ:</span> {fetchedData.doy_descr}
             </div>
             {fetchedData.postal_address && (
               <div className="col-span-2">
-                <span className="text-blue-600">Διεύθυνση:</span>{' '}
+                <span className="text-brand-600">Διεύθυνση:</span>{' '}
                 {fetchedData.postal_address} {fetchedData.postal_address_no}, {fetchedData.postal_zip_code} {fetchedData.postal_area}
               </div>
             )}
             {fetchedData.legal_form_descr && (
               <div>
-                <span className="text-blue-600">Μορφή:</span> {fetchedData.legal_form_descr}
+                <span className="text-brand-600">Μορφή:</span> {fetchedData.legal_form_descr}
               </div>
             )}
             {fetchedData.registration_date && (
               <div>
-                <span className="text-blue-600">Έναρξη:</span> {fetchedData.registration_date}
+                <span className="text-brand-600">Έναρξη:</span> {fetchedData.registration_date}
               </div>
             )}
           </div>
@@ -426,7 +426,7 @@ export function ClientForm({ client, onSubmit, onCancel, isLoading = false }: Cl
           id="is_active"
           checked={formData.is_active}
           onChange={(e) => handleChange('is_active', e.target.checked)}
-          className="h-4 w-4 text-blue-600 focus:ring-brand-500 border-gray-300 rounded"
+          className="h-4 w-4 text-brand-600 focus:ring-brand-500 border-gray-300 rounded"
         />
         <label htmlFor="is_active" className="ml-2 text-sm text-gray-700">
           Ενεργός πελάτης

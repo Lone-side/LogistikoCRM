@@ -60,7 +60,7 @@ export function PortalAccessCard({ clientId }: Props) {
   return (
     <section className="bg-white border border-gray-200 rounded-lg p-4" aria-label="Πρόσβαση Πύλης Πελάτη">
       <div className="flex items-center gap-2 mb-3">
-        <KeyRound className="w-5 h-5 text-blue-600" aria-hidden="true" />
+        <KeyRound className="w-5 h-5 text-brand-600" aria-hidden="true" />
         <h3 className="font-semibold text-gray-900">Πρόσβαση Πύλης Πελάτη</h3>
       </div>
 

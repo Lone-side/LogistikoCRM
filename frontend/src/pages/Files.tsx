@@ -56,8 +56,8 @@ export default function Files() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users size={24} className="text-blue-600" />
+            <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
+              <Users size={24} className="text-brand-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{clientsData?.count || 0}</p>
@@ -120,7 +120,7 @@ export default function Files() {
 
         {isLoading ? (
           <div className="p-8 text-center text-gray-500">
-            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <div className="animate-spin w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full mx-auto mb-4"></div>
             Φόρτωση πελατών...
           </div>
         ) : isError ? (
@@ -160,7 +160,7 @@ export default function Files() {
                 </div>
                 <div className="flex items-center gap-4">
                   {client.total_obligations !== undefined && client.total_obligations > 0 && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                    <span className="px-2 py-1 bg-brand-100 text-brand-700 text-xs font-medium rounded">
                       {client.total_obligations} υποχρεώσεις
                     </span>
                   )}

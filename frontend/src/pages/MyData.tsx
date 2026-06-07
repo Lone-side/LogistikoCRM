@@ -193,8 +193,8 @@ export default function MyData() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-          <FileText size={20} className="text-blue-600" />
+        <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+          <FileText size={20} className="text-brand-600" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">myDATA - Αποτέλεσμα ΦΠΑ</h1>
@@ -209,7 +209,7 @@ export default function MyData() {
             onClick={() => setActiveTab('overview')}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'overview'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-brand-500 text-brand-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -220,7 +220,7 @@ export default function MyData() {
             onClick={() => setActiveTab('calculator')}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'calculator'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-brand-500 text-brand-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -243,7 +243,7 @@ export default function MyData() {
                   <select
                     value={selectedClientId || ''}
                     onChange={(e) => setSelectedClientId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500 appearance-none bg-white"
+                    className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 appearance-none bg-white"
                   >
                     <option value="">-- Επιλέξτε Πελάτη --</option>
                     {clients.map((client) => (
@@ -284,7 +284,7 @@ export default function MyData() {
           {/* Loading State */}
           {loading && (
             <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-              <RefreshCw size={32} className="mx-auto mb-4 text-blue-500 animate-spin" />
+              <RefreshCw size={32} className="mx-auto mb-4 text-brand-500 animate-spin" />
               <p className="text-gray-500">Φόρτωση δεδομένων...</p>
             </div>
           )}

@@ -154,7 +154,7 @@ export function getStatusColor(status: string): string {
     case 'overdue':
       return 'text-red-600 bg-red-100';
     case 'in_progress':
-      return 'text-blue-600 bg-blue-100';
+      return 'text-brand-600 bg-brand-100';
     case 'cancelled':
       return 'text-gray-600 bg-gray-100';
     default:

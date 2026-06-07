@@ -132,8 +132,8 @@ export default function Tickets() {
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <AlertCircle size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+              <AlertCircle size={20} className="text-brand-600" />
             </div>
             <div>
               <p className="text-sm text-gray-500">Ανοιχτά</p>
@@ -192,7 +192,7 @@ export default function Tickets() {
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-              showFilters ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+              showFilters ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-gray-200 hover:bg-gray-50'
             }`}
           >
             <Filter size={18} />
@@ -262,7 +262,7 @@ export default function Tickets() {
                     type="checkbox"
                     checked={filters.open_only || false}
                     onChange={(e) => handleFilterChange('open_only', e.target.checked || undefined)}
-                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-brand-500"
+                    className="h-4 w-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
                   />
                   <span className="text-sm text-gray-700">Μόνο ανοιχτά</span>
                 </label>
@@ -441,7 +441,7 @@ function TicketRow({
         {ticket.client ? (
           <Link
             to={`/clients/${ticket.client.id}`}
-            className="text-blue-600 hover:underline font-medium"
+            className="text-brand-600 hover:underline font-medium"
           >
             {ticket.client.eponimia}
           </Link>
@@ -751,7 +751,7 @@ function TicketDetailModal({
                   <User size={16} className="text-gray-400" />
                   <Link
                     to={`/clients/${ticket.client.id}`}
-                    className="text-blue-600 hover:underline"
+                    className="text-brand-600 hover:underline"
                   >
                     {ticket.client.eponimia}
                   </Link>
@@ -921,7 +921,7 @@ function TicketDetailModal({
             <div className="flex flex-wrap gap-2 pt-4 border-t">
               <button
                 onClick={() => handleStatusChange('open')}
-                className="px-3 py-1.5 text-sm bg-blue-100 text-blue-800 rounded-lg hover:bg-blue-200 transition-colors"
+                className="px-3 py-1.5 text-sm bg-brand-100 text-brand-800 rounded-lg hover:bg-brand-200 transition-colors"
               >
                 Επαναφορά σε ανοιχτό
               </button>

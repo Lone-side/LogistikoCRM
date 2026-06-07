@@ -262,7 +262,7 @@ export function DocumentUploadModal({
             onClick={() => fileInputRef.current?.click()}
             className={`
               border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-              ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
+              ${isDragging ? 'border-brand-500 bg-brand-50' : 'border-gray-300 hover:border-gray-400'}
             `}
           >
             <input
@@ -284,7 +284,7 @@ export function DocumentUploadModal({
           {/* Selected file preview */}
           {file && (
             <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <File className="w-8 h-8 text-blue-500" />
+              <File className="w-8 h-8 text-brand-500" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 truncate">{file.name}</p>
                 <p className="text-sm text-gray-500">{formatFileSize(file.size)}</p>
@@ -340,7 +340,7 @@ export function DocumentUploadModal({
                 type="checkbox"
                 checked={sendEmail}
                 onChange={(e) => setSendEmail(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded"
+                className="w-4 h-4 text-brand-600 rounded"
               />
               <span className="text-sm text-gray-700">Αποστολή email στον πελάτη</span>
             </label>

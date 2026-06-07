@@ -609,8 +609,8 @@ export default function Obligations() {
 
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-            <span className="text-blue-800 font-medium">
+        <div className="bg-brand-50 border border-brand-200 rounded-lg p-4 flex items-center justify-between">
+            <span className="text-brand-800 font-medium">
               {selectedIds.size} επιλεγμένα
             </span>
             <div className="flex items-center gap-2">
@@ -727,14 +727,14 @@ export default function Obligations() {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {obligations.map((obligation) => (
-                        <tr key={obligation.id} className={`hover:bg-gray-50 ${selectedIds.has(obligation.id) ? 'bg-blue-50' : ''}`}>
+                        <tr key={obligation.id} className={`hover:bg-gray-50 ${selectedIds.has(obligation.id) ? 'bg-brand-50' : ''}`}>
                           <td className="px-4 py-4">
                             <button
                               onClick={() => handleSelectOne(obligation.id)}
                               className="text-gray-400 hover:text-gray-600"
                             >
                               {selectedIds.has(obligation.id) ? (
-                                <CheckSquare className="w-5 h-5 text-blue-600" />
+                                <CheckSquare className="w-5 h-5 text-brand-600" />
                               ) : (
                                 <Square className="w-5 h-5" />
                               )}
@@ -770,7 +770,7 @@ export default function Obligations() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             {(obligation.documents_count ?? 0) > 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium">
                                 <Paperclip className="w-3 h-3" />
                                 {obligation.documents_count}
                               </span>
@@ -801,7 +801,7 @@ export default function Obligations() {
                               {/* Send email button */}
                               <button
                                 onClick={() => handleEmailClick(obligation)}
-                                className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded"
+                                className="text-brand-600 hover:text-brand-900 p-1.5 hover:bg-brand-50 rounded"
                                 title="Αποστολή email"
                               >
                                 <Mail className="w-4 h-4" />
@@ -955,7 +955,7 @@ export default function Obligations() {
                 <button
                   type="button"
                   onClick={selectAllClients}
-                  className="text-xs text-blue-600 hover:text-blue-800"
+                  className="text-xs text-brand-600 hover:text-brand-800"
                 >
                   Επιλογή όλων
                 </button>
@@ -1247,9 +1247,9 @@ function GenerateMonthModal({
                 <p className="text-2xl font-bold text-yellow-700">{result.skipped_count}</p>
                 <p className="text-sm text-yellow-600">Παραλείφθηκαν</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-blue-700">{result.clients_processed}</p>
-                <p className="text-sm text-blue-600">Πελάτες</p>
+              <div className="bg-brand-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-brand-700">{result.clients_processed}</p>
+                <p className="text-sm text-brand-600">Πελάτες</p>
               </div>
             </div>
 
@@ -1426,7 +1426,7 @@ function GenerateMonthModal({
                   type="radio"
                   checked={useAllClients}
                   onChange={() => setUseAllClients(true)}
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-brand-600"
                   disabled={isLoading}
                 />
                 <span className="text-sm text-gray-700">
@@ -1438,7 +1438,7 @@ function GenerateMonthModal({
                   type="radio"
                   checked={!useAllClients}
                   onChange={() => setUseAllClients(false)}
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-brand-600"
                   disabled={isLoading}
                 />
                 <span className="text-sm text-gray-700">Επιλεγμένοι πελάτες</span>
@@ -1457,7 +1457,7 @@ function GenerateMonthModal({
                   <button
                     type="button"
                     onClick={selectAll}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-brand-600 hover:text-brand-800"
                     disabled={isLoading}
                   >
                     Επιλογή όλων
@@ -1488,7 +1488,7 @@ function GenerateMonthModal({
                     type="checkbox"
                     checked={showOnlyWithProfiles}
                     onChange={(e) => setShowOnlyWithProfiles(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 rounded"
+                    className="h-4 w-4 text-brand-600 rounded"
                     disabled={isLoading}
                   />
                   <span className="text-xs text-gray-600 whitespace-nowrap">Μόνο με προφίλ</span>
@@ -1517,7 +1517,7 @@ function GenerateMonthModal({
                         type="checkbox"
                         checked={selectedClientIds.includes(client.id)}
                         onChange={() => toggleClient(client.id)}
-                        className="mr-3 h-4 w-4 text-blue-600 rounded"
+                        className="mr-3 h-4 w-4 text-brand-600 rounded"
                         disabled={isLoading || !client.has_obligation_profile}
                       />
                       <div className="flex-1 min-w-0">
@@ -1542,7 +1542,7 @@ function GenerateMonthModal({
                             <span> • {client.obligation_profile_names.join(', ')}</span>
                           )}
                           {client.groups_used && client.groups_used.length > 0 && (
-                            <span className="text-blue-600"> • Ομάδες: {client.groups_used.join(', ')}</span>
+                            <span className="text-brand-600"> • Ομάδες: {client.groups_used.join(', ')}</span>
                           )}
                         </div>
                       </div>
@@ -1554,8 +1554,8 @@ function GenerateMonthModal({
           )}
 
           {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-700">
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
+            <p className="text-sm text-brand-700">
               Θα δημιουργηθούν υποχρεώσεις βάσει του προφίλ κάθε πελάτη.
               Υποχρεώσεις που υπάρχουν ήδη θα παραλειφθούν.
             </p>
@@ -1753,9 +1753,9 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                 <p className="text-2xl font-bold text-green-700">{result.created_count}</p>
                 <p className="text-sm text-green-600">Νέα προφίλ</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-blue-700">{result.updated_count}</p>
-                <p className="text-sm text-blue-600">Ενημερωμένα</p>
+              <div className="bg-brand-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-brand-700">{result.updated_count}</p>
+                <p className="text-sm text-brand-600">Ενημερωμένα</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-2xl font-bold text-gray-700">{result.clients_processed}</p>
@@ -1764,8 +1764,8 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
             </div>
             <p className="text-sm text-gray-700 text-center">{result.message}</p>
             {generateCurrentMonth && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-700">
+              <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
+                <p className="text-sm text-brand-700">
                   Δημιουργήθηκαν επίσης οι υποχρεώσεις του τρέχοντος μήνα για τους επιλεγμένους πελάτες.
                 </p>
               </div>
@@ -1786,7 +1786,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
       <div className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center">
-            <UserPlus className="w-6 h-6 text-blue-600 mr-2" />
+            <UserPlus className="w-6 h-6 text-brand-600 mr-2" />
             <h2 className="text-lg font-semibold text-gray-900">Μαζική Ανάθεση Υποχρεώσεων</h2>
           </div>
           <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
@@ -1822,13 +1822,13 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
             <label className="block text-sm font-medium text-gray-700 mb-2">Τρόπος ανάθεσης</label>
             <div className="flex gap-3">
               <label className={`flex-1 flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
-                assignMode === 'add' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'
+                assignMode === 'add' ? 'border-brand-500 bg-brand-50' : 'border-gray-300 hover:bg-gray-50'
               }`}>
                 <input
                   type="radio"
                   checked={assignMode === 'add'}
                   onChange={() => setAssignMode('add')}
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-brand-600"
                   disabled={isLoading}
                 />
                 <div>
@@ -1873,7 +1873,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                   <button
                     type="button"
                     onClick={selectAllFiltered}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-brand-600 hover:text-brand-800"
                     disabled={isLoading}
                   >
                     Όλους
@@ -1927,7 +1927,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                         type="checkbox"
                         checked={selectedClientIds.includes(client.id)}
                         onChange={() => toggleClient(client.id)}
-                        className="mr-2 h-4 w-4 text-blue-600 rounded"
+                        className="mr-2 h-4 w-4 text-brand-600 rounded"
                         disabled={isLoading}
                       />
                       <div className="flex-1 min-w-0">
@@ -1940,7 +1940,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                             </span>
                           )}
                           {client.groups_used && client.groups_used.length > 0 && (
-                            <span className="text-xs text-blue-600">
+                            <span className="text-xs text-brand-600">
                               [{client.groups_used.join(', ')}]
                             </span>
                           )}
@@ -1977,7 +1977,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                           type="checkbox"
                           checked={selectedProfileIds.includes(profile.id)}
                           onChange={() => toggleProfile(profile.id)}
-                          className="mr-2 h-4 w-4 text-blue-600 rounded"
+                          className="mr-2 h-4 w-4 text-brand-600 rounded"
                           disabled={isLoading}
                         />
                         <div className="flex-1">
@@ -2017,7 +2017,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                               type="checkbox"
                               checked={selectedTypeIds.includes(type.id)}
                               onChange={() => toggleType(type.id)}
-                              className="mr-2 h-3 w-3 text-blue-600 rounded"
+                              className="mr-2 h-3 w-3 text-brand-600 rounded"
                               disabled={isLoading}
                             />
                             <span className="text-gray-600 mr-1">{type.code}</span>
@@ -2033,20 +2033,20 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
           </div>
 
           {/* Generate Current Month Option */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
             <label className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={generateCurrentMonth}
                 onChange={(e) => setGenerateCurrentMonth(e.target.checked)}
-                className="mt-0.5 h-4 w-4 text-blue-600 rounded"
+                className="mt-0.5 h-4 w-4 text-brand-600 rounded"
                 disabled={isLoading}
               />
               <div>
-                <p className="text-sm font-medium text-blue-800">
+                <p className="text-sm font-medium text-brand-800">
                   Δημιουργία υποχρεώσεων τρέχοντος μήνα
                 </p>
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-brand-600">
                   Μετά την ανάθεση, θα δημιουργηθούν αυτόματα οι υποχρεώσεις του τρέχοντος μήνα
                 </p>
               </div>

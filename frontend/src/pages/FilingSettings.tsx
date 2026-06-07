@@ -84,7 +84,7 @@ const FilingSettingsPage: React.FC = () => {
   if (loading && !settings) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+        <RefreshCw className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     );
   }
@@ -102,7 +102,7 @@ const FilingSettingsPage: React.FC = () => {
             </button>
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <FolderTree className="w-6 h-6 text-blue-600" />
+                <FolderTree className="w-6 h-6 text-brand-600" />
                 Ρυθμίσεις Αρχειοθέτησης
               </h1>
               <p className="text-gray-500 text-sm mt-1">
@@ -156,7 +156,7 @@ const FilingSettingsPage: React.FC = () => {
                     type="checkbox"
                     checked={formData.use_network_storage || false}
                     onChange={(e) => handleChange('use_network_storage', e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-brand-500"
+                    className="w-5 h-5 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium flex items-center gap-2">
@@ -207,7 +207,7 @@ const FilingSettingsPage: React.FC = () => {
                         key={choice.value}
                         className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                           formData.folder_structure === choice.value
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                             : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                         }`}
                       >
@@ -250,7 +250,7 @@ const FilingSettingsPage: React.FC = () => {
                     type="checkbox"
                     checked={formData.use_greek_month_names || false}
                     onChange={(e) => handleChange('use_greek_month_names', e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600"
+                    className="w-5 h-5 rounded border-gray-300 text-brand-600"
                   />
                   <div>
                     <span className="font-medium">Ελληνικά Ονόματα Μηνών</span>
@@ -335,7 +335,7 @@ const FilingSettingsPage: React.FC = () => {
                     key={choice.value}
                     className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
                       formData.file_naming_convention === choice.value
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                         : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
                     }`}
                   >
@@ -406,7 +406,7 @@ const FilingSettingsPage: React.FC = () => {
                       type="checkbox"
                       checked={formData.enable_retention_warnings || false}
                       onChange={(e) => handleChange('enable_retention_warnings', e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600"
+                      className="w-5 h-5 rounded border-gray-300 text-brand-600"
                     />
                     <span className="text-sm">Προειδοποιήσεις λήξης</span>
                   </label>
@@ -488,11 +488,11 @@ const FilingSettingsPage: React.FC = () => {
               </div>
 
               {/* Help */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
-                <h3 className="font-semibold text-blue-800 dark:text-blue-300 mb-2">
+              <div className="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-4">
+                <h3 className="font-semibold text-brand-800 dark:text-brand-300 mb-2">
                   Βοήθεια
                 </h3>
-                <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
+                <ul className="text-sm text-brand-700 dark:text-brand-400 space-y-1">
                   <li>• Η δομή φακέλων εφαρμόζεται σε νέους πελάτες</li>
                   <li>• Τρέξτε init_filing_system για υπάρχοντες</li>
                   <li>• Τα αρχεία δεν μετακινούνται αυτόματα</li>

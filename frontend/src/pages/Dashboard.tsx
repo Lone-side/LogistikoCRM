@@ -123,8 +123,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-lg bg-blue-100">
-              <Users className="w-6 h-6 text-blue-600" />
+            <div className="p-3 rounded-lg bg-brand-100">
+              <Users className="w-6 h-6 text-brand-600" />
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Πελάτες</p>
@@ -278,12 +278,12 @@ export default function Dashboard() {
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
+              <Calendar className="w-5 h-5 text-brand-600" />
               Εβδομάδα
             </h3>
             <Link
               to="/calendar"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-sm text-brand-600 hover:text-brand-700 font-medium"
             >
               Πλήρες ημερολόγιο
             </Link>
@@ -306,7 +306,7 @@ export default function Dashboard() {
                   key={index}
                   className={`
                     text-center p-2 rounded-lg cursor-pointer transition-colors
-                    ${isToday ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'}
+                    ${isToday ? 'bg-brand-500 text-white' : 'hover:bg-gray-100'}
                     ${isPast && !isToday ? 'text-gray-400' : ''}
                   `}
                 >
@@ -317,7 +317,7 @@ export default function Dashboard() {
                     <div
                       className={`
                         text-xs mt-1 px-1.5 py-0.5 rounded-full
-                        ${isToday ? 'bg-blue-400 text-white' : 'bg-yellow-100 text-yellow-700'}
+                        ${isToday ? 'bg-brand-400 text-white' : 'bg-yellow-100 text-yellow-700'}
                       `}
                     >
                       {obligationCount}
@@ -390,8 +390,8 @@ export default function Dashboard() {
                     key={`client-${client.id}`}
                     className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg"
                   >
-                    <div className="p-1.5 bg-blue-100 rounded-full mt-0.5">
-                      <Plus className="w-4 h-4 text-blue-600" />
+                    <div className="p-1.5 bg-brand-100 rounded-full mt-0.5">
+                      <Plus className="w-4 h-4 text-brand-600" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
@@ -453,7 +453,7 @@ export default function Dashboard() {
               {stats.upcoming_deadlines.length > 5 && (
                 <Link
                   to="/obligations"
-                  className="block text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2"
+                  className="block text-center text-sm text-brand-600 hover:text-brand-700 font-medium py-2"
                 >
                   Προβολή όλων ({stats.upcoming_deadlines.length} προθεσμίες)
                 </Link>
@@ -472,13 +472,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-3">
             <Link
               to="/clients"
-              className="flex items-center justify-between p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors group"
             >
               <div className="flex items-center">
-                <Users className="w-5 h-5 text-blue-600 mr-3" />
-                <span className="text-blue-900 font-medium">Διαχείριση Πελατών</span>
+                <Users className="w-5 h-5 text-brand-600 mr-3" />
+                <span className="text-brand-900 font-medium">Διαχείριση Πελατών</span>
               </div>
-              <ArrowRight className="w-5 h-5 text-blue-600 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 text-brand-600 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
               to="/obligations"

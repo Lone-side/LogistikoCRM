@@ -184,7 +184,7 @@ export function SendEmailModal({
                     type="checkbox"
                     checked={selectedAttachments.includes(doc.id)}
                     onChange={() => toggleAttachment(doc.id)}
-                    className="w-4 h-4 text-blue-600 rounded mr-3"
+                    className="w-4 h-4 text-brand-600 rounded mr-3"
                   />
                   <span className="text-sm truncate">{doc.filename}</span>
                 </label>
@@ -202,13 +202,13 @@ export function SendEmailModal({
               return (
                 <span
                   key={docId}
-                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-sm rounded"
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-brand-50 text-brand-700 text-sm rounded"
                 >
                   <Paperclip className="w-3 h-3" />
                   {doc.filename}
                   <button
                     onClick={() => toggleAttachment(docId)}
-                    className="ml-1 hover:text-blue-900"
+                    className="ml-1 hover:text-brand-900"
                   >
                     <X className="w-3 h-3" />
                   </button>

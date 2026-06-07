@@ -106,7 +106,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const getIcon = () => {
     switch (node.type) {
       case 'client':
-        return <Building2 className="w-4 h-4 text-blue-600" />;
+        return <Building2 className="w-4 h-4 text-brand-600" />;
       case 'permanent':
         return <Star className="w-4 h-4 text-purple-500" />;
       case 'year':
@@ -146,7 +146,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       <div
         className={`flex items-center py-1 px-2 rounded cursor-pointer transition-colors ${
           isSelected
-            ? 'bg-blue-100 dark:bg-blue-900/30'
+            ? 'bg-brand-100 dark:bg-brand-900/30'
             : 'hover:bg-gray-100 dark:hover:bg-gray-800'
         }`}
         style={{ paddingLeft: `${level * 16 + 8}px` }}

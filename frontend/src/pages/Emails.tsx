@@ -20,8 +20,8 @@ export default function Emails() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Inbox size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+              <Inbox size={20} className="text-brand-600" />
             </div>
             <div>
               <p className="text-sm text-gray-500">Εισερχόμενα</p>
@@ -81,8 +81,8 @@ export default function Emails() {
         {/* Empty State */}
         <div className="p-12">
           <div className="text-center">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Mail size={32} className="text-blue-600" />
+            <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Mail size={32} className="text-brand-600" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               Διαχείριση Email
@@ -103,15 +103,15 @@ export default function Emails() {
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Πρότυπα Email</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors cursor-pointer">
+          <div className="border border-gray-200 rounded-lg p-4 hover:border-brand-300 transition-colors cursor-pointer">
             <h4 className="font-medium text-gray-900 mb-1">Υπενθύμιση ΦΠΑ</h4>
             <p className="text-sm text-gray-500">Μηνιαία υπενθύμιση για υποβολή ΦΠΑ</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors cursor-pointer">
+          <div className="border border-gray-200 rounded-lg p-4 hover:border-brand-300 transition-colors cursor-pointer">
             <h4 className="font-medium text-gray-900 mb-1">Υπενθύμιση ΑΠΔ</h4>
             <p className="text-sm text-gray-500">Μηνιαία υπενθύμιση για υποβολή ΑΠΔ</p>
           </div>
-          <div className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors cursor-pointer">
+          <div className="border border-gray-200 rounded-lg p-4 hover:border-brand-300 transition-colors cursor-pointer">
             <h4 className="font-medium text-gray-900 mb-1">Νέο έγγραφο</h4>
             <p className="text-sm text-gray-500">Ειδοποίηση για νέο έγγραφο</p>
           </div>

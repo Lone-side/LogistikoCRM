@@ -31,7 +31,7 @@ function getFileIcon(fileType: string) {
     return <ImageIcon className="w-5 h-5 text-green-500" />;
   }
   if (['doc', 'docx'].includes(type)) {
-    return <FileText className="w-5 h-5 text-blue-500" />;
+    return <FileText className="w-5 h-5 text-brand-500" />;
   }
   if (['xls', 'xlsx'].includes(type)) {
     return <FileText className="w-5 h-5 text-green-600" />;
@@ -47,7 +47,7 @@ function VersionBadge({ version }: { version?: number }) {
     <span
       className={`
         inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-        ${version > 1 ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}
+        ${version > 1 ? 'bg-brand-100 text-brand-800' : 'bg-green-100 text-green-800'}
       `}
     >
       v{version}
@@ -101,7 +101,7 @@ export default function ClientDocumentsTab({
             data.documents.map((doc) => (
               <div
                 key={doc.id}
-                className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 hover:shadow-sm transition-all"
+                className="border border-gray-200 rounded-lg p-4 hover:border-brand-300 hover:shadow-sm transition-all"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -147,7 +147,7 @@ export default function ClientDocumentsTab({
                     {canPreview(doc) && (
                       <button
                         onClick={() => setPreviewDoc(doc)}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        className="p-1.5 text-brand-600 hover:bg-brand-50 rounded transition-colors"
                         title="Προεπισκόπηση"
                         aria-label={`Προεπισκόπηση: ${doc.filename}`}
                       >

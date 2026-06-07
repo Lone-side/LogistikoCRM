@@ -64,7 +64,7 @@ export function VersionConfirmDialog({
         {/* Existing file info */}
         <div className="bg-gray-50 rounded-lg p-4">
           <div className="flex items-start gap-3">
-            <FileText className="w-10 h-10 text-blue-500 flex-shrink-0" />
+            <FileText className="w-10 h-10 text-brand-500 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-gray-900 truncate">
                 {existingDocument.original_filename || existingDocument.filename}
@@ -72,7 +72,7 @@ export function VersionConfirmDialog({
               <div className="mt-1 space-y-1 text-sm text-gray-500">
                 <p>
                   <span className="font-medium">Έκδοση:</span>{' '}
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-brand-100 text-brand-800">
                     v{existingDocument.version}
                   </span>
                 </p>
@@ -109,7 +109,7 @@ export function VersionConfirmDialog({
             className={`
               flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all
               ${selectedAction === 'new_version'
-                ? 'border-blue-500 bg-blue-50'
+                ? 'border-brand-500 bg-brand-50'
                 : 'border-gray-200 hover:border-gray-300'
               }
             `}
@@ -121,11 +121,11 @@ export function VersionConfirmDialog({
               value="new_version"
               checked={selectedAction === 'new_version'}
               onChange={() => setSelectedAction('new_version')}
-              className="mt-1 w-4 h-4 text-blue-600"
+              className="mt-1 w-4 h-4 text-brand-600"
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <GitBranch className="w-5 h-5 text-blue-600" />
+                <GitBranch className="w-5 h-5 text-brand-600" />
                 <span className="font-semibold text-gray-900">Δημιουργία νέας έκδοσης</span>
               </div>
               <p className="mt-1 text-sm text-gray-500">
@@ -138,7 +138,7 @@ export function VersionConfirmDialog({
             className={`
               flex items-start gap-4 p-4 border-2 rounded-lg cursor-pointer transition-all
               ${selectedAction === 'replace'
-                ? 'border-blue-500 bg-blue-50'
+                ? 'border-brand-500 bg-brand-50'
                 : 'border-gray-200 hover:border-gray-300'
               }
             `}
@@ -150,7 +150,7 @@ export function VersionConfirmDialog({
               value="replace"
               checked={selectedAction === 'replace'}
               onChange={() => setSelectedAction('replace')}
-              className="mt-1 w-4 h-4 text-blue-600"
+              className="mt-1 w-4 h-4 text-brand-600"
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">

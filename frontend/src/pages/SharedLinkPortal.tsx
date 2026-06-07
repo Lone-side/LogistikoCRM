@@ -131,7 +131,7 @@ export default function SharedLinkPortal() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 text-brand-500 animate-spin mx-auto mb-4" />
           <p className="text-gray-500">Φόρτωση...</p>
         </div>
       </div>
@@ -160,8 +160,8 @@ export default function SharedLinkPortal() {
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock className="w-8 h-8 text-blue-500" />
+            <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8 text-brand-500" />
             </div>
             <h1 className="text-xl font-bold text-gray-900">{linkName || 'Κοινόχρηστο Αρχείο'}</h1>
             <p className="text-gray-500 text-sm mt-1">
@@ -320,8 +320,8 @@ export default function SharedLinkPortal() {
         <header className="bg-white border-b border-gray-200 px-4 py-4">
           <div className="max-w-6xl mx-auto">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <FolderOpen className="w-6 h-6 text-blue-500" />
+              <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
+                <FolderOpen className="w-6 h-6 text-brand-500" />
               </div>
               <div>
                 <h1 className="font-bold text-gray-900">{content.name}</h1>
@@ -362,7 +362,7 @@ export default function SharedLinkPortal() {
                   {content.access_level === 'download' && (
                     <button
                       onClick={() => handleDownload(doc.id)}
-                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-blue-500"
+                      className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-brand-500"
                       title="Λήψη"
                     >
                       <Download size={20} />

@@ -150,7 +150,7 @@ export default function ClientTicketsTab({
                         <span
                           className={`px-2 py-1 text-xs font-medium rounded ${
                             ticket.is_open
-                              ? 'bg-blue-100 text-blue-800'
+                              ? 'bg-brand-100 text-brand-800'
                               : 'bg-gray-100 text-gray-800'
                           }`}
                         >
@@ -222,7 +222,7 @@ export default function ClientTicketsTab({
                           ) : (
                             <button
                               onClick={() => setEditingTicketId(ticket.id)}
-                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                              className="p-1 text-gray-400 hover:text-brand-600 hover:bg-brand-50 rounded"
                               title="Επεξεργασία"
                             >
                               <Pencil className="w-4 h-4" />

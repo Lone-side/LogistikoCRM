@@ -222,7 +222,7 @@ export default function ClientPortal() {
               onClick={() => setTab(key)}
               className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
                 tab === key
-                  ? 'border-blue-600 text-blue-600'
+                  ? 'border-brand-600 text-brand-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -557,7 +557,7 @@ export default function ClientPortal() {
                         {d.download_url ? (
                           <a
                             href={d.download_url}
-                            className="text-blue-600 hover:text-blue-800 font-medium"
+                            className="text-brand-600 hover:text-brand-800 font-medium"
                             target="_blank"
                             rel="noreferrer"
                           >

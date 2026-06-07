@@ -279,7 +279,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                         type="checkbox"
                         checked={(formData.profiles || []).includes(p.id)}
                         onChange={() => toggleProfile(p.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
+                        className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
                       />
                       <span className="text-sm text-gray-700">{p.name}</span>
                     </label>
@@ -322,7 +322,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                   type="checkbox"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
+                  className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
                 />
                 <span className="text-sm text-gray-700">Ενεργό</span>
               </label>
@@ -531,10 +531,10 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
                       type="checkbox"
                       checked={selectedTypeIds.includes(type.id)}
                       onChange={() => toggleType(type.id)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
+                      className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
                     />
                     <span className="text-sm text-gray-700">
-                      <span className="font-medium text-blue-600">{type.code}</span>
+                      <span className="font-medium text-brand-600">{type.code}</span>
                       {' - '}
                       {type.name}
                     </span>
@@ -695,7 +695,7 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
                       type="checkbox"
                       checked={formData.obligation_types?.includes(type.id) || false}
                       onChange={() => toggleType(type.id)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
+                      className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
                     />
                     <span className="text-sm text-gray-700">
                       <span className="font-medium">{type.code}</span> - {type.name}
@@ -755,7 +755,7 @@ function ViewTypesModal({ isOpen, onClose, profile }: ViewTypesModalProps) {
             <ul className="space-y-2">
               {profile.obligation_types.map((type) => (
                 <li key={type.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                  <span className="px-2 py-1 text-xs font-medium bg-brand-100 text-brand-700 rounded">
                     {type.code}
                   </span>
                   <span className="text-sm text-gray-700">{type.name}</span>
@@ -918,8 +918,8 @@ export default function ObligationSettings() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Settings className="text-blue-600" size={20} />
+          <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+            <Settings className="text-brand-600" size={20} />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Ρυθμίσεις Υποχρεώσεων</h1>
@@ -941,7 +941,7 @@ export default function ObligationSettings() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'text-blue-600 border-b-2 border-blue-600 -mb-px bg-blue-50/50'
+                  ? 'text-brand-600 border-b-2 border-brand-600 -mb-px bg-brand-50/50'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
@@ -949,7 +949,7 @@ export default function ObligationSettings() {
               {tab.label}
               <span
                 className={`px-2 py-0.5 text-xs rounded-full ${
-                  activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                  activeTab === tab.id ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-600'
                 }`}
               >
                 {tab.count}
@@ -1003,7 +1003,7 @@ export default function ObligationSettings() {
                       {types.map((type) => (
                         <tr key={type.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
-                            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                            <span className="px-2 py-1 text-xs font-medium bg-brand-100 text-brand-700 rounded">
                               {type.code}
                             </span>
                           </td>
@@ -1050,7 +1050,7 @@ export default function ObligationSettings() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEdit('types', type)}
-                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                className="p-1 text-gray-400 hover:text-brand-600 transition-colors"
                                 title="Επεξεργασία"
                               >
                                 <Pencil size={16} />
@@ -1103,7 +1103,7 @@ export default function ObligationSettings() {
                           <td className="px-4 py-3">
                             <button
                               onClick={() => handleViewTypes(profile)}
-                              className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                              className="px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded hover:bg-brand-200 transition-colors"
                             >
                               {profile.obligation_types_count} τύποι
                             </button>
@@ -1112,7 +1112,7 @@ export default function ObligationSettings() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEdit('profiles', profile)}
-                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                className="p-1 text-gray-400 hover:text-brand-600 transition-colors"
                                 title="Επεξεργασία"
                               >
                                 <Pencil size={16} />
@@ -1182,7 +1182,7 @@ export default function ObligationSettings() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEdit('groups', group)}
-                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                className="p-1 text-gray-400 hover:text-brand-600 transition-colors"
                                 title="Επεξεργασία"
                               >
                                 <Pencil size={16} />

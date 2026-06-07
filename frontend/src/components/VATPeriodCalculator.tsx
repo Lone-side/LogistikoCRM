@@ -387,9 +387,9 @@ export default function VATPeriodCalculator() {
             </div>
 
             {/* Διαφορά */}
-            <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-blue-500 shadow-sm p-4">
+            <div className="bg-white rounded-lg border border-gray-200 border-l-4 border-l-brand-500 shadow-sm p-4">
               <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                <Scale size={16} className="text-blue-500" />
+                <Scale size={16} className="text-brand-500" />
                 Διαφορά (Εκροές − Εισροές)
               </p>
               <p className={`text-2xl font-bold mt-2 ${result.vat_difference >= 0 ? 'text-gray-900' : 'text-emerald-600'}`}>

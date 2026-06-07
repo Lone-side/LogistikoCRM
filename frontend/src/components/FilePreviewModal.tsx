@@ -61,7 +61,7 @@ export function FilePreviewModal({
             {previewType === 'pdf' ? (
               <FileText className="w-6 h-6 text-red-500" />
             ) : previewType === 'image' ? (
-              <ImageIcon className="w-6 h-6 text-blue-500" />
+              <ImageIcon className="w-6 h-6 text-brand-500" />
             ) : (
               <FileText className="w-6 h-6 text-gray-500" />
             )}
@@ -106,7 +106,7 @@ export function FilePreviewModal({
         <div className="flex-1 overflow-hidden mt-4 bg-gray-100 rounded-lg relative">
           {isLoading && canPreview && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
             </div>
           )}
 

@@ -135,7 +135,7 @@ export default function Calls() {
           <p className="text-gray-500 mt-1">
             Ιστορικό κλήσεων και VoIP ενσωμάτωση
             {autoRefresh && (
-              <span className="ml-2 text-xs text-blue-500">
+              <span className="ml-2 text-xs text-brand-500">
                 • Αυτόματη ανανέωση σε {secondsUntilRefresh}s
               </span>
             )}
@@ -147,7 +147,7 @@ export default function Calls() {
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               autoRefresh
-                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
             title={autoRefresh ? 'Απενεργοποίηση αυτόματης ανανέωσης' : 'Ενεργοποίηση αυτόματης ανανέωσης'}
@@ -197,8 +197,8 @@ export default function Calls() {
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <PhoneOutgoing size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+              <PhoneOutgoing size={20} className="text-brand-600" />
             </div>
             <div>
               <p className="text-sm text-gray-500">Εξερχόμενες</p>
@@ -253,7 +253,7 @@ export default function Calls() {
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-              showFilters ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+              showFilters ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-gray-200 hover:bg-gray-50'
             }`}
           >
             <Filter size={18} />
@@ -474,7 +474,7 @@ function CallRow({
     if (call.direction === 'incoming') {
       return <PhoneIncoming size={18} className="text-green-500" />;
     }
-    return <PhoneOutgoing size={18} className="text-blue-500" />;
+    return <PhoneOutgoing size={18} className="text-brand-500" />;
   };
 
   const getDirectionLabel = () => {
@@ -508,7 +508,7 @@ function CallRow({
         {call.client ? (
           <Link
             to={`/clients/${call.client.id}`}
-            className="text-blue-600 hover:underline font-medium"
+            className="text-brand-600 hover:underline font-medium"
           >
             {call.client.eponimia}
           </Link>
@@ -525,7 +525,7 @@ function CallRow({
           {!call.client && (
             <button
               onClick={onMatchClient}
-              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              className="p-1.5 text-brand-600 hover:bg-brand-50 rounded transition-colors"
               title="Αντιστοίχιση πελάτη"
             >
               <User size={16} />
@@ -625,7 +625,7 @@ function MatchClientModal({
                 <button
                   key={client.id}
                   onClick={() => handleMatch(client.id)}
-                  className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors"
+                  className="w-full px-4 py-3 text-left hover:bg-brand-50 transition-colors"
                 >
                   <p className="font-medium text-gray-900">{client.eponimia}</p>
                   <p className="text-sm text-gray-500">ΑΦΜ: {client.afm}</p>
@@ -693,7 +693,7 @@ function CreateTicketFromCallModal({
             <p className="text-sm text-gray-600">Κλήση:</p>
             <p className="font-mono font-medium">{call.phone_number}</p>
             {call.client && (
-              <p className="text-sm text-blue-600 mt-1">{call.client.eponimia}</p>
+              <p className="text-sm text-brand-600 mt-1">{call.client.eponimia}</p>
             )}
           </div>
 

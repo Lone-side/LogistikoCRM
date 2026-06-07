@@ -35,7 +35,7 @@ export default function DoorButton() {
     icon = <Check size={18} />;
     label = 'Άνοιξε!';
   } else if (isLoading) {
-    buttonStyle = 'bg-blue-500 text-white opacity-70 cursor-wait';
+    buttonStyle = 'bg-brand-500 text-white opacity-70 cursor-wait';
     icon = <Loader2 size={18} className="animate-spin" />;
     label = '...';
   } else if (pulseDoor.isError) {

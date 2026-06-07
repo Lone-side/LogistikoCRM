@@ -75,14 +75,14 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   const icons = {
     success: <CheckCircle className="w-5 h-5 text-green-500" />,
     error: <AlertCircle className="w-5 h-5 text-red-500" />,
-    info: <Info className="w-5 h-5 text-blue-500" />,
+    info: <Info className="w-5 h-5 text-brand-500" />,
     'missed-call': <PhoneMissed className="w-5 h-5 text-red-500" />,
   };
 
   const bgColors = {
     success: 'bg-green-50 border-green-200',
     error: 'bg-red-50 border-red-200',
-    info: 'bg-blue-50 border-blue-200',
+    info: 'bg-brand-50 border-brand-200',
     'missed-call': 'bg-red-50 border-red-200',
   };
 

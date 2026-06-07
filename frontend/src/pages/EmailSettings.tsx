@@ -156,7 +156,7 @@ export default function EmailSettings() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
         <span className="ml-3 text-gray-600">Φόρτωση ρυθμίσεων...</span>
       </div>
     );
@@ -185,8 +185,8 @@ export default function EmailSettings() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Mail className="w-6 h-6 text-blue-600" />
+          <div className="p-2 bg-brand-100 rounded-lg">
+            <Mail className="w-6 h-6 text-brand-600" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Ρυθμίσεις Email</h1>
@@ -376,12 +376,12 @@ export default function EmailSettings() {
             </div>
 
             {/* Gmail Help */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-800 mb-2 flex items-center gap-2">
+            <div className="bg-brand-50 border border-brand-200 rounded-lg p-4">
+              <h4 className="font-medium text-brand-800 mb-2 flex items-center gap-2">
                 <Shield className="w-4 h-4" />
                 Για Gmail / Google Workspace
               </h4>
-              <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+              <ul className="text-sm text-brand-700 space-y-1 list-disc list-inside">
                 <li>Ενεργοποιήστε 2-Factor Authentication</li>
                 <li>Δημιουργήστε App Password από τις ρυθμίσεις Google</li>
                 <li>Χρησιμοποιήστε το App Password αντί για τον κανονικό κωδικό</li>

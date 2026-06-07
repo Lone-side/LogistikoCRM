@@ -54,8 +54,8 @@ export default function SetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-blue-100">
-            <KeyRound className="h-6 w-6 text-blue-600" />
+          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-brand-100">
+            <KeyRound className="h-6 w-6 text-brand-600" />
           </div>
           <h1 className="mt-4 text-3xl font-bold text-gray-900">Ορισμός Κωδικού</h1>
           <h2 className="mt-2 text-lg text-gray-600">
@@ -98,7 +98,7 @@ export default function SetPassword() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-brand-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-brand-500 focus:border-brand-500"
                   placeholder="Τουλάχιστον 8 χαρακτήρες"
                 />
               </div>
@@ -114,7 +114,7 @@ export default function SetPassword() {
                   required
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-brand-500 focus:border-blue-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-brand-500 focus:border-brand-500"
                   placeholder="Επαναλάβετε τον κωδικό"
                 />
               </div>

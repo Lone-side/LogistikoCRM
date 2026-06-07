@@ -37,7 +37,7 @@ export const OBLIGATION_STATUS_LABELS_PLURAL: Record<string, string> = {
 /** Status colors for obligation badges - Tailwind classes */
 export const OBLIGATION_STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
-  in_progress: 'bg-blue-100 text-blue-800',
+  in_progress: 'bg-brand-100 text-brand-800',
   completed: 'bg-green-100 text-green-800',
   overdue: 'bg-red-100 text-red-800',
   cancelled: 'bg-gray-100 text-gray-800',
@@ -67,7 +67,7 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
 
 /** Status colors for ticket badges - Tailwind classes */
 export const TICKET_STATUS_COLORS: Record<string, string> = {
-  open: 'bg-blue-100 text-blue-800',
+  open: 'bg-brand-100 text-brand-800',
   assigned: 'bg-cyan-100 text-cyan-800',
   in_progress: 'bg-yellow-100 text-yellow-800',
   resolved: 'bg-green-100 text-green-800',
@@ -118,7 +118,7 @@ export const PRIORITY_OPTIONS = [
 
 /** Call status colors - text color classes (different format for call icons) */
 export const CALL_STATUS_COLORS: Record<string, string> = {
-  active: 'text-blue-600',
+  active: 'text-brand-600',
   completed: 'text-green-600',
   missed: 'text-red-600',
   failed: 'text-gray-600',
@@ -126,7 +126,7 @@ export const CALL_STATUS_COLORS: Record<string, string> = {
 
 /** Call status colors - badge format with background (for SearchModal) */
 export const CALL_STATUS_BADGE_COLORS: Record<string, string> = {
-  active: 'bg-blue-100 text-blue-700',
+  active: 'bg-brand-100 text-brand-700',
   completed: 'bg-green-100 text-green-700',
   missed: 'bg-red-100 text-red-700',
   failed: 'bg-gray-100 text-gray-700',

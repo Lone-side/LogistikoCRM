@@ -39,7 +39,7 @@ export default function NotificationDropdown() {
       case 'due_today':
         return <Clock size={16} className="text-orange-500" />;
       case 'upcoming':
-        return <Calendar size={16} className="text-blue-500" />;
+        return <Calendar size={16} className="text-brand-500" />;
       default:
         return <Bell size={16} className="text-gray-500" />;
     }
@@ -52,7 +52,7 @@ export default function NotificationDropdown() {
       case 'medium':
         return 'border-l-orange-500 bg-orange-50';
       default:
-        return 'border-l-blue-500 bg-blue-50';
+        return 'border-l-brand-500 bg-brand-50';
     }
   };
 
@@ -165,7 +165,7 @@ export default function NotificationDropdown() {
                   setIsOpen(false);
                   navigate('/obligations?status=overdue,pending');
                 }}
-                className="w-full text-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+                className="w-full text-center text-sm text-brand-600 hover:text-brand-800 font-medium"
               >
                 Προβολή όλων των υποχρεώσεων
               </button>

@@ -150,7 +150,7 @@ export function BulkCompleteModal({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-medium flex items-center justify-center">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-brand-100 text-brand-600 text-xs font-medium flex items-center justify-center">
                       {index + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -213,7 +213,7 @@ export function BulkCompleteModal({
 
         {/* Summary */}
         {filesCount > 0 && (
-          <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700">
+          <div className="bg-brand-50 rounded-lg p-3 text-sm text-brand-700">
             <strong>{filesCount}</strong> από {obligations.length} υποχρεώσεις έχουν επισυναπτόμενο αρχείο
           </div>
         )}
@@ -225,7 +225,7 @@ export function BulkCompleteModal({
               type="checkbox"
               checked={saveToClientFolders}
               onChange={(e) => setSaveToClientFolders(e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded"
+              className="w-4 h-4 text-brand-600 rounded"
             />
             <FolderPlus className="w-4 h-4 text-gray-500" />
             <span className="text-sm text-gray-700">Αποθήκευση εγγράφων στους φακέλους πελατών</span>
@@ -244,7 +244,7 @@ export function BulkCompleteModal({
                   setAttachToEmails(false);
                 }
               }}
-              className="w-4 h-4 text-blue-600 rounded"
+              className="w-4 h-4 text-brand-600 rounded"
             />
             <Mail className="w-4 h-4 text-gray-400" />
             <span className="font-medium text-gray-900">Αποστολή email ενημέρωσης</span>
@@ -280,7 +280,7 @@ export function BulkCompleteModal({
                     type="checkbox"
                     checked={attachToEmails}
                     onChange={(e) => setAttachToEmails(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded"
+                    className="w-4 h-4 text-brand-600 rounded"
                   />
                   <Paperclip className="w-4 h-4 text-gray-400" />
                   <span className="text-sm text-gray-700">Επισύναψη εγγράφων στα emails</span>

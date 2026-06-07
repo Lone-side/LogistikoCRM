@@ -64,7 +64,7 @@ export default function UploadModal({
           {/* Drop zone */}
           <div
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-              dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+              dragActive ? 'border-brand-500 bg-brand-50' : 'border-gray-300'
             }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -80,7 +80,7 @@ export default function UploadModal({
             />
             {file ? (
               <div className="flex items-center justify-center gap-2">
-                <FileText className="w-8 h-8 text-blue-600" />
+                <FileText className="w-8 h-8 text-brand-600" />
                 <span className="font-medium">{file.name}</span>
                 <button
                   onClick={() => setFile(null)}
@@ -95,7 +95,7 @@ export default function UploadModal({
                 <p className="text-gray-600 mb-1">Σύρετε αρχείο εδώ ή</p>
                 <button
                   onClick={() => inputRef.current?.click()}
-                  className="text-blue-600 hover:underline"
+                  className="text-brand-600 hover:underline"
                 >
                   επιλέξτε αρχείο
                 </button>

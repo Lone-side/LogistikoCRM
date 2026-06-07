@@ -26,8 +26,8 @@ const CATEGORIES = {
   clients: {
     label: 'ΠΕΛΑΤΕΣ',
     icon: Users,
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600'
+    iconBg: 'bg-brand-100',
+    iconColor: 'text-brand-600'
   },
   obligations: {
     label: 'ΥΠΟΧΡΕΩΣΕΙΣ',
@@ -183,7 +183,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
         data-index={globalIndex}
         onClick={() => navigateToResult(item)}
         className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-          isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+          isSelected ? 'bg-brand-50' : 'hover:bg-gray-50'
         }`}
       >
         <div

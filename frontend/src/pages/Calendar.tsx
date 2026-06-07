@@ -68,7 +68,7 @@ function CalendarDayCell({ day, isCurrentMonth, isToday: isTodayDay, dayData, on
         <span
           className={`
             text-sm md:text-base font-medium
-            ${isTodayDay ? 'text-blue-600 font-bold' : ''}
+            ${isTodayDay ? 'text-brand-600 font-bold' : ''}
           `}
         >
           {day}
@@ -174,18 +174,18 @@ function DayDetailModal({
         <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
           {/* Header */}
           <div className={`flex items-center justify-between p-4 border-b border-gray-200 ${
-            isDateToday ? 'bg-blue-50' : isPastDate ? 'bg-gray-50' : 'bg-white'
+            isDateToday ? 'bg-brand-50' : isPastDate ? 'bg-gray-50' : 'bg-white'
           }`}>
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${
-                isDateToday ? 'bg-blue-100' : 'bg-gray-100'
+                isDateToday ? 'bg-brand-100' : 'bg-gray-100'
               }`}>
-                <CalendarIcon size={20} className={isDateToday ? 'text-blue-600' : 'text-gray-600'} />
+                <CalendarIcon size={20} className={isDateToday ? 'text-brand-600' : 'text-gray-600'} />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{dateStr}</h3>
                 {isDateToday && (
-                  <span className="text-xs text-blue-600 font-medium">Σήμερα</span>
+                  <span className="text-xs text-brand-600 font-medium">Σήμερα</span>
                 )}
                 {isPastDate && !isDateToday && (
                   <span className="text-xs text-gray-500">Παρελθούσα ημερομηνία</span>
@@ -217,7 +217,7 @@ function DayDetailModal({
                     </span>
                   )}
                   {dayData.in_progress > 0 && (
-                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 flex items-center gap-1">
+                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-brand-100 text-brand-800 flex items-center gap-1">
                       <Clock size={14} />
                       Σε εξέλιξη: {dayData.in_progress}
                     </span>
@@ -247,7 +247,7 @@ function DayDetailModal({
                           : obl.status === 'overdue'
                           ? 'bg-red-50 border-red-200'
                           : obl.status === 'in_progress'
-                          ? 'bg-blue-50 border-blue-200'
+                          ? 'bg-brand-50 border-brand-200'
                           : 'bg-white border-gray-200 hover:border-gray-300'
                       }`}
                     >
@@ -263,7 +263,7 @@ function DayDetailModal({
                             <span className={`text-xs font-medium ${
                               obl.status === 'overdue' ? 'text-red-600' :
                               obl.status === 'completed' ? 'text-green-600' :
-                              obl.status === 'in_progress' ? 'text-blue-600' :
+                              obl.status === 'in_progress' ? 'text-brand-600' :
                               'text-gray-500'
                             }`}>
                               {getStatusLabel(obl.status)}
@@ -328,7 +328,7 @@ function DayDetailModal({
                           {/* View client */}
                           <Link
                             to={`/clients/${obl.client_id}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-100 hover:bg-brand-200 rounded-lg transition-colors"
                             title="Προβολή πελάτη"
                           >
                             <ExternalLink size={14} />
@@ -613,7 +613,7 @@ export default function Calendar() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={goToToday}
-            className="px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
           >
             Σήμερα
           </button>
@@ -621,7 +621,7 @@ export default function Calendar() {
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
               hasActiveFilters
-                ? 'bg-blue-100 text-blue-700'
+                ? 'bg-brand-100 text-brand-700'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
           >
@@ -664,7 +664,7 @@ export default function Calendar() {
                     client_id: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
               >
                 <option value="">Όλοι οι πελάτες</option>
                 {clientsData?.results?.map((client) => (
@@ -688,7 +688,7 @@ export default function Calendar() {
                     type_id: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
               >
                 <option value="">Όλοι οι τύποι</option>
                 {obligationTypes?.map((type) => (
@@ -712,7 +712,7 @@ export default function Calendar() {
                     status: e.target.value || undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
               >
                 <option value="">Όλες οι καταστάσεις</option>
                 <option value="pending">Εκκρεμεί</option>
@@ -777,7 +777,7 @@ export default function Calendar() {
           </div>
           <div className="bg-white rounded-lg shadow p-4 col-span-2 md:col-span-1">
             <p className="text-sm text-gray-500">Σε εξέλιξη</p>
-            <p className="text-2xl font-bold text-blue-600">
+            <p className="text-2xl font-bold text-brand-600">
               {calendarData.summary.in_progress}
             </p>
           </div>
@@ -787,7 +787,7 @@ export default function Calendar() {
       {/* Calendar grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
           <span className="ml-3 text-gray-500">Φόρτωση...</span>
         </div>
       ) : isError ? (
@@ -820,7 +820,7 @@ export default function Calendar() {
             <span className="text-sm text-gray-600">Εκπρόθεσμες</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded bg-blue-100"></span>
+            <span className="w-4 h-4 rounded bg-brand-100"></span>
             <span className="text-sm text-gray-600">Σε εξέλιξη</span>
           </div>
           <div className="flex items-center gap-2">

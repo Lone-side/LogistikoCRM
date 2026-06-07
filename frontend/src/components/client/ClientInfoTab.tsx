@@ -132,7 +132,7 @@ export default function ClientInfoTab({
           type="checkbox"
           checked={!!value}
           onChange={(e) => onFieldChange(field, e.target.checked)}
-          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-brand-500"
+          className="h-4 w-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
         />
       );
     }
@@ -169,7 +169,7 @@ export default function ClientInfoTab({
       {/* Basic Info Section */}
       <section>
         <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <User className="w-5 h-5 text-blue-600" />
+          <User className="w-5 h-5 text-brand-600" />
           Βασικά Στοιχεία
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -241,7 +241,7 @@ export default function ClientInfoTab({
       {/* Business Address Section */}
       <section>
         <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <Building className="w-5 h-5 text-blue-600" />
+          <Building className="w-5 h-5 text-brand-600" />
           Διεύθυνση Επιχείρησης
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -291,7 +291,7 @@ export default function ClientInfoTab({
       {/* myDATA ΑΑΔΕ Section */}
       <section>
         <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <Building2 className="w-5 h-5 text-blue-600" />
+          <Building2 className="w-5 h-5 text-brand-600" />
           myDATA ΑΑΔΕ
           {myDataCreds?.is_verified && (
             <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
@@ -385,7 +385,7 @@ export default function ClientInfoTab({
               </Button>
               <Link
                 to="/mydata"
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-brand-600 hover:text-brand-800 hover:bg-brand-50 rounded"
               >
                 <ExternalLink className="w-4 h-4" />
                 Προβολή ΦΠΑ
@@ -452,7 +452,7 @@ export default function ClientInfoTab({
                   type="checkbox"
                   checked={myDataIsSandbox}
                   onChange={(e) => setMyDataIsSandbox(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-brand-500"
+                  className="h-4 w-4 text-brand-600 rounded border-gray-300 focus:ring-brand-500"
                 />
                 <span className="text-sm text-gray-700">
                   Sandbox (Test περιβάλλον)
@@ -490,7 +490,7 @@ export default function ClientInfoTab({
                 Σφάλμα αποθήκευσης: {(saveMyDataMutation.error as Error)?.message || 'Άγνωστο σφάλμα'}
               </div>
             )}
-            <div className="p-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm">
+            <div className="p-3 bg-brand-50 text-brand-700 border border-brand-200 rounded-lg text-sm">
               <p className="font-medium mb-1">Οδηγίες:</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
                 <li>Συνδεθείτε στο <a href="https://mydata.aade.gr" target="_blank" rel="noopener noreferrer" className="underline">mydata.aade.gr</a></li>

@@ -32,7 +32,7 @@ const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  'ΦΠΑ': 'bg-blue-500',
+  'ΦΠΑ': 'bg-brand-500',
   'ΑΠΔ': 'bg-green-500',
   'ΕΝΦΙΑ': 'bg-yellow-500',
   'Ε1': 'bg-purple-500',
@@ -146,7 +146,7 @@ export default function Reports() {
                   onClick={() => handleExport('obligations')}
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
                 >
-                  <FileSpreadsheet size={18} className="text-blue-600" />
+                  <FileSpreadsheet size={18} className="text-brand-600" />
                   <div>
                     <div className="font-medium text-sm">Υποχρεώσεις (Excel)</div>
                     <div className="text-xs text-gray-500">Τρέχουσες υποχρεώσεις</div>
@@ -196,7 +196,7 @@ export default function Reports() {
                 onClick={() => setPeriod(option.value)}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
                   period === option.value
-                    ? 'bg-blue-50 text-blue-700'
+                    ? 'bg-brand-50 text-brand-700'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
@@ -211,8 +211,8 @@ export default function Reports() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users size={24} className="text-blue-600" />
+            <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
+              <Users size={24} className="text-brand-600" />
             </div>
             {renderChange(stats?.comparison?.clients_change)}
           </div>
@@ -259,7 +259,7 @@ export default function Reports() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Υποχρεώσεις ανά τύπο</h3>
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
             </div>
           ) : stats?.obligations_by_type && stats.obligations_by_type.length > 0 ? (
             <div className="space-y-4">
@@ -292,7 +292,7 @@ export default function Reports() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Μηνιαία δραστηριότητα</h3>
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
             </div>
           ) : stats?.monthly_activity && stats.monthly_activity.length > 0 ? (
             <div className="h-48">

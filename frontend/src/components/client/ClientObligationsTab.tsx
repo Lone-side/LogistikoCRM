@@ -76,7 +76,7 @@ export default function ClientObligationsTab({
         </div>
         <Link
           to={`/obligations?client=${clientId}`}
-          className="ml-auto text-sm text-blue-600 hover:underline"
+          className="ml-auto text-sm text-brand-600 hover:underline"
         >
           Προβολή όλων
           <ExternalLink className="w-3 h-3 inline ml-1" />
@@ -126,7 +126,7 @@ export default function ClientObligationsTab({
                     <td className="px-4 py-3 text-sm">
                       <Link
                         to={`/obligations?id=${obl.id}`}
-                        className="text-blue-600 hover:underline font-medium"
+                        className="text-brand-600 hover:underline font-medium"
                       >
                         {obl.obligation_type_name || obl.obligation_type_code}
                       </Link>

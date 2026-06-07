@@ -80,7 +80,7 @@ export default function UserManagement() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Users className="text-blue-600" />
+            <Users className="text-brand-600" />
             Διαχείριση Χρηστών
           </h1>
           <p className="text-gray-500 mt-1">
@@ -126,7 +126,7 @@ export default function UserManagement() {
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center">
-            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-blue-600" />
+            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-brand-600" />
             <p className="text-gray-500">Φόρτωση χρηστών...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
@@ -244,8 +244,8 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
     <tr className={`hover:bg-gray-50 ${!user.is_active ? 'opacity-60' : ''}`}>
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-            <span className="text-blue-600 font-medium">
+          <div className="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center">
+            <span className="text-brand-600 font-medium">
               {user.first_name?.charAt(0) || user.username.charAt(0).toUpperCase()}
             </span>
           </div>
@@ -255,7 +255,7 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
                 ? `${user.first_name} ${user.last_name}`
                 : user.username}
               {isCurrentUser && (
-                <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                <span className="ml-2 px-2 py-0.5 text-xs bg-brand-100 text-brand-700 rounded">
                   Εσείς
                 </span>
               )}
@@ -273,7 +273,7 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
               Διαχειριστής
             </span>
           ) : user.is_staff ? (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded-full">
               <UserCheck size={12} />
               Προσωπικό
             </span>
@@ -319,7 +319,7 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
           {canEdit && (
             <button
               onClick={onEdit}
-              className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-brand-100 text-brand-600 rounded-lg transition-colors"
               title="Επεξεργασία"
             >
               <Pencil size={16} />
@@ -587,7 +587,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, is_staff: e.target.checked })
                     }
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
+                    className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium text-gray-900">Προσωπικό</span>
@@ -604,7 +604,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, is_active: e.target.checked })
                     }
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-brand-500"
+                    className="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium text-gray-900">Ενεργός</span>

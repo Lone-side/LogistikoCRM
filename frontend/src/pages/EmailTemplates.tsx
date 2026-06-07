@@ -66,8 +66,8 @@ export default function EmailTemplates() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Mail className="w-6 h-6 text-blue-600" />
+          <div className="p-2 bg-brand-100 rounded-lg">
+            <Mail className="w-6 h-6 text-brand-600" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Emails</h1>
@@ -83,7 +83,7 @@ export default function EmailTemplates() {
             onClick={() => setActiveTab('history')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'history'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-brand-500 text-brand-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -94,7 +94,7 @@ export default function EmailTemplates() {
             onClick={() => setActiveTab('templates')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'templates'
-                ? 'border-blue-500 text-blue-600'
+                ? 'border-brand-500 text-brand-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -194,7 +194,7 @@ function EmailHistoryTab() {
         );
       case 'queued':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-brand-100 text-brand-700 rounded-full">
             <Clock className="w-3 h-3" />
             Στην ουρά
           </span>
@@ -264,8 +264,8 @@ function EmailHistoryTab() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Send className="w-5 h-5 text-blue-600" />
+            <div className="p-2 bg-brand-100 rounded-lg">
+              <Send className="w-5 h-5 text-brand-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{data?.count || 0}</p>
@@ -335,7 +335,7 @@ function EmailHistoryTab() {
       {/* Loading */}
       {isLoading && (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-4"></div>
           <p className="text-gray-500">Φόρτωση ιστορικού...</p>
         </div>
       )}
@@ -377,8 +377,8 @@ function EmailHistoryTab() {
                   >
                     <div className="col-span-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <User className="w-4 h-4 text-blue-600" />
+                        <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4 text-brand-600" />
                         </div>
                         <div className="min-w-0">
                           <p className="font-medium text-gray-900 truncate">
@@ -410,7 +410,7 @@ function EmailHistoryTab() {
                     <div className="col-span-1 flex justify-end gap-1">
                       <button
                         onClick={() => handleViewDetails(email)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        className="p-2 text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg"
                         title="Λεπτομέρειες"
                       >
                         <Eye className="w-4 h-4" />
@@ -418,7 +418,7 @@ function EmailHistoryTab() {
                       {email.client && (
                         <Link
                           to={`/clients/${email.client}`}
-                          className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                          className="p-2 text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg"
                           title="Προβολή πελάτη"
                         >
                           <ExternalLink className="w-4 h-4" />
@@ -690,7 +690,7 @@ function EmailTemplatesTab() {
       {/* Loading State */}
       {isLoading && (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-4"></div>
           <p className="text-gray-500">Φόρτωση προτύπων...</p>
         </div>
       )}
@@ -700,8 +700,8 @@ function EmailTemplatesTab() {
         <div className="bg-white rounded-lg border border-gray-200">
           {templates?.length === 0 ? (
             <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="w-8 h-8 text-blue-600" />
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-brand-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Δεν υπάρχουν πρότυπα
@@ -737,7 +737,7 @@ function EmailTemplatesTab() {
                           </span>
                         )}
                         {template.obligation_type_name && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                          <span className="px-2 py-0.5 text-xs font-medium bg-brand-100 text-brand-800 rounded-full">
                             {template.obligation_type_name}
                           </span>
                         )}
@@ -752,7 +752,7 @@ function EmailTemplatesTab() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handlePreview(template)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        className="p-2 text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg"
                         title="Προεπισκόπηση"
                       >
                         <Eye className="w-4 h-4" />
@@ -766,7 +766,7 @@ function EmailTemplatesTab() {
                       </button>
                       <button
                         onClick={() => handleEdit(template)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        className="p-2 text-gray-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg"
                         title="Επεξεργασία"
                       >
                         <Edit2 className="w-4 h-4" />
@@ -802,7 +802,7 @@ function EmailTemplatesTab() {
               key={variable.key}
               className="bg-gray-50 rounded-lg p-3 text-sm"
             >
-              <code className="text-blue-600 font-mono">{`{${variable.key}}`}</code>
+              <code className="text-brand-600 font-mono">{`{${variable.key}}`}</code>
               <p className="text-gray-600 mt-1">{variable.label}</p>
             </div>
           ))}
@@ -1119,7 +1119,7 @@ function EmailTemplateForm({
           name="is_active"
           checked={formData.is_active}
           onChange={handleChange}
-          className="w-4 h-4 text-blue-600 rounded"
+          className="w-4 h-4 text-brand-600 rounded"
         />
         <span className="text-sm text-gray-700">Ενεργό πρότυπο</span>
       </label>
