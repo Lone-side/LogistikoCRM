@@ -68,7 +68,12 @@ def get_counterparty_header() -> SafeString:
 
 def get_crmimap(ea: EmailAccount, box: Optional[str] = None) -> Optional[CrmIMAP]:
     app_config = apps.get_app_config('crm')
-    return app_config.mci.get_crmimap(ea, box)    
+    # Ο CrmImapManager (mci) είναι απενεργοποιημένος σε αυτό το fork
+    # (βλ. crm/apps.py) — οι callers χειρίζονται το None
+    mci = getattr(app_config, 'mci', None)
+    if mci is None:
+        return None
+    return mci.get_crmimap(ea, box)
     
 
 def get_email_date(msg: Message) -> datetime:

@@ -366,6 +366,8 @@ if TESTING:
     SECURE_SSL_REDIRECT = False
     LANGUAGE_CODE = 'en'
     LANGUAGES = [('en', ''), ('uk', '')]
+    # Τα tests ελέγχουν ειδοποιήσεις μέσω mail_admins - χρειάζεται μη κενό ADMINS
+    ADMINS = [('Admin', 'admin@example.com')]
 
 
     # CORS Settings - Επιτρέπει πρόσβαση από τοπικό δίκτυο

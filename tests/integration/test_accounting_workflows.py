@@ -30,7 +30,7 @@ class ClientObligationWorkflowTest(TestCase):
 
         # Create company and client
         self.company = Company.objects.create(
-            company_name="Test Company Ltd",
+            full_name="Test Company Ltd",
             email="company@example.com"
         )
 
@@ -72,10 +72,10 @@ class ClientObligationWorkflowTest(TestCase):
         )
 
         # Step 2: Assign obligations to client
-        client_obl = ClientObligation.objects.create(
-            client=self.client,
-            is_active=True
-        )
+        # Το signal δημιουργεί αυτόματα ClientObligation με το ClientProfile
+        client_obl, _ = ClientObligation.objects.get_or_create(client=self.client)
+        client_obl.is_active = True
+        client_obl.save()
         client_obl.obligation_types.add(vat_monthly, myf)
 
         # Step 3: Generate monthly obligations for March 2024
@@ -101,7 +101,8 @@ class ClientObligationWorkflowTest(TestCase):
 
         self.assertEqual(vat_obl.deadline.day, 31)  # Last day of March
         self.assertEqual(myf_obl.deadline.day, 20)  # 20th of March
-        self.assertEqual(vat_obl.status, 'pending')
+        # Η deadline (2024) είναι περασμένη - το save() τη μαρκάρει overdue
+        self.assertEqual(vat_obl.status, 'overdue')
 
         # Step 4: Complete an obligation
         vat_obl.status = 'completed'
@@ -123,11 +124,12 @@ class ClientObligationWorkflowTest(TestCase):
             is_active=True
         )
 
+        # timing != 'immediate' ώστε να επιστραφεί το ScheduledEmail
         rule = EmailAutomationRule.objects.create(
             name="Send on completion",
             trigger="on_complete",
             template=template,
-            timing="immediate",
+            timing="delay_24h",
             is_active=True
         )
 
@@ -167,13 +169,33 @@ class ClientLifecycleWorkflowTest(TestCase):
         )
 
         # Step 2: Verify folder structure was created by signal
-        base_path = os.path.join(settings.MEDIA_ROOT, get_client_folder(client))
-        expected_folders = ['contracts', 'invoices', 'tax', 'myf', 'vat', 'payroll', 'general']
+        # Η δομή είναι ιεραρχική βάσει FilingSystemSettings:
+        # 00_ΜΟΝΙΜΑ/, {έτος}/{μήνας}/{κατηγορία}/
+        from datetime import datetime as dt
+        from settings.models import FilingSystemSettings
 
-        for folder in expected_folders:
-            folder_path = os.path.join(base_path, folder)
+        filing_settings = FilingSystemSettings.get_settings()
+        base_path = os.path.join(
+            filing_settings.get_archive_root(), get_client_folder(client)
+        )
+
+        permanent_path = os.path.join(
+            base_path, filing_settings.permanent_folder_name
+        )
+        for folder in filing_settings.get_permanent_folder_categories():
             self.assertTrue(
-                os.path.exists(folder_path),
+                os.path.exists(os.path.join(permanent_path, folder)),
+                f"Folder {folder} should be created automatically"
+            )
+
+        year_path = os.path.join(base_path, str(dt.now().year))
+        month_name = (
+            filing_settings.get_month_folder_name(1)
+            if filing_settings.use_greek_month_names else '01'
+        )
+        for folder in filing_settings.get_monthly_folder_categories():
+            self.assertTrue(
+                os.path.exists(os.path.join(year_path, month_name, folder)),
                 f"Folder {folder} should be created automatically"
             )
 
@@ -197,12 +219,11 @@ class ClientLifecycleWorkflowTest(TestCase):
             deadline_type="last_day"
         )
 
-        profile.obligations.add(payroll, vat)
+        profile.obligation_types.add(payroll, vat)
 
-        client_obl = ClientObligation.objects.create(
-            client=client,
-            is_active=True
-        )
+        client_obl, _ = ClientObligation.objects.get_or_create(client=client)
+        client_obl.is_active = True
+        client_obl.save()
         client_obl.obligation_profiles.add(profile)
 
         # Step 4: Generate obligations
@@ -354,11 +375,13 @@ class EmailAutomationWorkflowTest(TestCase):
         )
 
         # Create automation rule
+        # timing != 'immediate' ώστε το trigger_automation_rules να επιστρέψει
+        # το ScheduledEmail (τα immediate στέλνονται απευθείας χωρίς επιστροφή)
         rule = EmailAutomationRule.objects.create(
             name="3-day reminder",
             trigger="before_deadline",
             template=template,
-            timing="immediate",
+            timing="delay_24h",
             days_before_deadline=3,
             is_active=True
         )
@@ -413,10 +436,9 @@ class MonthlyObligationBatchProcessingTest(TransactionTestCase):
 
         # Assign obligations to all clients
         for client in clients:
-            client_obl = ClientObligation.objects.create(
-                client=client,
-                is_active=True
-            )
+            client_obl, _ = ClientObligation.objects.get_or_create(client=client)
+            client_obl.is_active = True
+            client_obl.save()
             client_obl.obligation_types.add(monthly_vat)
 
             # Half of clients get quarterly too
