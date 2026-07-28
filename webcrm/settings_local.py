@@ -26,6 +26,16 @@ else:  # development
     # Δέχεται όλες τις IPs για εύκολο local development
     ALLOWED_HOSTS = ['*']
 
+    # Χωρίς .env το settings.py υπολογίζει DEBUG=False κατά το import και
+    # ενεργοποιεί το production security block (SSL redirect, secure cookies,
+    # HSTS) - απενεργοποίηση εδώ ώστε ο runserver να είναι πλοηγήσιμος
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SECURE_HSTS_SECONDS = 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+
 # Αυτόματη ανίχνευση τοπικής IP για CSRF
 def get_local_ip():
     """Βρίσκει την τοπική IP του server"""

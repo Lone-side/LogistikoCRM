@@ -82,11 +82,11 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${BLUE}Django Backend:${NC}"
 echo "   • http://localhost:8000"
 echo "   • http://$LOCAL_IP:8000"
-echo "   • http://localhost:8000/admin (Django Admin)"
+echo "   • http://localhost:8000/el/456-admin/ (Django Admin)"
 echo ""
 echo -e "${BLUE}React Frontend:${NC}"
-echo "   • http://localhost:3000 (ή όπως δείχνει το Vite)"
-echo "   • http://$LOCAL_IP:3000"
+echo "   • http://localhost:5173 (ή όπως δείχνει το Vite)"
+echo "   • http://$LOCAL_IP:5173"
 echo ""
 echo -e "${YELLOW}⚠️  ΣΗΜΑΝΤΙΚΟ: Απενεργοποίησε Ad Blockers!${NC}"
 echo "   uBlock Origin, AdBlock, Privacy Badger, κλπ."
@@ -116,7 +116,7 @@ if command -v tmux &> /dev/null; then
     tmux send-keys -t logistikocrm:dev.1 "sleep 3" C-m
     tmux send-keys -t logistikocrm:dev.1 "cd frontend" C-m
     tmux send-keys -t logistikocrm:dev.1 "echo '⚛️  React Frontend'" C-m
-    tmux send-keys -t logistikocrm:dev.1 "npm start" C-m
+    tmux send-keys -t logistikocrm:dev.1 "npm run dev" C-m
 
     # Attach to session
     echo -e "${GREEN}✅ Servers ξεκίνησαν στο tmux session 'logistikocrm'${NC}"
@@ -148,7 +148,7 @@ else
     # Start React in background
     echo -e "${BLUE}⚛️  Εκκίνηση React frontend...${NC}"
     cd frontend
-    npm start > ../react.log 2>&1 &
+    npm run dev > ../react.log 2>&1 &
     REACT_PID=$!
     echo "   PID: $REACT_PID"
     cd ..

@@ -340,6 +340,8 @@ class AuditLog(models.Model):
     Comprehensive audit trail for all critical operations
     Critical for accounting office compliance
     """
+    # Ρητά BigAutoField: το migration δημιούργησε bigint id ενώ το app default είναι AutoField
+    id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
 
     ACTION_CHOICES = [
         ('create', 'Created'),

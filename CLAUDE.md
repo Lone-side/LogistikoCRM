@@ -201,16 +201,22 @@ python -m venv venv
 source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 
-# Εγκατάσταση dependencies
+# Εγκατάσταση dependencies (το mysqlclient είναι προαιρετικό/σχολιασμένο)
 pip install -r requirements.txt
 pip install -r requirements-dev.txt  # για development
 
-# Ρύθμιση βάσης
+# Ρυθμίσεις (το .env.development είναι το σωστό template)
+cp .env.development .env
+
+# Ρύθμιση βάσης — Η ΣΕΙΡΑ ΕΧΕΙ ΣΗΜΑΣΙΑ
 python manage.py migrate
-python manage.py createsuperuser
+python manage.py createcachetable   # απαραίτητο (database cache)
+python manage.py setupdata          # groups/fixtures + superuser IamSUPER
+# ⚠️ ΟΧΙ createsuperuser πριν το setupdata — χαλάει τα pk των groups
 
 # Εκκίνηση server
 python manage.py runserver
+# Admin: http://localhost:8000/el/456-admin/  |  CRM: http://localhost:8000/el/123/
 ```
 
 ### Frontend Development

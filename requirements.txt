@@ -11,7 +11,9 @@ polib>=1.2.0  # Translation file handling (.po files)
 
 # Database
 psycopg2-binary>=2.9.9  # PostgreSQL adapter (production)
-mysqlclient>=2.2.0  # MySQL adapter (alternative to PostgreSQL)
+# mysqlclient>=2.2.0  # MySQL adapter (προαιρετικό - θέλει MySQL headers:
+#                       sudo apt install default-libmysqlclient-dev build-essential
+#                       Τοπικά ΔΕΝ χρειάζεται (default: SQLite)
 
 # REST API
 djangorestframework>=3.14.0

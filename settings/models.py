@@ -12,6 +12,8 @@ class FilingSystemSettings(models.Model):
     Επιτρέπει την προσαρμογή της δομής φακέλων και των
     κανόνων αρχειοθέτησης για το λογιστικό γραφείο.
     """
+    # Ρητά BigAutoField: το migration δημιούργησε bigint id ενώ το app default είναι AutoField
+    id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
 
     class Meta:
         verbose_name = _('Ρυθμίσεις Αρχειοθέτησης')
@@ -340,6 +342,8 @@ class BackupSettings(models.Model):
     """
     Ρυθμίσεις Backup - Singleton model.
     """
+    # Ρητά BigAutoField: το migration δημιούργησε bigint id ενώ το app default είναι AutoField
+    id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
 
     class Meta:
         verbose_name = _('Ρυθμίσεις Backup')
@@ -396,6 +400,8 @@ class BackupHistory(models.Model):
     """
     Ιστορικό Backups.
     """
+    # Ρητά BigAutoField: το migration δημιούργησε bigint id ενώ το app default είναι AutoField
+    id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
 
     class Meta:
         verbose_name = _('Backup')
@@ -465,6 +471,8 @@ class GSISSettings(models.Model):
     Χρησιμοποιεί τους "Ειδικούς Κωδικούς Λήψης Στοιχείων" της ΑΑΔΕ.
     Singleton model - μόνο μία εγγραφή επιτρέπεται.
     """
+    # Ρητά BigAutoField: το migration δημιούργησε bigint id ενώ το app default είναι AutoField
+    id = models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')
 
     class Meta:
         verbose_name = _('Ρυθμίσεις GSIS')

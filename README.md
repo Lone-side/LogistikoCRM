@@ -14,6 +14,16 @@
 
 ---
 
+# LogistikoCRM
+
+> **🇬🇷 Fork για ελληνικά λογιστικά γραφεία** — βασισμένο στο Django-CRM, με
+> ενσωμάτωση myDATA (ΑΑΔΕ), διαχείριση φορολογικών υποχρεώσεων, VoIP και
+> αρχειοθέτηση πελατών.
+>
+> **➡️ Τοπική εγκατάσταση: βλ. [SETUP_GUIDE.md](SETUP_GUIDE.md)** — τα βήματα
+> εκεί είναι τα σωστά για αυτό το fork (το admin ΔΕΝ είναι στο `/admin/`).
+> Το υπόλοιπο README προέρχεται από το upstream Django-CRM.
+
 # Django-CRM
 
 *(Collaborative and Analytical Customer Relationship Management Software)*
