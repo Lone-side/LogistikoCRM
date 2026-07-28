@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import apiClient from '../api/client';
 
@@ -212,7 +212,7 @@ export function useReportExport() {
     }
   }, []);
 
-  const exportObligations = useCallback(async (period: ReportPeriod = 'month') => {
+  const exportObligations = useCallback(async (_period: ReportPeriod = 'month') => {
     setState({ isExporting: true, exportType: 'obligations', error: null });
     try {
       await downloadFilteredObligationsExcel({});

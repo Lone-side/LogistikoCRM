@@ -26,7 +26,6 @@ import {
   useUpdateEmailSettings,
   useTestEmailConnection,
   useSendTestEmail,
-  type EmailSettingsData,
   type EmailSettingsUpdateData,
 } from '../hooks/useEmail';
 

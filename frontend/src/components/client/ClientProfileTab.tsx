@@ -39,7 +39,7 @@ export default function ClientProfileTab({
   const [hasChanges, setHasChanges] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [exclusionWarning, setExclusionWarning] = useState<string | null>(null);
-  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [, setShowBulkAssignModal] = useState(false);
 
   // Initialize from client profile when it loads
   useEffect(() => {

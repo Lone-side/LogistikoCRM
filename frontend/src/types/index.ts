@@ -139,7 +139,8 @@ export interface ClientFormData {
   arithmos_epixeirisis?: string;
   poli_epixeirisis?: string;
   tk_epixeirisis?: string;
-  imerominia_enarksis?: string;
+  // null: το Django DateField θέλει null αντί για κενό string
+  imerominia_enarksis?: string | null;
 }
 
 export interface ObligationFormData {

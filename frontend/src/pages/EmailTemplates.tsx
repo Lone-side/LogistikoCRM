@@ -17,7 +17,6 @@ import {
   Copy,
   Clock,
   Search,
-  Filter,
   ChevronLeft,
   ChevronRight,
   CheckCircle,
@@ -234,7 +233,7 @@ function EmailHistoryTab() {
               <option value="">Όλοι οι πελάτες</option>
               {clients?.results.map((client) => (
                 <option key={client.id} value={client.id}>
-                  {client.onoma}
+                  {client.eponimia}
                 </option>
               ))}
             </select>
