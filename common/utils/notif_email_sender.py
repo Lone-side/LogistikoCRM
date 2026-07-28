@@ -28,6 +28,11 @@ class NotifEmailSender(threading.Thread):
             reply_to=settings.CRM_REPLY_TO
         )
         msg.content_subtype = "html"
+        if getattr(settings, 'TESTING', False):
+            # Συγχρονισμένη αποστολή στα tests ώστε το mail.outbox
+            # να είναι άμεσα διαθέσιμο
+            msg.send()
+            return
         self.send_queue.put(msg)
 
     def run(self):

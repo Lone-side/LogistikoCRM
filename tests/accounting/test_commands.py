@@ -43,10 +43,10 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         )
 
         # Create client obligation
-        self.client_obl = ClientObligation.objects.create(
-            client=self.client,
-            is_active=True
-        )
+        # Το signal δημιουργεί αυτόματα ClientObligation με το ClientProfile
+        self.client_obl, _ = ClientObligation.objects.get_or_create(client=self.client)
+        self.client_obl.is_active = True
+        self.client_obl.save()
         self.client_obl.obligation_types.add(
             self.monthly_obl_type,
             self.quarterly_obl_type
@@ -77,7 +77,8 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Check monthly obligation
         monthly = monthly_obls.get(obligation_type=self.monthly_obl_type)
         self.assertEqual(monthly.deadline.day, 31)  # Last day of March
-        self.assertEqual(monthly.status, 'pending')
+        # Η deadline (2024) είναι περασμένη, οπότε το save() τη μαρκάρει overdue
+        self.assertEqual(monthly.status, 'overdue')
 
     def test_command_skips_non_applicable_months(self):
         """Test that quarterly obligations are only created for specific months"""
@@ -138,10 +139,9 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             eidos_ipoxreou="company"
         )
 
-        client_obl2 = ClientObligation.objects.create(
-            client=client2,
-            is_active=True
-        )
+        client_obl2, _ = ClientObligation.objects.get_or_create(client=client2)
+        client_obl2.is_active = True
+        client_obl2.save()
         client_obl2.obligation_types.add(self.monthly_obl_type)
 
         out = StringIO()
@@ -204,8 +204,8 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             month=6
         )
 
-        # Should be pending again (recreated)
-        self.assertEqual(new_obl.status, 'pending')
+        # Recreated (όχι πλέον completed)· με περασμένη deadline γίνεται overdue
+        self.assertEqual(new_obl.status, 'overdue')
         self.assertEqual(new_obl.notes, '')
 
     def test_command_inactive_clients_skipped(self):
@@ -247,7 +247,7 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
             deadline_day=25
         )
 
-        profile.obligations.add(payroll_obl)
+        profile.obligation_types.add(payroll_obl)
 
         # Add profile to client
         self.client_obl.obligation_profiles.add(profile)

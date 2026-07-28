@@ -66,9 +66,17 @@ class CalendarViewTestCase(TestCase):
             completed_date=today - timedelta(days=5)
         )
 
+        # Διαφορετικός τύπος ώστε να μην παραβιάζεται το unique constraint
+        # (client, obligation_type, year, month)
+        self.overdue_obligation_type = ObligationType.objects.create(
+            name="ΑΠΔ",
+            code="APD",
+            frequency="monthly",
+            is_active=True
+        )
         self.overdue_obligation = MonthlyObligation.objects.create(
             client=self.client_profile,
-            obligation_type=self.obligation_type,
+            obligation_type=self.overdue_obligation_type,
             year=today.year,
             month=today.month,
             deadline=today - timedelta(days=3),

@@ -94,6 +94,10 @@ class EmailTemplateSelectionTest(TestCase):
 
     def setUp(self):
         """Set up test data"""
+        # Καθαρισμός των seeded templates (data migration) ώστε να
+        # επιλεγούν τα templates του test
+        EmailTemplate.objects.all().delete()
+
         self.obligation_type = ObligationType.objects.create(
             name='ΦΠΑ',
             code='FPA',
@@ -366,6 +370,10 @@ class EmailServiceGreekCharactersTest(TestCase):
 
     def setUp(self):
         """Set up test data with Greek characters"""
+        # Καθαρισμός των seeded templates (data migration) ώστε να
+        # επιλεγεί το template του test
+        EmailTemplate.objects.all().delete()
+
         self.obligation_type = ObligationType.objects.create(
             name='Φόρος Προστιθέμενης Αξίας',
             code='ΦΠΑ',

@@ -101,16 +101,14 @@ def sanitize_filename(filename):
     - Special characters that could cause issues
     - Leading dots
     """
-    # Get just the filename, no path
-    filename = os.path.basename(filename)
-    
-    # Remove dangerous characters
-    dangerous_chars = ['/', '\\', '..', '\x00', '\n', '\r']
-    for char in dangerous_chars:
+    # Remove parent-directory references entirely, then neutralize
+    # path separators and control characters
+    filename = filename.replace('..', '')
+    for char in ['/', '\\', '\x00', '\n', '\r']:
         filename = filename.replace(char, '_')
-    
-    # Remove leading dots (hidden files)
-    filename = filename.lstrip('.')
+
+    # Remove leading dots (hidden files) and leftover separators
+    filename = filename.lstrip('._')
     
     # Ensure filename is not empty
     if not filename:

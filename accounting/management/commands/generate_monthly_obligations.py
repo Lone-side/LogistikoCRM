@@ -169,7 +169,7 @@ class Command(BaseCommand):
             query = query.filter(client__afm=self.client_afm)
         
         client_obligations = query.select_related('client').prefetch_related(
-            'obligation_types', 'obligation_profiles__obligations'
+            'obligation_types', 'obligation_profiles__obligation_types'
         )
         
         total_clients = client_obligations.count()

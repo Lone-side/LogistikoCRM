@@ -28,8 +28,9 @@ class UserMiddlewareTest(TestCase):
             password='testpass123'
         )
 
-        # Create groups
-        self.co_workers = Group.objects.create(name='co-workers')
+        # Create groups (το co-workers ίσως υπάρχει ήδη από το signal
+        # δημιουργίας χρήστη)
+        self.co_workers, _ = Group.objects.get_or_create(name='co-workers')
         self.operators = Group.objects.create(name='operators')
         self.chiefs = Group.objects.create(name='chiefs')
         self.managers = Group.objects.create(name='managers')
@@ -153,6 +154,11 @@ class SetUserDepartmentTest(TestCase):
             username='testuser',
             password='testpass123'
         )
+        # Το set_user_department προϋποθέτει ότι το middleware έχει ήδη
+        # θέσει τα attributes ρόλων στον χρήστη
+        self.user.is_chief = False
+        self.user.is_superoperator = False
+        self.user.is_accountant = False
 
     def _add_session_to_request(self, request):
         """Helper to add session to request"""
@@ -329,10 +335,11 @@ class CheckUserLanguageTest(TestCase):
         # Mock current language as same
         mock_get_language.return_value = 'en'
 
-        # Get initial updated_at
-        initial_updated = self.profile.updated_at
+        with patch.object(self.profile, 'save') as mock_save:
+            check_user_language(self.profile)
 
-        check_user_language(self.profile)
+        # Δεν πρέπει να γίνει αποθήκευση όταν η γλώσσα είναι ίδια
+        mock_save.assert_not_called()
 
         self.profile.refresh_from_db()
         # Should not change language_code
