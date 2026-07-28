@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import timedelta
 
-from tasks.models import Task, Project, Memo
+from tasks.models import Task, Project, Memo, TaskStage
 from tasks.forms import TaskForm, ProjectForm, MemoForm
 from common.utils.helpers import get_today
 
@@ -19,6 +19,7 @@ class TaskFormTest(TestCase):
             username='testuser',
             password='testpass123'
         )
+        self.stage = TaskStage.objects.create(name='In progress', active=True, default=True)
 
     def test_valid_task_form(self):
         """Test form with valid data"""
@@ -27,6 +28,12 @@ class TaskFormTest(TestCase):
             'description': 'Test description',
             'responsible': [self.user.id],
             'due_date': (get_today() + timedelta(days=7)).isoformat(),
+            'stage': self.stage.id,
+            'creation_date': get_today().isoformat(),
+            'priority': '2',
+            'next_step': 'next step',
+            'next_step_date': (get_today() + timedelta(days=1)).isoformat(),
+            'token': 'testtoken',
         }
 
         form = TaskForm(data=form_data)
@@ -73,6 +80,12 @@ class TaskFormTest(TestCase):
             'name': 'Test Task',
             'responsible': [self.user.id],
             'due_date': (get_today() + timedelta(days=5)).isoformat(),
+            'stage': self.stage.id,
+            'creation_date': get_today().isoformat(),
+            'priority': '2',
+            'next_step': 'next step',
+            'next_step_date': (get_today() + timedelta(days=1)).isoformat(),
+            'token': 'testtoken',
         }
 
         form = TaskForm(data=form_data)
@@ -82,7 +95,8 @@ class TaskFormTest(TestCase):
         """Test that subtasks can only have one responsible person"""
         # Create parent task
         parent_task = Task.objects.create(
-            name="Parent Task"
+            name="Parent Task",
+            stage=self.stage
         )
         parent_task.responsible.add(self.user)
 
@@ -107,7 +121,8 @@ class TaskFormTest(TestCase):
         """Test that subtasks with single responsible are valid"""
         # Create parent task
         parent_task = Task.objects.create(
-            name="Parent Task"
+            name="Parent Task",
+            stage=self.stage
         )
         parent_task.responsible.add(self.user)
 
@@ -115,6 +130,12 @@ class TaskFormTest(TestCase):
             'name': 'Subtask',
             'task': parent_task.id,
             'responsible': [self.user.id],  # Single responsible
+            'stage': self.stage.id,
+            'creation_date': get_today().isoformat(),
+            'priority': '2',
+            'next_step': 'next step',
+            'next_step_date': (get_today() + timedelta(days=1)).isoformat(),
+            'token': 'testtoken',
         }
 
         form = TaskForm(data=form_data)
@@ -150,6 +171,11 @@ class ProjectFormTest(TestCase):
             'name': 'Test Project',
             'description': 'Project description',
             'responsible': [self.user.id],
+            'creation_date': get_today().isoformat(),
+            'priority': '2',
+            'next_step': 'next step',
+            'next_step_date': (get_today() + timedelta(days=1)).isoformat(),
+            'token': 'testtoken',
         }
 
         form = ProjectForm(data=form_data)
@@ -177,6 +203,11 @@ class ProjectFormTest(TestCase):
             'name': 'Big Project',
             'description': 'Large project',
             'responsible': [self.user.id, user2.id],
+            'creation_date': get_today().isoformat(),
+            'priority': '2',
+            'next_step': 'next step',
+            'next_step_date': (get_today() + timedelta(days=1)).isoformat(),
+            'token': 'testtoken',
         }
 
         form = ProjectForm(data=form_data)
@@ -186,11 +217,20 @@ class ProjectFormTest(TestCase):
 class MemoFormTest(TestCase):
     """Test MemoForm validation"""
 
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='memouser',
+            password='testpass123'
+        )
+
     def test_valid_memo_form(self):
         """Test form with valid data"""
         form_data = {
             'name': 'Test Memo',
             'description': 'Memo description',
+            'to': self.user.id,
+            'stage': Memo.PENDING,
+            'creation_date': get_today().isoformat(),
         }
 
         form = MemoForm(data=form_data)
@@ -200,6 +240,9 @@ class MemoFormTest(TestCase):
         """Test memo with minimal required data"""
         form_data = {
             'name': 'Simple Memo',
+            'to': self.user.id,
+            'stage': Memo.PENDING,
+            'creation_date': get_today().isoformat(),
         }
 
         form = MemoForm(data=form_data)

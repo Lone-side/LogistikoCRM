@@ -67,7 +67,9 @@ class Task(TaskBase):
         super().clean()
 
     def save(self, *args, **kwargs):
-        if self.stage:
+        # self.stage_id αντί για self.stage: η πρόσβαση σε άδειο FK
+        # σηκώνει RelatedObjectDoesNotExist
+        if self.stage_id:
             self.active = self.stage.active
         if not self.lead_time:
             self.lead_time = timedelta(minutes=0)
