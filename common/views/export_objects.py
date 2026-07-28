@@ -71,7 +71,7 @@ def save_to_excel(datadict: dict, file_path: Path) -> None:
     df = df.replace('nan', '')
     df = df.replace('None', '')
     writer = pd.ExcelWriter(file_path, engine='xlsxwriter')
-    df.to_excel(writer, 'Sheet1', index=False, na_rep=' ')
+    df.to_excel(writer, sheet_name='Sheet1', index=False, na_rep=' ')
     writer.close()
 
 
