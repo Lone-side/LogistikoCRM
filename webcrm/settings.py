@@ -437,6 +437,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',       # Anonymous users: 100 requests/hour
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
+        'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',

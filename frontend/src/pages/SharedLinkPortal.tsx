@@ -3,15 +3,15 @@
  * Public page for accessing shared files/folders (no authentication required)
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   File, FileText, FileSpreadsheet, Image, Download, Lock, Mail,
-  AlertCircle, Loader2, FolderOpen
+  AlertCircle, Loader2, FolderOpen, Upload, CheckCircle, X, AlertTriangle
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import apiClient from '../api/client';
-import type { PublicSharedContent } from '../types/fileManager';
+import type { PublicSharedContent, PortalUploadResult } from '../types/fileManager';
 
 // File type icon
 function FileIcon({ fileType, size = 24 }: { fileType: string; size?: number }) {
@@ -26,6 +26,172 @@ function FileIcon({ fileType, size = 24 }: { fileType: string; size?: number }) 
     return <FileText size={size} className="text-red-500" />;
   }
   return <File size={size} className="text-gray-500" />;
+}
+
+// Περιοχή upload για τον πελάτη (εμφανίζεται όταν το link επιτρέπει upload)
+function PortalUploadSection({
+  token,
+  content,
+  email,
+}: {
+  token: string;
+  content: PublicSharedContent;
+  email: string;
+}) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [result, setResult] = useState<PortalUploadResult | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    setFiles((prev) => [...prev, ...Array.from(list)].slice(0, 10));
+    setResult(null);
+    setUploadError(null);
+  };
+
+  const handleUpload = async () => {
+    if (!files.length) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const formData = new FormData();
+      files.forEach((f) => formData.append('files', f));
+      if (content.access_token) formData.append('auth', content.access_token);
+      if (email) formData.append('email', email);
+      const response = await apiClient.post<PortalUploadResult>(
+        `/accounting/share/${token}/upload/`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+      setResult(response.data);
+      setFiles([]);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: PortalUploadResult & { error?: string } } };
+      if (axiosErr.response?.data?.errors?.length) {
+        setResult(axiosErr.response.data);
+        setFiles([]);
+      } else {
+        setUploadError(axiosErr.response?.data?.error || 'Σφάλμα κατά τη μεταφόρτωση');
+      }
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6 mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Upload className="w-5 h-5 text-blue-500" />
+        <h2 className="font-bold text-gray-900">Αποστολή Εγγράφων στο Λογιστήριο</h2>
+      </div>
+
+      {content.upload_note && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800 whitespace-pre-line">
+          {content.upload_note}
+        </div>
+      )}
+
+      {/* Drop zone */}
+      <div
+        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+          dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+        }`}
+        onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragActive(false);
+          addFiles(e.dataTransfer.files);
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => addFiles(e.target.files)}
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.txt,.csv,.xml"
+        />
+        <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+        <p className="text-gray-600 mb-1">Σύρετε αρχεία εδώ ή</p>
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="text-blue-600 hover:underline font-medium"
+        >
+          επιλέξτε αρχεία
+        </button>
+        <p className="text-xs text-gray-400 mt-2">Έως 10 αρχεία ανά αποστολή</p>
+      </div>
+
+      {/* Selected files */}
+      {files.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {files.map((f, i) => (
+            <div key={i} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-1.5">
+              <span className="truncate">{f.name}</span>
+              <button
+                onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                className="p-0.5 hover:bg-gray-200 rounded"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {uploadError && (
+        <div className="mt-3 bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm flex items-center gap-2">
+          <AlertCircle size={16} />
+          {uploadError}
+        </div>
+      )}
+
+      {/* Upload result */}
+      {result && (
+        <div className="mt-3 space-y-1.5 text-sm">
+          {result.uploaded.map((u, i) => (
+            <div key={i} className="flex items-center gap-2 bg-green-50 border border-green-200 rounded px-3 py-2 text-green-800">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span className="truncate">{u.filename}</span>
+              {u.warning && (
+                <span className="flex items-center gap-1 text-amber-700 text-xs ml-auto shrink-0">
+                  <AlertTriangle className="w-3.5 h-3.5" /> {u.warning}
+                </span>
+              )}
+            </div>
+          ))}
+          {result.errors.map((e, i) => (
+            <div key={i} className="flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-2 text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span className="truncate">{e.filename}</span>
+              <span className="text-xs ml-auto shrink-0">{e.error}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {files.length > 0 && (
+        <Button onClick={handleUpload} disabled={uploading} className="w-full mt-4 py-3">
+          {uploading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Αποστολή...
+            </>
+          ) : (
+            <>
+              <Upload className="w-4 h-4 mr-2" />
+              Αποστολή {files.length} αρχείων
+            </>
+          )}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 export default function SharedLinkPortal() {
@@ -114,14 +280,14 @@ export default function SharedLinkPortal() {
     }
   };
 
-  // Handle download
+  // Handle download (με το access token για προστατευμένα links)
   const handleDownload = async (docId?: number) => {
     try {
-      const downloadUrl = docId
-        ? `/accounting/share/${token}/download/?doc_id=${docId}`
-        : `/accounting/share/${token}/download/`;
-
-      window.open(downloadUrl, '_blank');
+      const params = new URLSearchParams();
+      if (docId) params.set('doc_id', String(docId));
+      if (content?.access_token) params.set('auth', content.access_token);
+      const query = params.toString();
+      window.open(`/accounting/share/${token}/download/${query ? `?${query}` : ''}`, '_blank');
     } catch (err) {
       console.error('Download error:', err);
     }
@@ -278,6 +444,9 @@ export default function SharedLinkPortal() {
 
         {/* Preview */}
         <div className="max-w-6xl mx-auto p-4">
+          {content.allow_upload && token && (
+            <PortalUploadSection token={token} content={content} email={email} />
+          )}
           {isPdf && doc.preview_url ? (
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
               <iframe
@@ -338,6 +507,9 @@ export default function SharedLinkPortal() {
 
         {/* Documents list */}
         <div className="max-w-6xl mx-auto p-4">
+          {content.allow_upload && token && (
+            <PortalUploadSection token={token} content={content} email={email} />
+          )}
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
               <p className="text-sm text-gray-600">

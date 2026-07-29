@@ -48,6 +48,7 @@ import {
   ClientNotesTab,
   UploadModal,
   CreateTicketModal,
+  ClientPortalLinkModal,
   type TicketUpdateData,
 } from '../components/client';
 
@@ -79,6 +80,7 @@ export default function ClientDetails() {
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [docFilters, setDocFilters] = useState<ClientDocumentFilters>({});
+  const [portalLinkModalOpen, setPortalLinkModalOpen] = useState(false);
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
   // Fetch client data
@@ -330,6 +332,7 @@ export default function ClientDetails() {
               filters={docFilters}
               onFiltersChange={setDocFilters}
               onUpload={() => setUploadModalOpen(true)}
+              onCreatePortalLink={() => setPortalLinkModalOpen(true)}
               onDelete={(docId) => {
                 if (confirm('Διαγραφή εγγράφου;')) {
                   deleteMutation.mutate(docId);
@@ -397,6 +400,15 @@ export default function ClientDetails() {
           isLoading={uploadMutation.isPending}
           errorMessage={uploadError}
           clientId={clientId}
+        />
+      )}
+
+      {/* Portal Link Modal */}
+      {portalLinkModalOpen && client && (
+        <ClientPortalLinkModal
+          clientId={clientId}
+          clientName={client.eponimia}
+          onClose={() => setPortalLinkModalOpen(false)}
         />
       )}
 

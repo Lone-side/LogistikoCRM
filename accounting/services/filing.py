@@ -115,6 +115,36 @@ def validate_upload(uploaded_file):
             f'Μέγιστο επιτρεπόμενο: {max_mb}MB'
         )
 
+    _reject_dangerous_content(uploaded_file)
+
+
+# Περιεχόμενο που δεν δεχόμαστε ΠΟΤΕ ανεξαρτήτως κατάληξης — σημαντικό για
+# τα ανώνυμα uploads του portal (π.χ. HTML με script μεταμφιεσμένο σε .pdf)
+_DANGEROUS_MIME_TYPES = {
+    'text/html', 'application/xhtml+xml', 'text/javascript',
+    'application/javascript', 'application/x-dosexec', 'application/x-executable',
+    'application/x-sharedlib', 'application/x-mach-binary', 'application/x-elf',
+    'application/x-sh', 'application/x-msdownload',
+}
+
+
+def _reject_dangerous_content(uploaded_file):
+    """Best-effort έλεγχος πραγματικού περιεχομένου με python-magic (αν υπάρχει)."""
+    try:
+        import magic
+    except ImportError:
+        return
+    try:
+        uploaded_file.seek(0)
+        detected = magic.from_buffer(uploaded_file.read(2048), mime=True)
+        uploaded_file.seek(0)
+    except Exception:
+        return
+    if detected in _DANGEROUS_MIME_TYPES:
+        raise ValidationError(
+            'Το περιεχόμενο του αρχείου δεν αντιστοιχεί σε αποδεκτό τύπο εγγράφου.'
+        )
+
 
 def apply_naming(uploaded_file, client, category=None, year=None, month=None):
     """
@@ -245,7 +275,10 @@ def create_client_document(client, uploaded_file, category='general', obligation
       Ονοματολογίας των ρυθμίσεων + sanitize (apply_naming)
     - Παίρνει κατηγορία/έτος/μήνα από την υποχρέωση αν δεν δόθηκαν
     - Αν υπάρχει ήδη τρέχον έγγραφο για τον ίδιο συνδυασμό:
-      on_existing='version' → νέα έκδοση, 'replace' → αντικατάσταση (v1)
+      on_existing='version' → νέα έκδοση, 'replace' → αντικατάσταση (v1),
+      'keep' → νέο ανεξάρτητο έγγραφο ΧΩΡΙΣ να πειραχτεί το υπάρχον
+      (υποχρεωτικό για ανώνυμα uploads πελατών — δεν επιτρέπεται να
+      εκτοπίζουν έγγραφα του γραφείου)
     - Δημιουργεί on-demand τους φακέλους για το έτος του εγγράφου
       (αυτό καλύπτει και το πέρασμα σε νέα χρονιά)
 
@@ -269,11 +302,13 @@ def create_client_document(client, uploaded_file, category='general', obligation
     # Φάκελοι για το έτος του εγγράφου (idempotent, καλύπτει νέα χρονιά)
     ensure_folders(client, year=year)
 
-    existing = ClientDocument.check_existing(
-        client=client,
-        obligation=obligation,
-        category=category if category and category != 'general' else None,
-    )
+    existing = None
+    if on_existing != 'keep':
+        existing = ClientDocument.check_existing(
+            client=client,
+            obligation=obligation,
+            category=category if category and category != 'general' else None,
+        )
     if existing and existing.year == year and existing.month == month:
         if on_existing == 'replace':
             old_path = existing.file.path if existing.file else None

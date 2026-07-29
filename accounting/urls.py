@@ -130,6 +130,7 @@ from .api_file_manager import (
     CollectionViewSet,
     PublicSharedLinkView,
     PublicSharedLinkDownloadView,
+    PublicSharedLinkUploadView,
     FileManagerStatsView,
     RecentDocumentsView,
     BrowseFoldersView,
@@ -503,4 +504,5 @@ urlpatterns = [
     # Public Shared Link Access (NO AUTH REQUIRED)
     path("share/<str:token>/", PublicSharedLinkView.as_view(), name="shared_link_access"),
     path("share/<str:token>/download/", PublicSharedLinkDownloadView.as_view(), name="shared_link_download"),
+    path("share/<str:token>/upload/", PublicSharedLinkUploadView.as_view(), name="shared_link_upload"),
 ]

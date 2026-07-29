@@ -29,3 +29,6 @@ export type { UploadModalProps } from './UploadModal';
 
 export { default as CreateTicketModal } from './CreateTicketModal';
 export type { CreateTicketModalProps } from './CreateTicketModal';
+
+export { default as ClientPortalLinkModal } from './ClientPortalLinkModal';
+export type { ClientPortalLinkModalProps } from './ClientPortalLinkModal';
