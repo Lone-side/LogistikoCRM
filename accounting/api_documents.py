@@ -39,15 +39,15 @@ class DocumentFilter(FilterSet):
         fields = ['client_id', 'obligation_id', 'category']
 
     def filter_year(self, queryset, name, value):
-        """Filter by year in uploaded_at"""
+        """Filter στο πεδίο year (έτος αναφοράς — συμφωνεί με τη δομή φακέλων)"""
         if value:
-            return queryset.filter(uploaded_at__year=int(value))
+            return queryset.filter(year=int(value))
         return queryset
 
     def filter_month(self, queryset, name, value):
-        """Filter by month in uploaded_at"""
+        """Filter στο πεδίο month (μήνας αναφοράς — συμφωνεί με τη δομή φακέλων)"""
         if value:
-            return queryset.filter(uploaded_at__month=int(value))
+            return queryset.filter(month=int(value))
         return queryset
 
     def filter_search(self, queryset, name, value):
@@ -236,14 +236,21 @@ class DocumentViewSet(viewsets.ModelViewSet):
                 elif 'Ε1' in type_code or 'Ε3' in type_code:
                     category = 'tax'
 
-        # Create document
-        document = ClientDocument.objects.create(
-            client=client,
-            obligation=obligation,
-            file=uploaded_file,
-            document_category=category,
-            description=description
-        )
+        # Create document (ενιαία διαδρομή: validation βάσει ρυθμίσεων + versioning)
+        from django.core.exceptions import ValidationError
+        from .services import filing
+
+        try:
+            document = filing.create_client_document(
+                client=client,
+                uploaded_file=uploaded_file,
+                category=category,
+                obligation=obligation,
+                user=request.user,
+                description=description,
+            )
+        except ValidationError as e:
+            return Response({'error': '; '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
         result_serializer = DocumentSerializer(document, context={'request': request})
         return Response({

@@ -289,7 +289,7 @@ export interface ClientDocument {
   file_type: string;
   file_size?: number;
   file_size_display?: string;
-  document_category: 'contracts' | 'invoices' | 'tax' | 'myf' | 'vat' | 'payroll' | 'general';
+  document_category: string;
   category_display?: string;
   description?: string;
   uploaded_at: string;
@@ -301,15 +301,73 @@ export interface ClientDocument {
   uploaded_by?: string | null;
 }
 
-// Document Categories
-export const DOCUMENT_CATEGORIES = [
-  { value: 'contract', label: 'Σύμβαση' },
-  { value: 'invoice', label: 'Τιμολόγιο' },
-  { value: 'tax_return', label: 'Φορολογική Δήλωση' },
-  { value: 'vat', label: 'ΦΠΑ' },
-  { value: 'payroll', label: 'Μισθοδοσία' },
-  { value: 'apd', label: 'ΑΠΔ' },
-  { value: 'other', label: 'Άλλο' },
+// Document Categories — αντιστοιχούν στα ClientDocument.CATEGORY_CHOICES του backend,
+// ομαδοποιημένες κατά τύπο φακέλου (00_ΜΟΝΙΜΑ / μηνιαίοι / 13_ΕΤΗΣΙΑ)
+export const DOCUMENT_CATEGORY_GROUPS: {
+  label: string;
+  type: 'permanent' | 'monthly' | 'yearend';
+  categories: { value: string; label: string }[];
+}[] = [
+  {
+    label: 'Μόνιμα (00_ΜΟΝΙΜΑ)',
+    type: 'permanent',
+    categories: [
+      { value: 'registration', label: 'Ιδρυτικά Έγγραφα' },
+      { value: 'contracts', label: 'Συμβάσεις' },
+      { value: 'licenses', label: 'Άδειες & Πιστοποιητικά' },
+      { value: 'correspondence', label: 'Αλληλογραφία' },
+    ],
+  },
+  {
+    label: 'Μηνιαία',
+    type: 'monthly',
+    categories: [
+      { value: 'vat', label: 'ΦΠΑ' },
+      { value: 'apd', label: 'ΑΠΔ/ΕΦΚΑ' },
+      { value: 'myf', label: 'ΜΥΦ' },
+      { value: 'payroll', label: 'Μισθοδοσία' },
+      { value: 'invoices_issued', label: 'Εκδοθέντα Τιμολόγια' },
+      { value: 'invoices_received', label: 'Ληφθέντα Τιμολόγια' },
+      { value: 'bank', label: 'Τραπεζικά' },
+      { value: 'receipts', label: 'Αποδείξεις' },
+      { value: 'general', label: 'Γενικά' },
+    ],
+  },
+  {
+    label: 'Ετήσια (13_ΕΤΗΣΙΑ)',
+    type: 'yearend',
+    categories: [
+      { value: 'e1', label: 'Ε1 - Φόρος Εισοδήματος' },
+      { value: 'e2', label: 'Ε2 - Ακίνητα' },
+      { value: 'e3', label: 'Ε3 - Οικονομικά Στοιχεία' },
+      { value: 'enfia', label: 'ΕΝΦΙΑ' },
+      { value: 'balance', label: 'Ισολογισμός' },
+      { value: 'audit', label: 'Έλεγχοι' },
+    ],
+  },
+];
+
+// Επίπεδη λίστα (για dropdowns/φίλτρα)
+export const DOCUMENT_CATEGORIES = DOCUMENT_CATEGORY_GROUPS.flatMap((g) => g.categories);
+
+// Ετικέτα κατηγορίας από value (+ legacy κατηγορίες για παλιά έγγραφα)
+export const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
+  ...Object.fromEntries(DOCUMENT_CATEGORIES.map((c) => [c.value, c.label])),
+  invoices: 'Τιμολόγια',
+  tax: 'Φορολογικά',
+  efka: 'ΕΦΚΑ',
+};
+
+// Τύπος φακέλου ανά κατηγορία (καθορίζει αν χρειάζεται έτος/μήνας στο upload)
+export const DOCUMENT_CATEGORY_FOLDER_TYPE: Record<string, 'permanent' | 'monthly' | 'yearend'> =
+  Object.fromEntries(
+    DOCUMENT_CATEGORY_GROUPS.flatMap((g) => g.categories.map((c) => [c.value, g.type]))
+  );
+
+// Ελληνικά ονόματα μηνών (index 0 = Ιανουάριος)
+export const GREEK_MONTH_NAMES = [
+  'Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος', 'Μάιος', 'Ιούνιος',
+  'Ιούλιος', 'Αύγουστος', 'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος',
 ];
 
 // Email Log interface
@@ -670,16 +728,7 @@ export interface DocumentUploadResult {
   document: ClientDocument;
 }
 
-// Document Category labels
-export const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
-  contracts: 'Συμβάσεις',
-  invoices: 'Τιμολόγια',
-  tax: 'Φορολογικά',
-  myf: 'ΜΥΦ',
-  vat: 'ΦΠΑ',
-  payroll: 'Μισθοδοσία',
-  general: 'Γενικά',
-};
+// (Οι ετικέτες κατηγοριών εγγράφων ορίζονται πιο πάνω στο DOCUMENT_CATEGORY_LABELS)
 
 // ============================================
 // OBLIGATION SETTINGS TYPES

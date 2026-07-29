@@ -753,3 +753,33 @@ def retry_failed_emails(self):
     result = f"Retried {retried} emails, {succeeded} succeeded"
     logger.info(f"✅ {result}")
     return result
+
+# ============================================
+# YEARLY FOLDER ROLLOVER
+# ============================================
+
+@shared_task
+def ensure_yearly_folders(year=None):
+    """
+    Δημιουργία δέντρου φακέλων αρχειοθέτησης για όλους τους ενεργούς
+    πελάτες για το δεδομένο έτος (default: τρέχον).
+
+    Προγραμματίζεται 1η Ιανουαρίου (Celery beat) ώστε η νέα χρονιά να
+    έχει έτοιμους φακέλους — τα uploads τούς δημιουργούν ούτως ή άλλως
+    on-demand, αυτό είναι το δίχτυ ασφαλείας για χειροκίνητη αρχειοθέτηση.
+    """
+    from .models import ClientProfile
+    from .services import filing
+
+    year = year or timezone.now().year
+    created = 0
+    failed = 0
+    for client in ClientProfile.objects.filter(is_active=True):
+        if filing.ensure_folders(client, year=year):
+            created += 1
+        else:
+            failed += 1
+
+    result = f"Φάκελοι έτους {year}: {created} πελάτες OK, {failed} αποτυχίες"
+    logger.info(result)
+    return result

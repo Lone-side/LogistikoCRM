@@ -147,17 +147,18 @@ def upload_document_with_version(request):
             'error': 'client_id is required'
         }, status=400)
 
-    # Validate file using common utilities
+    # Validation βάσει FilingSystemSettings (καταλήξεις/μέγεθος)
     from django.core.exceptions import ValidationError
-    from common.utils.file_validation import validate_file_upload, sanitize_filename
+    from common.utils.file_validation import sanitize_filename
+    from .services import filing
 
     try:
-        validate_file_upload(uploaded_file)
+        filing.validate_upload(uploaded_file)
         uploaded_file.name = sanitize_filename(uploaded_file.name)
     except ValidationError as e:
         return JsonResponse({
             'success': False,
-            'error': str(e.message) if hasattr(e, 'message') else str(e)
+            'error': '; '.join(e.messages)
         }, status=400)
 
     try:

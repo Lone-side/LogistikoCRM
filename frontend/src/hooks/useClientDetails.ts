@@ -85,11 +85,24 @@ export function useClientFull(id: number) {
 /**
  * Get client documents
  */
-export function useClientDocuments(id: number, category?: string) {
+export interface ClientDocumentFilters {
+  category?: string;
+  year?: number;
+  month?: number;
+  search?: string;
+  current_only?: boolean;
+}
+
+export function useClientDocuments(id: number, filters?: ClientDocumentFilters) {
   return useQuery({
-    queryKey: [CLIENT_DOCUMENTS_KEY, id, category],
+    queryKey: [CLIENT_DOCUMENTS_KEY, id, filters],
     queryFn: async () => {
-      const params = category ? { category } : {};
+      const params: Record<string, string | number> = {};
+      if (filters?.category) params.category = filters.category;
+      if (filters?.year) params.year = filters.year;
+      if (filters?.month) params.month = filters.month;
+      if (filters?.search) params.search = filters.search;
+      if (filters?.current_only) params.current_only = '1';
       const response = await apiClient.get<ClientDocumentsResponse>(
         `/api/v1/clients/${id}/documents/`,
         { params }
@@ -188,17 +201,23 @@ export function useUploadDocument(clientId: number) {
       category,
       description,
       obligationId,
+      year,
+      month,
     }: {
       file: File;
       category?: string;
       description?: string;
       obligationId?: number;
+      year?: number;
+      month?: number;
     }) => {
       const formData = new FormData();
       formData.append('file', file);
       if (category) formData.append('category', category);
       if (description) formData.append('description', description);
       if (obligationId) formData.append('obligation_id', String(obligationId));
+      if (year) formData.append('year', String(year));
+      if (month) formData.append('month', String(month));
 
       const response = await apiClient.post(
         `/api/v1/clients/${clientId}/documents/upload/`,

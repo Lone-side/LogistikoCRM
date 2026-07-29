@@ -297,12 +297,28 @@ class ClientViewSet(viewsets.ModelViewSet):
         client = self.get_object()
         documents = client.documents.select_related(
             'obligation', 'obligation__obligation_type'
-        ).order_by('-uploaded_at')
+        ).order_by('-year', '-month', '-uploaded_at')
 
-        # Optional filtering
+        # Optional filtering (year/month στα πεδία αναφοράς — συμφωνούν με τους φακέλους)
         category = request.query_params.get('category')
         if category:
             documents = documents.filter(document_category=category)
+        year = request.query_params.get('year')
+        if year:
+            documents = documents.filter(year=int(year))
+        month = request.query_params.get('month')
+        if month:
+            documents = documents.filter(month=int(month))
+        search = request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            documents = documents.filter(
+                Q(filename__icontains=search) |
+                Q(original_filename__icontains=search) |
+                Q(description__icontains=search)
+            )
+        if request.query_params.get('current_only') in ('1', 'true', 'True'):
+            documents = documents.filter(is_current=True)
 
         serializer = ClientDocumentSerializer(
             documents, many=True, context={'request': request}
@@ -321,7 +337,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         Upload a document for a specific client (multipart/form-data)
         """
         from django.core.exceptions import ValidationError as DjangoValidationError
-        from common.utils.file_validation import validate_file_upload, sanitize_filename
+        from .services import filing
 
         client = self.get_object()
 
@@ -331,38 +347,33 @@ class ClientViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        uploaded_file = request.FILES['file']
-
-        # Use comprehensive file validation from common utilities
-        try:
-            validate_file_upload(uploaded_file)
-        except DjangoValidationError as e:
-            return Response(
-                {'error': str(e.message) if hasattr(e, 'message') else str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Sanitize filename to prevent directory traversal
-        uploaded_file.name = sanitize_filename(uploaded_file.name)
-
-        # Create document
-        document = ClientDocument.objects.create(
-            client=client,
-            file=uploaded_file,
-            document_category=request.data.get('category', 'general'),
-            description=request.data.get('description', '')
-        )
-
-        # Link to obligation if provided
+        # Σύνδεση με υποχρέωση αν δόθηκε
+        obligation = None
         obligation_id = request.data.get('obligation_id')
         if obligation_id:
             try:
                 from .models import MonthlyObligation
                 obligation = MonthlyObligation.objects.get(id=obligation_id, client=client)
-                document.obligation = obligation
-                document.save()
             except MonthlyObligation.DoesNotExist:
                 pass
+
+        # Ενιαία διαδρομή: validation βάσει ρυθμίσεων + versioning + φάκελοι
+        try:
+            document = filing.create_client_document(
+                client=client,
+                uploaded_file=request.FILES['file'],
+                category=request.data.get('category', 'general'),
+                obligation=obligation,
+                year=request.data.get('year'),
+                month=request.data.get('month'),
+                user=request.user,
+                description=request.data.get('description', ''),
+            )
+        except DjangoValidationError as e:
+            return Response(
+                {'error': '; '.join(e.messages)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         serializer = ClientDocumentSerializer(document, context={'request': request})
         return Response({

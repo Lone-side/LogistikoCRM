@@ -31,6 +31,7 @@ import {
   useClientObligationProfile,
   useUpdateClientObligationProfile,
 } from '../hooks/useClientDetails';
+import type { ClientDocumentFilters } from '../hooks/useClientDetails';
 import { useObligationTypesGrouped } from '../hooks/useObligations';
 import { useObligationProfilesList } from '../hooks/useObligationSettings';
 import type { ClientFull } from '../types';
@@ -76,6 +77,8 @@ export default function ClientDetails() {
   const [yearFilter, setYearFilter] = useState<number>(new Date().getFullYear());
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [docFilters, setDocFilters] = useState<ClientDocumentFilters>({});
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
 
   // Fetch client data
@@ -84,7 +87,7 @@ export default function ClientDetails() {
   // Tab-specific queries (lazy loaded)
   const { data: documentsData, isLoading: docsLoading } = useClientDocuments(
     clientId,
-    activeTab === 'documents' ? undefined : undefined
+    docFilters
   );
   const { data: obligationsData, isLoading: oblLoading } = useClientObligations(
     clientId,
@@ -324,6 +327,8 @@ export default function ClientDetails() {
             <ClientDocumentsTab
               data={documentsData}
               isLoading={docsLoading}
+              filters={docFilters}
+              onFiltersChange={setDocFilters}
               onUpload={() => setUploadModalOpen(true)}
               onDelete={(docId) => {
                 if (confirm('Διαγραφή εγγράφου;')) {
@@ -370,16 +375,27 @@ export default function ClientDetails() {
       {/* Upload Modal */}
       {uploadModalOpen && (
         <UploadModal
-          onClose={() => setUploadModalOpen(false)}
-          onUpload={(file, category, description) => {
+          onClose={() => {
+            setUploadModalOpen(false);
+            setUploadError(null);
+          }}
+          onUpload={(file, category, description, year, month) => {
+            setUploadError(null);
             uploadMutation.mutate(
-              { file, category, description },
+              { file, category, description, year, month },
               {
                 onSuccess: () => setUploadModalOpen(false),
+                onError: (err) => {
+                  const axiosErr = err as { response?: { data?: { error?: string } } };
+                  setUploadError(
+                    axiosErr.response?.data?.error || 'Σφάλμα κατά τη μεταφόρτωση'
+                  );
+                },
               }
             );
           }}
           isLoading={uploadMutation.isPending}
+          errorMessage={uploadError}
         />
       )}
 
