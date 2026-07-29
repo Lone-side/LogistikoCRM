@@ -73,7 +73,6 @@ export interface Obligation {
   time_spent?: number | null;
   hourly_rate?: number | null;
   attachment?: string | null;
-  attachments?: string[];
   documents_count?: number;     // Count of attached documents (read_only)
   created_at: string;
   updated_at: string;

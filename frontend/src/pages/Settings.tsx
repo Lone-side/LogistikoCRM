@@ -23,6 +23,7 @@ import { Button } from '../components';
 import { useToast } from '../components/Toast';
 import { useAuthStore } from '../stores/authStore';
 import { gsisApi, authApi } from '../api/client';
+import apiClient from '../api/client';
 
 type SettingsTab = 'profile' | 'notifications' | 'security' | 'integrations';
 
@@ -78,13 +79,11 @@ export default function Settings() {
     }
   };
 
-  // Handle notification settings save
+  // Handle notification settings save (αποθήκευση στον server, ανά χρήστη)
   const handleSaveNotifications = async () => {
     setIsSavingNotifications(true);
     try {
-      // TODO: Implement backend API for notification settings
-      // For now, just store in localStorage as a temporary solution
-      localStorage.setItem('notificationSettings', JSON.stringify(notificationSettings));
+      await apiClient.put('/api/v1/notifications/settings/', notificationSettings);
       showToast('success', 'Οι ρυθμίσεις ειδοποιήσεων αποθηκεύτηκαν');
     } catch (error) {
       console.error('Notification settings save error:', error);
@@ -94,16 +93,16 @@ export default function Settings() {
     }
   };
 
-  // Load notification settings from localStorage on mount
+  // Load notification settings from server on mount
   useEffect(() => {
-    const saved = localStorage.getItem('notificationSettings');
-    if (saved) {
-      try {
-        setNotificationSettings(JSON.parse(saved));
-      } catch {
-        // ignore parse errors
-      }
-    }
+    apiClient
+      .get('/api/v1/notifications/settings/')
+      .then((response) => {
+        const { email_reminders, email_overdue, new_files, missed_calls, weekly_summary } =
+          response.data;
+        setNotificationSettings({ email_reminders, email_overdue, new_files, missed_calls, weekly_summary });
+      })
+      .catch((error) => console.error('Notification settings load error:', error));
   }, []);
 
   // GSIS Settings State

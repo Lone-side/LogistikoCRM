@@ -687,3 +687,39 @@ class StopPhrase(models.Model):
         Returns the string representation of the stop phrase.
         """
         return self.phrase
+
+
+class UserNotificationSettings(models.Model):
+    """
+    Προτιμήσεις ειδοποιήσεων ανά χρήστη (σελίδα Ρυθμίσεις του React UI).
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notification_settings',
+        verbose_name='Χρήστης',
+    )
+    email_reminders = models.BooleanField(
+        'Email υπενθυμίσεις προθεσμιών', default=True)
+    email_overdue = models.BooleanField(
+        'Email για εκπρόθεσμες υποχρεώσεις', default=True)
+    new_files = models.BooleanField(
+        'Ειδοποίηση για νέα αρχεία', default=False)
+    missed_calls = models.BooleanField(
+        'Ειδοποίηση για αναπάντητες κλήσεις', default=True)
+    weekly_summary = models.BooleanField(
+        'Εβδομαδιαία σύνοψη', default=False)
+
+    updated_at = models.DateTimeField('Ενημερώθηκε', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Ρυθμίσεις Ειδοποιήσεων Χρήστη'
+        verbose_name_plural = 'Ρυθμίσεις Ειδοποιήσεων Χρηστών'
+
+    def __str__(self):
+        return f"Ειδοποιήσεις: {self.user.username}"
+
+    @classmethod
+    def get_for_user(cls, user):
+        obj, _ = cls.objects.get_or_create(user=user)
+        return obj

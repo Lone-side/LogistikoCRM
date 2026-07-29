@@ -198,53 +198,94 @@ def send_obligation_reminders():
     Στέλνεται: Κάθε weekday 9:00 AM
     Λήπτες: Πελάτες με υποχρεώσεις που λήγουν τις επόμενες 7 ημέρες
     """
+    # Δεν ξαναστέλνουμε υπενθύμιση για την ίδια υποχρέωση πριν περάσουν Χ ημέρες
+    REMINDER_COOLDOWN_DAYS = 3
+
     try:
         today = timezone.now().date()
         week_end = today + timedelta(days=7)
-        
-        # Find obligations due this week
+
+        # Υποχρεώσεις που λήγουν αυτή την εβδομάδα (και οι «σε εξέλιξη»)
         pending_obligations = MonthlyObligation.objects.filter(
             deadline__gte=today,
             deadline__lte=week_end,
-            status='pending'
+            status__in=['pending', 'in_progress'],
         ).select_related('client', 'obligation_type')
-        
+
         if not pending_obligations.exists():
             logger.info("No obligations due this week - skipping reminder")
             return f"No reminders sent (0 obligations due)"
-        
+
+        # Πρότυπο: το seeded «Υπενθύμιση Προθεσμίας» (τα ονόματα είναι ελληνικά —
+        # το παλιό icontains='reminder' δεν το έβρισκε ποτέ)
+        def get_reminder_template(obligation_type):
+            return (
+                EmailTemplate.objects.filter(
+                    obligation_type=obligation_type, is_active=True,
+                    name__icontains='Υπενθύμιση'
+                ).first()
+                or EmailTemplate.objects.filter(
+                    name='Υπενθύμιση Προθεσμίας', is_active=True
+                ).first()
+                or EmailTemplate.objects.filter(
+                    is_active=True, name__icontains='Υπενθύμιση Προθεσμίας'
+                ).first()
+            )
+
         sent_count = 0
-        
+        skipped_recent = 0
+        cooldown_start = timezone.now() - timedelta(days=REMINDER_COOLDOWN_DAYS)
+
         for obligation in pending_obligations:
             try:
                 client = obligation.client
-                
+
                 # Skip if no email
                 if not client.email:
                     logger.warning(f"Client {client.afm} has no email - skipping")
                     continue
-                
-                # Get template (look for 'obligation reminder' template)
-                template = EmailTemplate.objects.filter(
-                    name__icontains='reminder',
-                    is_active=True
-                ).first()
-                
+
+                template = get_reminder_template(obligation.obligation_type)
+
+                # Anti-spam: αν στάλθηκε πρόσφατα υπενθύμιση για την ίδια
+                # υποχρέωση, μην την ξαναστείλεις (το task τρέχει καθημερινά)
+                already_sent = ScheduledEmail.objects.filter(
+                    obligations=obligation,
+                    status='sent',
+                    sent_at__gte=cooldown_start,
+                    subject__icontains='Υπενθύμιση',
+                ).exists()
+                if already_sent:
+                    skipped_recent += 1
+                    continue
+
+                context = {
+                    'client_name': client.eponimia,
+                    'client_afm': client.afm,
+                    'obligation_type': obligation.obligation_type.name,
+                    'period_month': obligation.month,
+                    'period_year': obligation.year,
+                    'period_display': f"{obligation.month:02d}/{obligation.year}",
+                    'deadline': obligation.deadline.strftime('%d/%m/%Y'),
+                    'days_left': (obligation.deadline - today).days,
+                    'accountant_name': '',
+                    'company_name': '',
+                }
+
                 if not template:
                     logger.warning("No reminder template found - using default message")
-                    # Use default message
                     subject = f"⏰ Υπενθύμιση: Υποχρέωση {obligation.obligation_type.name}"
-                    body = f"Καλημέρα {client.eponimia},\n\nΥπενθύμιση: Η υποχρέωση '{obligation.obligation_type.name}' λήγει στις {obligation.deadline.strftime('%d/%m/%Y')}.\n\nΜε εκτίμηση"
+                    body = (
+                        f"Καλημέρα {client.eponimia},\n\n"
+                        f"Υπενθύμιση: Η υποχρέωση '{obligation.obligation_type.name}' "
+                        f"λήγει στις {obligation.deadline.strftime('%d/%m/%Y')}.\n\nΜε εκτίμηση"
+                    )
                 else:
-                    # Render template
-                    context = {
-                        'client_name': client.eponimia,
-                        'obligation_name': obligation.obligation_type.name,
-                        'deadline': obligation.deadline.strftime('%d/%m/%Y'),
-                        'days_left': (obligation.deadline - today).days,
-                    }
-                    subject, body = template.render(context)
-                
+                    # render_simple: τα seeded templates έχουν {μεταβλητή} με
+                    # μονά άγκιστρα — το render() (Django Template) δεν τα
+                    # αντικαθιστούσε ποτέ
+                    subject, body = template.render_simple(context)
+
                 # Send email
                 send_mail(
                     subject=subject,
@@ -254,9 +295,9 @@ def send_obligation_reminders():
                     html_message=body if template else None,
                     fail_silently=False,
                 )
-                
-                # Log email
-                ScheduledEmail.objects.create(
+
+                # Log email (με σύνδεση στην υποχρέωση για το anti-spam check)
+                log_entry = ScheduledEmail.objects.create(
                     recipient_email=client.email,
                     recipient_name=client.eponimia,
                     client=client,
@@ -267,17 +308,21 @@ def send_obligation_reminders():
                     status='sent',
                     sent_at=timezone.now(),
                 )
-                
+                log_entry.obligations.add(obligation)
+
                 sent_count += 1
                 logger.info(f"✅ Reminder sent to {client.email} for obligation {obligation.obligation_type.name}")
-                
+
             except Exception as e:
                 logger.error(f"❌ Error sending reminder for obligation #{obligation.id}: {e}")
                 continue
-        
-        logger.info(f"✅ Obligation reminders sent: {sent_count}/{pending_obligations.count()}")
-        return f"Sent {sent_count} obligation reminders"
-        
+
+        logger.info(
+            f"✅ Obligation reminders: {sent_count} sent, "
+            f"{skipped_recent} skipped (recent), of {pending_obligations.count()} due"
+        )
+        return f"Sent {sent_count} obligation reminders ({skipped_recent} skipped as recent)"
+
     except Exception as exc:
         logger.error(f"❌ Error in send_obligation_reminders: {exc}")
         return f"Error: {str(exc)}"
@@ -807,3 +852,28 @@ def extract_document_text(self, document_id):
     status = text_extraction.process_document(document)
     logger.info(f"Text extraction for document {document_id}: {status}")
     return status
+
+
+# ============================================
+# DATABASE BACKUP (Celery beat, καθημερινά 02:00)
+# ============================================
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=300)
+def backup_database_task(self):
+    """
+    Αυτόματο backup βάσης — τρέχει από το Celery beat ώστε να μη
+    χρειάζεται χειροκίνητο crontab setup (το scripts/backup_cron.sh
+    παραμένει για deployments χωρίς Celery).
+    """
+    from io import StringIO
+    from django.core.management import call_command
+
+    out = StringIO()
+    try:
+        call_command('backup_database', stdout=out)
+        result = out.getvalue().strip()
+        logger.info(f"✅ Scheduled backup: {result}")
+        return result
+    except Exception as exc:
+        logger.error(f"❌ Scheduled backup failed: {exc}")
+        raise self.retry(exc=exc)

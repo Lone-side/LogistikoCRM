@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import serializers
 
-from .models import FilingSystemSettings
+from .models import FilingSystemSettings, UserNotificationSettings
 
 
 class FilingSystemSettingsSerializer(serializers.ModelSerializer):
@@ -296,3 +296,30 @@ class DocumentCategoriesView(APIView):
             'categories': categories,
             'grouped': grouped,
         })
+
+
+class NotificationSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserNotificationSettings
+        fields = ['email_reminders', 'email_overdue', 'new_files',
+                  'missed_calls', 'weekly_summary', 'updated_at']
+        read_only_fields = ['updated_at']
+
+
+class NotificationSettingsView(APIView):
+    """
+    GET: Προτιμήσεις ειδοποιήσεων του τρέχοντος χρήστη
+    PUT: Ενημέρωση προτιμήσεων
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        obj = UserNotificationSettings.get_for_user(request.user)
+        return Response(NotificationSettingsSerializer(obj).data)
+
+    def put(self, request):
+        obj = UserNotificationSettings.get_for_user(request.user)
+        serializer = NotificationSettingsSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

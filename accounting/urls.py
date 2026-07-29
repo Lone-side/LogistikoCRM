@@ -7,6 +7,8 @@ Description: Unified and optimized URL routing for the Accounting app.
 """
 
 from django.urls import path, include
+
+from settings.api import NotificationSettingsView
 from rest_framework.routers import DefaultRouter
 from . import views_main as views
 from . import api_auth
@@ -400,6 +402,8 @@ urlpatterns = [
     # BACKUP & RESTORE API
     # ==================================================
     path("api/settings/backup/", include("settings.backup_urls")),
+    path("api/v1/notifications/settings/", NotificationSettingsView.as_view(),
+         name="api_v1_notification_settings"),
 
     # ==================================================
     # FILE MANAGER API (v1)
