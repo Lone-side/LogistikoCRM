@@ -1,30 +1,95 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   FileText,
   Upload,
   RefreshCw,
   X,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../../components';
-import { DOCUMENT_CATEGORIES } from '../../types';
+import apiClient from '../../api/client';
+import {
+  DOCUMENT_CATEGORY_GROUPS,
+  DOCUMENT_CATEGORY_FOLDER_TYPE,
+  DOCUMENT_CATEGORY_LABELS,
+  GREEK_MONTH_NAMES,
+} from '../../types';
+import type { DocumentSuggestion } from '../../types';
 
 // Props interface
 export interface UploadModalProps {
   onClose: () => void;
-  onUpload: (file: File, category?: string, description?: string) => void;
+  onUpload: (file: File, category?: string, description?: string, year?: number, month?: number) => void;
   isLoading: boolean;
+  /** Μήνυμα σφάλματος από το backend (π.χ. μη επιτρεπόμενη κατάληξη) */
+  errorMessage?: string | null;
+  /** ID πελάτη — ενεργοποιεί τις «έξυπνες» προτάσεις από το περιεχόμενο */
+  clientId?: number;
 }
 
 export default function UploadModal({
   onClose,
   onUpload,
   isLoading,
+  errorMessage,
+  clientId,
 }: UploadModalProps) {
+  const now = new Date();
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState('general');
+  const [categoryTouched, setCategoryTouched] = useState(false);
   const [description, setDescription] = useState('');
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [dragActive, setDragActive] = useState(false);
+  const [suggestion, setSuggestion] = useState<DocumentSuggestion | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // «Έξυπνες» προτάσεις: διαβάζει το περιεχόμενο του αρχείου στον server
+  // (χωρίς αποθήκευση) και προτείνει κατηγορία/όνομα + έλεγχο ΑΦΜ
+  useEffect(() => {
+    if (!file) {
+      setSuggestion(null);
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      setSuggesting(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (clientId) formData.append('client_id', String(clientId));
+        const response = await apiClient.post<DocumentSuggestion>(
+          '/api/v1/documents/suggest/',
+          formData,
+          { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+        if (cancelled) return;
+        setSuggestion(response.data);
+        if (response.data.suggested_category && !categoryTouched) {
+          setCategory(response.data.suggested_category);
+        }
+      } catch {
+        if (!cancelled) setSuggestion(null);
+      } finally {
+        if (!cancelled) setSuggesting(false);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, clientId]);
+
+  // Τι χρειάζεται η κατηγορία: μόνιμα → τίποτα, ετήσια → έτος, μηνιαία → έτος+μήνας
+  const folderType = DOCUMENT_CATEGORY_FOLDER_TYPE[category] || 'monthly';
+  const needsYear = folderType !== 'permanent';
+  const needsMonth = folderType === 'monthly';
+
+  const yearOptions = Array.from({ length: 7 }, (_, i) => now.getFullYear() + 1 - i);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -47,7 +112,13 @@ export default function UploadModal({
 
   const handleSubmit = () => {
     if (file) {
-      onUpload(file, category, description);
+      onUpload(
+        file,
+        category,
+        description,
+        needsYear ? year : undefined,
+        needsMonth ? month : undefined,
+      );
     }
   };
 
@@ -76,7 +147,7 @@ export default function UploadModal({
               type="file"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.txt,.csv,.xml"
             />
             {file ? (
               <div className="flex items-center justify-center gap-2">
@@ -100,29 +171,118 @@ export default function UploadModal({
                   επιλέξτε αρχείο
                 </button>
                 <p className="text-xs text-gray-400 mt-2">
-                  PDF, DOC, XLS, JPG, PNG (max 10MB)
+                  Επιτρεπόμενοι τύποι και μέγεθος βάσει Ρυθμίσεων Αρχειοθέτησης
                 </p>
               </>
             )}
           </div>
 
-          {/* Category */}
+          {/* Backend error */}
+          {errorMessage && (
+            <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
+
+          {/* Έξυπνες προτάσεις από το περιεχόμενο */}
+          {file && (suggesting || suggestion) && (
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm space-y-1">
+              {suggesting ? (
+                <p className="flex items-center gap-1.5 text-blue-700">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Ανάλυση περιεχομένου...
+                </p>
+              ) : (
+                suggestion && (
+                  <>
+                    {suggestion.suggested_category && (
+                      <p className="flex items-center gap-1.5 text-blue-700">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Αναγνωρίστηκε: {DOCUMENT_CATEGORY_LABELS[suggestion.suggested_category] || suggestion.suggested_category}
+                      </p>
+                    )}
+                    {suggestion.suggested_filename && suggestion.suggested_filename !== file.name && (
+                      <p className="text-blue-600 text-xs">
+                        Θα αποθηκευτεί ως: <span className="font-mono">{suggestion.suggested_filename}</span>
+                      </p>
+                    )}
+                    {suggestion.afm_matches_client === false && (
+                      <p className="flex items-center gap-1.5 text-amber-700">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        Το ΑΦΜ στο έγγραφο ({suggestion.detected_afm}) δεν αντιστοιχεί στον πελάτη
+                      </p>
+                    )}
+                  </>
+                )
+              )}
+            </div>
+          )}
+
+          {/* Category (ομαδοποιημένη: Μόνιμα / Μηνιαία / Ετήσια) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Κατηγορία
             </label>
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setCategoryTouched(true);
+              }}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg"
             >
-              {DOCUMENT_CATEGORIES.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
-                </option>
+              {DOCUMENT_CATEGORY_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.categories.map((cat) => (
+                    <option key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            <p className="text-xs text-gray-400 mt-1">
+              {folderType === 'permanent' && 'Θα αποθηκευτεί στον φάκελο 00_ΜΟΝΙΜΑ'}
+              {folderType === 'yearend' && 'Θα αποθηκευτεί στον φάκελο 13_ΕΤΗΣΙΑ του έτους'}
+              {folderType === 'monthly' && 'Θα αποθηκευτεί στον μηνιαίο φάκελο του πελάτη'}
+            </p>
           </div>
+
+          {/* Year / Month (ανάλογα με την κατηγορία) */}
+          {needsYear && (
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Έτος
+                </label>
+                <select
+                  value={year}
+                  onChange={(e) => setYear(parseInt(e.target.value, 10))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                >
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              {needsMonth && (
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Μήνας
+                  </label>
+                  <select
+                    value={month}
+                    onChange={(e) => setMonth(parseInt(e.target.value, 10))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  >
+                    {GREEK_MONTH_NAMES.map((name, i) => (
+                      <option key={i + 1} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Description */}
           <div>

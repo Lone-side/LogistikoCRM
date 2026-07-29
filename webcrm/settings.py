@@ -610,6 +610,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'accounting.tasks.retry_failed_emails',
         'schedule': crontab(minute='*/30'),  # Every 30 minutes
     },
+    'ensure-yearly-folders': {
+        'task': 'accounting.tasks.ensure_yearly_folders',
+        'schedule': crontab(hour=6, minute=0, day_of_month=1, month_of_year=1),  # 1η Ιανουαρίου 06:00
+    },
 }
 
 # ==================== SITE CONFIGURATION ====================

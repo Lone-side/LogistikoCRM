@@ -646,14 +646,21 @@ class MonthlyObligationAdmin(admin.ModelAdmin):
             obj.completed_by = request.user
             obj.completed_date = timezone.now().date()
 
-        # Check if a new attachment was uploaded
+        # Νέο αρχείο από το (deprecated) πεδίο attachment → ClientDocument
         if 'attachment' in form.changed_data and obj.attachment:
-            # Save the model first to get the ID
             super().save_model(request, obj, form, change)
-            # Then archive the attachment to organized folder structure
             try:
-                obj.archive_attachment(obj.attachment)
-                self.message_user(request, f'📁 Το αρχείο αρχειοθετήθηκε: {obj.attachment.name}', messages.SUCCESS)
+                import os
+                from django.core.files import File
+                from ..services import filing
+                upload = File(obj.attachment.file, name=os.path.basename(obj.attachment.name))
+                document = filing.create_client_document(
+                    client=obj.client,
+                    uploaded_file=upload,
+                    obligation=obj,
+                    user=request.user,
+                )
+                self.message_user(request, f'📁 Το αρχείο αρχειοθετήθηκε: {document.filename}', messages.SUCCESS)
             except Exception as e:
                 self.message_user(request, f'⚠️ Σφάλμα αρχειοθέτησης: {e}', messages.WARNING)
         else:

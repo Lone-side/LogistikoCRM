@@ -147,18 +147,9 @@ def upload_document_with_version(request):
             'error': 'client_id is required'
         }, status=400)
 
-    # Validate file using common utilities
+    # Ενιαία διαδρομή αρχειοθέτησης (validation βάσει ρυθμίσεων + ονομασία + versioning)
     from django.core.exceptions import ValidationError
-    from common.utils.file_validation import validate_file_upload, sanitize_filename
-
-    try:
-        validate_file_upload(uploaded_file)
-        uploaded_file.name = sanitize_filename(uploaded_file.name)
-    except ValidationError as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e.message) if hasattr(e, 'message') else str(e)
-        }, status=400)
+    from .services import filing
 
     try:
         client = get_object_or_404(ClientProfile, id=client_id)
@@ -185,94 +176,56 @@ def upload_document_with_version(request):
             obligation=obligation,
             category=category if category != 'general' else None
         )
+        has_conflict = bool(existing and existing.year == year and existing.month == month)
 
-        if existing and existing.year == year and existing.month == month:
-            # Handle based on version_action
-            if version_action == 'new_version':
-                # Create new version
-                new_doc = existing.create_new_version(
-                    new_file=uploaded_file,
-                    user=request.user
-                )
-                return JsonResponse({
-                    'success': True,
-                    'action': 'new_version',
-                    'message': f'Δημιουργήθηκε νέα έκδοση (v{new_doc.version})',
-                    'document': _document_to_dict(new_doc),
-                    'previous_version': {
-                        'id': existing.id,
-                        'version': existing.version,
-                    }
-                })
+        if has_conflict and version_action not in ('new_version', 'replace'):
+            # auto - return info that file exists
+            return JsonResponse({
+                'success': False,
+                'action': 'exists',
+                'message': 'Υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό',
+                'existing_document': _document_to_dict(existing),
+                'requires_decision': True,
+            }, status=409)  # Conflict
 
-            elif version_action == 'replace':
-                # Delete old and create new (same version number)
-                old_path = existing.file.path if existing.file else None
+        previous_version = (
+            {'id': existing.id, 'version': existing.version} if has_conflict else None
+        )
 
-                # Create new document with version 1
-                new_doc = ClientDocument(
-                    client=client,
-                    obligation=obligation,
-                    file=uploaded_file,
-                    original_filename=uploaded_file.name,
-                    document_category=category,
-                    year=year,
-                    month=month,
-                    version=1,
-                    is_current=True,
-                    description=description,
-                    uploaded_by=request.user,
-                )
-
-                # Delete old file and document
-                if old_path and os.path.exists(old_path):
-                    try:
-                        os.remove(old_path)
-                    except Exception as e:
-                        logger.warning(f"Could not delete old file {old_path}: {e}")
-
-                existing.delete()
-                new_doc.save()
-
-                return JsonResponse({
-                    'success': True,
-                    'action': 'replaced',
-                    'message': 'Το αρχείο αντικαταστάθηκε',
-                    'document': _document_to_dict(new_doc),
-                })
-
-            else:  # auto - return info that file exists
-                return JsonResponse({
-                    'success': False,
-                    'action': 'exists',
-                    'message': 'Υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό',
-                    'existing_document': _document_to_dict(existing),
-                    'requires_decision': True,
-                }, status=409)  # Conflict
-
-        else:
-            # No existing document - create new
-            new_doc = ClientDocument(
+        try:
+            new_doc = filing.create_client_document(
                 client=client,
+                uploaded_file=uploaded_file,
+                category=category,
                 obligation=obligation,
-                file=uploaded_file,
-                original_filename=uploaded_file.name,
-                document_category=category,
                 year=year,
                 month=month,
-                version=1,
-                is_current=True,
+                user=request.user,
                 description=description,
-                uploaded_by=request.user,
+                on_existing='replace' if version_action == 'replace' else 'version',
             )
-            new_doc.save()
-
+        except ValidationError as e:
             return JsonResponse({
-                'success': True,
-                'action': 'created',
-                'message': 'Το αρχείο αποθηκεύτηκε επιτυχώς',
-                'document': _document_to_dict(new_doc),
-            })
+                'success': False,
+                'error': '; '.join(e.messages)
+            }, status=400)
+
+        if has_conflict and version_action == 'replace':
+            action, message = 'replaced', 'Το αρχείο αντικαταστάθηκε'
+        elif has_conflict:
+            action, message = 'new_version', f'Δημιουργήθηκε νέα έκδοση (v{new_doc.version})'
+        else:
+            action, message = 'created', 'Το αρχείο αποθηκεύτηκε επιτυχώς'
+
+        response = {
+            'success': True,
+            'action': action,
+            'message': message,
+            'document': _document_to_dict(new_doc),
+        }
+        if action == 'new_version':
+            response['previous_version'] = previous_version
+        return JsonResponse(response)
 
     except Exception as e:
         logger.error(f"Error uploading document: {e}", exc_info=True)
@@ -348,3 +301,70 @@ def _document_to_dict(doc):
         'uploaded_at': doc.uploaded_at.strftime('%d/%m/%Y %H:%M'),
         'uploaded_by': doc.uploaded_by.get_full_name() if doc.uploaded_by else None,
     }
+
+
+# =============================================================================
+# SMART SUGGESTIONS (κατηγορία / ΑΦΜ / όνομα) ΠΡΙΝ ΤΟ UPLOAD
+# =============================================================================
+
+@staff_member_required
+@require_POST
+def suggest_document_metadata(request):
+    """
+    POST /api/v1/documents/suggest/
+    Δέχεται αρχείο (+ προαιρετικά client_id) και επιστρέφει προτάσεις
+    ΧΩΡΙΣ να αποθηκεύσει τίποτα:
+        - suggested_category: από λέξεις-κλειδιά στο περιεχόμενο/όνομα
+        - detected_afm / afm_matches_client
+        - suggested_filename: βάσει Κανόνα Ονοματολογίας ρυθμίσεων
+    """
+    from django.core.exceptions import ValidationError
+    from common.utils.afm import find_afm_candidates
+    from settings.models import FilingSystemSettings
+    from .services import filing, text_extraction
+
+    if 'file' not in request.FILES:
+        return JsonResponse({'error': 'Δεν επιλέχθηκε αρχείο'}, status=400)
+
+    uploaded_file = request.FILES['file']
+    try:
+        filing.validate_upload(uploaded_file)
+    except ValidationError as e:
+        return JsonResponse({'error': '; '.join(e.messages)}, status=400)
+
+    client = None
+    client_id = request.POST.get('client_id')
+    if client_id:
+        client = ClientProfile.objects.filter(id=client_id).first()
+
+    # Εξαγωγή in-memory, μόνο πρώτες σελίδες
+    text, _status = text_extraction.extract_text_from_file(
+        uploaded_file, uploaded_file.name, max_pages=5
+    )
+    uploaded_file.seek(0)
+
+    suggested_category = text_extraction.suggest_category(text, uploaded_file.name)
+    detected = find_afm_candidates(text)
+    detected_afm = detected[0] if detected else None
+    afm_matches_client = None
+    if client and detected:
+        afm_matches_client = client.afm in detected
+
+    suggested_filename = uploaded_file.name
+    try:
+        filing_settings = FilingSystemSettings.get_settings()
+        suggested_filename = filing_settings.generate_filename(
+            uploaded_file.name,
+            client=client,
+            category=suggested_category or request.POST.get('category') or None,
+        )
+    except Exception as e:
+        logger.warning(f"Suggest filename failed: {e}")
+
+    return JsonResponse({
+        'suggested_category': suggested_category,
+        'detected_afm': detected_afm,
+        'afm_matches_client': afm_matches_client,
+        'suggested_filename': suggested_filename,
+        'has_text': bool(text),
+    })

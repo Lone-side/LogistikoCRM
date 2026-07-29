@@ -118,6 +118,7 @@ class DocumentFilter(FilterSet):
                 Q(filename__icontains=value) |
                 Q(description__icontains=value) |
                 Q(original_filename__icontains=value) |
+                Q(extracted_text__icontains=value) |
                 Q(client__eponimia__icontains=value) |
                 Q(client__afm__icontains=value)
             )
@@ -190,6 +191,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             'file', 'file_url', 'filename', 'original_filename', 'file_type', 'file_size', 'file_size_display',
             'document_category', 'category_display', 'description',
             'year', 'month', 'version', 'is_current',
+            'ocr_status', 'afm_mismatch',
             'uploaded_at', 'uploaded_by',
             'tags', 'is_favorite', 'can_preview', 'shared_links_count'
         ]
@@ -394,34 +396,28 @@ class DocumentViewSet(viewsets.ModelViewSet):
         year = request.data.get('year')
         month = request.data.get('month')
 
-        # Validate files using common utilities
+        # Ενιαία διαδρομή αρχειοθέτησης (validation βάσει ρυθμίσεων + versioning)
         from django.core.exceptions import ValidationError
-        from common.utils.file_validation import validate_file_upload, sanitize_filename
+        from .services import filing
 
         uploaded_docs = []
         errors = []
 
         for f in files:
             try:
-                validate_file_upload(f)
-                f.name = sanitize_filename(f.name)
+                doc = filing.create_client_document(
+                    client=client,
+                    uploaded_file=f,
+                    category=category,
+                    obligation=obligation,
+                    year=year,
+                    month=month,
+                    user=request.user,
+                    description=description,
+                )
             except ValidationError as e:
-                errors.append(f'{f.name}: {str(e.message) if hasattr(e, "message") else str(e)}')
+                errors.append(f'{f.name}: {"; ".join(e.messages)}')
                 continue
-
-            doc = ClientDocument(
-                client=client,
-                obligation=obligation,
-                file=f,
-                document_category=category,
-                description=description,
-                uploaded_by=request.user
-            )
-            if year:
-                doc.year = int(year)
-            if month:
-                doc.month = int(month)
-            doc.save()
             uploaded_docs.append(doc)
 
         result_serializer = DocumentSerializer(uploaded_docs, many=True, context={'request': request})

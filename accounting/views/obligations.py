@@ -25,8 +25,8 @@ from ..models import (
     ClientDocument
 )
 
-# SECURITY: File upload validation
-from common.utils.file_validation import validate_file_upload
+# Ενιαία υπηρεσία αρχειοθέτησης (validation + ClientDocument + φάκελοι)
+from ..services import filing
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 import logging
@@ -82,22 +82,21 @@ def quick_complete_obligation(request, obligation_id):
             else:
                 obligation.notes = new_note
 
-        # Handle file attachment with SECURITY validation
+        # Handle file attachment (validation μέσω FilingSystemSettings)
         if 'attachment' in request.FILES:
-            uploaded_file = request.FILES['attachment']
-
-            # SECURITY FIX: Validate uploaded file before processing
             try:
-                validate_file_upload(uploaded_file)
+                document = filing.create_client_document(
+                    client=obligation.client,
+                    uploaded_file=request.FILES['attachment'],
+                    obligation=obligation,
+                    user=request.user,
+                )
             except DjangoValidationError as e:
                 return JsonResponse({
                     'success': False,
-                    'message': f'Mh egkyro arxeio: {str(e)}'
+                    'message': f'Μη έγκυρο αρχείο: {"; ".join(e.messages)}'
                 }, status=400)
-
-            # File is validated, proceed with archiving
-            archive_path = obligation.archive_attachment(uploaded_file)
-            logger.info(f'Arxeiothetithike: {archive_path}')
+            logger.info(f'Αρχειοθετήθηκε: {document.file.name}')
         obligation.save()
 
         # Success response
@@ -141,14 +140,14 @@ def bulk_complete_view(request):
         notes = request.POST.get('notes', '')
         attachments = request.FILES.getlist('attachments')
 
-        # SECURITY FIX: Validate all uploaded files before processing
+        # Επικύρωση όλων των αρχείων πριν την επεξεργασία (βάσει ρυθμίσεων)
         for attachment in attachments:
             try:
-                validate_file_upload(attachment)
+                filing.validate_upload(attachment)
             except DjangoValidationError as e:
                 return JsonResponse({
                     'success': False,
-                    'message': f'Mh egkyro arxeio "{attachment.name}": {str(e)}'
+                    'message': f'Μη έγκυρο αρχείο "{attachment.name}": {"; ".join(e.messages)}'
                 }, status=400)
 
         if not obligation_ids:
@@ -176,11 +175,17 @@ def bulk_complete_view(request):
                 else:
                     obl.notes = new_note
 
+            obl.save()
+
             # Attach file if available (already validated above)
             if idx < len(attachments):
-                obl.attachment = attachments[idx]
+                filing.create_client_document(
+                    client=obl.client,
+                    uploaded_file=attachments[idx],
+                    obligation=obl,
+                    user=request.user,
+                )
 
-            obl.save()
             completed_count += 1
 
         return JsonResponse({
@@ -277,14 +282,19 @@ def advanced_bulk_complete(request):
                             obligation.notes = new_note
 
                     # Handle file
+                    obligation.save()
                     if group_num == '0':  # Individual files
                         if j < len(files):
                             logger.info(f"    Archiving individual file {j}: {files[j].name}")
-                            archive_path = obligation.archive_attachment(files[j])
-                            processed_details.append(f"{obligation.obligation_type.name}: {archive_path}")
-                            logger.info(f"    Archived to: {archive_path}")
+                            document = filing.create_client_document(
+                                client=obligation.client,
+                                uploaded_file=files[j],
+                                obligation=obligation,
+                                user=request.user,
+                            )
+                            processed_details.append(f"{obligation.obligation_type.name}: {document.file.name}")
+                            logger.info(f"    Archived to: {document.file.name}")
                         else:
-                            obligation.save()
                             processed_details.append(f"{obligation.obligation_type.name} (xoris arxeio)")
                             logger.info(f"    No file for this obligation")
                     else:  # Group file
@@ -298,11 +308,15 @@ def advanced_bulk_complete(request):
                             file_copy.name = file_to_use.name
                             file_to_use.seek(0)  # Reset for next use
 
-                            archive_path = obligation.archive_attachment(file_copy)
+                            document = filing.create_client_document(
+                                client=obligation.client,
+                                uploaded_file=file_copy,
+                                obligation=obligation,
+                                user=request.user,
+                            )
                             processed_details.append(f"{obligation.obligation_type.name} (Group {group_num})")
-                            logger.info(f"    Archived to: {archive_path}")
+                            logger.info(f"    Archived to: {document.file.name}")
                         else:
-                            obligation.save()
                             processed_details.append(f"{obligation.obligation_type.name} (no file)")
 
                     completed_count += 1
@@ -411,37 +425,27 @@ def complete_with_file(request, obligation_id):
                 'error': 'Den anevasate arxeio'
             }, status=400)
 
-        uploaded_file = request.FILES['file']
-
-        # SECURITY: File validation
+        # Create ClientDocument (validation βάσει ρυθμίσεων + versioning + φάκελοι)
         try:
-            validate_file_upload(uploaded_file)
-        except Exception as e:
+            document = filing.create_client_document(
+                client=obligation.client,
+                uploaded_file=request.FILES['file'],
+                category=request.POST.get('category', 'general'),
+                obligation=obligation,
+                user=request.user,
+                description=request.POST.get('description', ''),
+            )
+        except DjangoValidationError as e:
             return JsonResponse({
                 'success': False,
-                'error': f'Mh egkyro arxeio: {str(e)}'
+                'error': f'Μη έγκυρο αρχείο: {"; ".join(e.messages)}'
             }, status=400)
-
-        # Create ClientDocument
-        category = request.POST.get('category', 'general')
-        description = request.POST.get('description', '')
-
-        document = ClientDocument.objects.create(
-            client=obligation.client,
-            obligation=obligation,
-            file=uploaded_file,
-            filename=uploaded_file.name,
-            file_type=uploaded_file.content_type,
-            document_category=category,
-            description=description
-        )
 
         # Update obligation
         old_status = obligation.status
         obligation.status = 'completed'
         obligation.completed_date = timezone.now().date()
         obligation.completed_by = request.user
-        obligation.attachment = uploaded_file  # Set primary attachment
 
         # Update time spent if provided
         time_spent = request.POST.get('time_spent')
@@ -462,7 +466,7 @@ def complete_with_file(request, obligation_id):
                 obj=obligation,
                 changes={
                     'status': {'old': old_status, 'new': 'completed'},
-                    'attachment': {'old': None, 'new': uploaded_file.name}
+                    'attachment': {'old': None, 'new': document.filename}
                 },
                 description=f'Oloklirosi me arxeio: {obligation}',
                 severity='medium',
@@ -548,14 +552,14 @@ def bulk_complete_obligations(request):
         description = request.POST.get('description', '')
         uploaded_file = request.FILES.get('file')
 
-        # Validate file if provided
+        # Validate file if provided (βάσει ρυθμίσεων)
         if uploaded_file:
             try:
-                validate_file_upload(uploaded_file)
-            except Exception as e:
+                filing.validate_upload(uploaded_file)
+            except DjangoValidationError as e:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Mh egkyro arxeio: {str(e)}'
+                    'error': f'Μη έγκυρο αρχείο: {"; ".join(e.messages)}'
                 }, status=400)
 
         completed_count = 0
@@ -570,21 +574,21 @@ def bulk_complete_obligations(request):
                 obligation.completed_date = timezone.now().date()
                 obligation.completed_by = request.user
 
-                # Attach file if provided
-                if uploaded_file:
-                    # Create document for this obligation
-                    ClientDocument.objects.create(
-                        client=obligation.client,
-                        obligation=obligation,
-                        file=uploaded_file,
-                        filename=uploaded_file.name,
-                        file_type=uploaded_file.content_type,
-                        document_category=category,
-                        description=description or f'Maziki oloklirosi - {timezone.now().date()}'
-                    )
-                    obligation.attachment = uploaded_file
-
                 obligation.save()
+
+                # Attach file if provided — αντίγραφο ανά υποχρέωση
+                if uploaded_file:
+                    uploaded_file.seek(0)
+                    file_copy = ContentFile(uploaded_file.read())
+                    file_copy.name = uploaded_file.name
+                    filing.create_client_document(
+                        client=obligation.client,
+                        uploaded_file=file_copy,
+                        category=category,
+                        obligation=obligation,
+                        user=request.user,
+                        description=description or f'Μαζική ολοκλήρωση - {timezone.now().date()}',
+                    )
 
                 # Audit log
                 try:
@@ -886,22 +890,19 @@ def wizard_bulk_process(request):
                 # Handle file upload for this specific obligation
                 file_key = f'file_{ob_id}'
                 if file_key in request.FILES:
-                    uploaded_file = request.FILES[file_key]
-
-                    # Use archive_attachment method for proper file organization
                     try:
-                        archive_path = obligation.archive_attachment(uploaded_file)
-                        logger.info(f"Wizard: Archived file for obligation {ob_id}: {archive_path}")
-                    except Exception as file_error:
-                        logger.warning(f"Could not archive file for {ob_id}: {file_error}")
-                        # Fallback: create ClientDocument
-                        ClientDocument.objects.create(
+                        document = filing.create_client_document(
                             client=obligation.client,
+                            uploaded_file=request.FILES[file_key],
                             obligation=obligation,
-                            file=uploaded_file,
-                            filename=uploaded_file.name,
-                            document_category=ob_data.get('category', 'general'),
-                            description=f"Wizard upload - {timezone.now().strftime('%d/%m/%Y')}"
+                            category=ob_data.get('category', 'general'),
+                            user=request.user,
+                            description=f"Wizard upload - {timezone.now().strftime('%d/%m/%Y')}",
+                        )
+                        logger.info(f"Wizard: Archived file for obligation {ob_id}: {document.file.name}")
+                    except DjangoValidationError as file_error:
+                        logger.warning(
+                            f"Invalid file for {ob_id}: {'; '.join(file_error.messages)}"
                         )
 
                 obligation.save()

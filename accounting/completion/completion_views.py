@@ -23,10 +23,13 @@ import json
 import logging
 from datetime import datetime
 
+from django.core.exceptions import ValidationError
+
 from ..models import (
     MonthlyObligation, ClientProfile, ObligationType,
     EmailTemplate, EmailLog, ClientDocument, ArchiveConfiguration
 )
+from ..services import filing
 from ..services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
@@ -256,24 +259,19 @@ def obligation_complete_single(request, obligation_id):
     try:
         # File upload
         if 'file' in request.FILES:
-            uploaded_file = request.FILES['file']
-
-            # Validate
-            if not uploaded_file.content_type == 'application/pdf':
+            try:
+                document = filing.create_client_document(
+                    client=obligation.client,
+                    uploaded_file=request.FILES['file'],
+                    obligation=obligation,
+                    user=request.user,
+                )
+            except ValidationError as e:
                 return JsonResponse({
                     'success': False,
-                    'error': 'Επιτρέπονται μόνο αρχεία PDF'
+                    'error': '; '.join(e.messages)
                 }, status=400)
-
-            if uploaded_file.size > 10 * 1024 * 1024:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Το αρχείο δεν πρέπει να ξεπερνά τα 10MB'
-                }, status=400)
-
-            # Archive the file
-            archive_path = obligation.archive_attachment(uploaded_file)
-            logger.info(f"Archived file for obligation {obligation_id}: {archive_path}")
+            logger.info(f"Archived file for obligation {obligation_id}: {document.file.name}")
 
         # Update obligation
         old_status = obligation.status
@@ -364,14 +362,17 @@ def obligation_complete_bulk(request):
                 # Check for file
                 file_key = f'file_{ob_id}'
                 if file_key in request.FILES:
-                    uploaded_file = request.FILES[file_key]
-
-                    # Validate PDF
-                    if uploaded_file.content_type == 'application/pdf':
-                        if uploaded_file.size <= 10 * 1024 * 1024:
-                            obligation.archive_attachment(uploaded_file)
-                        else:
-                            logger.warning(f"File too large for obligation {ob_id}")
+                    try:
+                        filing.create_client_document(
+                            client=obligation.client,
+                            uploaded_file=request.FILES[file_key],
+                            obligation=obligation,
+                            user=request.user,
+                        )
+                    except ValidationError as e:
+                        logger.warning(
+                            f"Invalid file for obligation {ob_id}: {'; '.join(e.messages)}"
+                        )
 
                 # Complete
                 obligation.status = 'completed'
@@ -428,32 +429,29 @@ def obligation_upload_file(request, obligation_id):
             'error': 'Δεν επιλέχθηκε αρχείο'
         }, status=400)
 
-    uploaded_file = request.FILES['file']
-
-    # Validate
-    if not uploaded_file.content_type == 'application/pdf':
-        return JsonResponse({
-            'success': False,
-            'error': 'Επιτρέπονται μόνο αρχεία PDF'
-        }, status=400)
-
-    if uploaded_file.size > 10 * 1024 * 1024:
-        return JsonResponse({
-            'success': False,
-            'error': 'Το αρχείο δεν πρέπει να ξεπερνά τα 10MB'
-        }, status=400)
-
     try:
-        archive_path = obligation.archive_attachment(uploaded_file)
+        document = filing.create_client_document(
+            client=obligation.client,
+            uploaded_file=request.FILES['file'],
+            obligation=obligation,
+            user=request.user,
+        )
 
         return JsonResponse({
             'success': True,
             'message': 'Το αρχείο αποθηκεύτηκε επιτυχώς',
-            'path': archive_path,
-            'filename': os.path.basename(archive_path),
-            'url': obligation.attachment.url if obligation.attachment else '',
+            'path': document.file.name,
+            'filename': document.filename,
+            'url': document.file.url if document.file else '',
+            'document_id': document.id,
+            'version': document.version,
         })
 
+    except ValidationError as e:
+        return JsonResponse({
+            'success': False,
+            'error': '; '.join(e.messages)
+        }, status=400)
     except Exception as e:
         logger.error(f"File upload error for obligation {obligation_id}: {e}", exc_info=True)
         return JsonResponse({
@@ -762,11 +760,9 @@ def client_files_view(request, client_id):
     """
     client = get_object_or_404(ClientProfile, id=client_id)
 
-    # Βάση αρχειοθέτησης
-    from ..models import get_safe_client_name
-    archive_root = getattr(settings, 'ARCHIVE_ROOT', settings.MEDIA_ROOT)
-    client_folder = get_safe_client_name(client)
-    client_path = os.path.join(archive_root, 'clients', client_folder)
+    # Βάση αρχειοθέτησης (από FilingSystemSettings)
+    archive_root = filing.get_archive_root()
+    client_path = filing.get_client_folder_path(client)
 
     # Δημιουργία δομής αρχείων
     files_tree = {}
@@ -839,13 +835,12 @@ def file_download(request, client_id, file_path):
     """
     client = get_object_or_404(ClientProfile, id=client_id)
 
-    archive_root = getattr(settings, 'ARCHIVE_ROOT', settings.MEDIA_ROOT)
-    full_path = os.path.join(archive_root, file_path)
+    archive_root = filing.get_archive_root()
+    full_path = os.path.realpath(os.path.join(archive_root, file_path))
 
-    # Security check - ensure file is within client's folder
-    from ..models import get_safe_client_name
-    client_folder = get_safe_client_name(client)
-    if client_folder not in file_path:
+    # Security check: το αρχείο πρέπει να είναι μέσα στον φάκελο του πελάτη
+    client_root = os.path.realpath(filing.get_client_folder_path(client))
+    if not full_path.startswith(client_root + os.sep):
         return HttpResponse('Access denied', status=403)
 
     if not os.path.exists(full_path):
@@ -866,13 +861,12 @@ def file_delete(request, client_id, file_path):
     """
     client = get_object_or_404(ClientProfile, id=client_id)
 
-    archive_root = getattr(settings, 'ARCHIVE_ROOT', settings.MEDIA_ROOT)
-    full_path = os.path.join(archive_root, file_path)
+    archive_root = filing.get_archive_root()
+    full_path = os.path.realpath(os.path.join(archive_root, file_path))
 
-    # Security check
-    from ..models import get_safe_client_name
-    client_folder = get_safe_client_name(client)
-    if client_folder not in file_path:
+    # Security check: το αρχείο πρέπει να είναι μέσα στον φάκελο του πελάτη
+    client_root = os.path.realpath(filing.get_client_folder_path(client))
+    if not full_path.startswith(client_root + os.sep):
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
 
     if not os.path.exists(full_path):
@@ -946,10 +940,7 @@ def open_client_folder(request, client_id):
     """
     client = get_object_or_404(ClientProfile, id=client_id)
 
-    from ..models import get_client_folder
-    archive_root = getattr(settings, 'ARCHIVE_ROOT', settings.MEDIA_ROOT)
-    client_folder = get_client_folder(client)
-    folder_path = os.path.join(archive_root, client_folder)
+    folder_path = filing.get_client_folder_path(client)
 
     # Windows path conversion
     windows_path = folder_path.replace('/', '\\')
