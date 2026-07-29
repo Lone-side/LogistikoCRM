@@ -15,34 +15,45 @@
 
 ## 🚀 Προτεραιότητες Ανάπτυξης
 
-### Φάση 1: Καθαρό Backend (ΤΡΕΧΟΥΣΑ)
-- [ ] Διόρθωση όλων των migration θεμάτων
-- [ ] Όλα τα models να έχουν `__str__`, `get_absolute_url`
-- [ ] Καθαρισμός αχρησιμοποίητου κώδικα
-- [ ] Προσθήκη validation στα models
+### Φάση 1: Καθαρό Backend ✅
+- [x] Διόρθωση όλων των migration θεμάτων (`makemigrations --check` καθαρό)
+- [x] Όλα τα models να έχουν `__str__`, `get_absolute_url`
+- [x] Καθαρισμός αχρησιμοποίητου κώδικα
+- [x] Προσθήκη validation στα models
 
-### Φάση 2: Διασύνδεση Αρχείων-Υποχρεώσεων
-- [ ] Σύνδεση uploaded αρχείων με συγκεκριμένες υποχρεώσεις
-- [ ] Αυτόματη δημιουργία φακέλων κατά το upload
-- [ ] Προβολή όλων των εγγράφων ανά πελάτη στο admin
-- [ ] Κουμπί "Άνοιγμα φακέλου πελάτη" στο admin
+### Φάση 2: Διασύνδεση Αρχείων-Υποχρεώσεων ✅
+- [x] Σύνδεση uploaded αρχείων με συγκεκριμένες υποχρεώσεις (ClientDocument.obligation)
+- [x] Αυτόματη δημιουργία φακέλων κατά το upload (accounting/services/filing.py)
+- [x] Προβολή όλων των εγγράφων ανά πελάτη (admin + React tab με ομαδοποίηση)
+- [x] Κουμπί "Άνοιγμα φακέλου πελάτη" στο admin
+- [x] Αυτόματη ονομασία αρχείων (FilingSystemSettings.file_naming_convention)
+- [x] Εξαγωγή κειμένου PDF + αναζήτηση περιεχομένου + έλεγχος ΑΦΜ (text_extraction.py)
 
-### Φάση 3: Email Αυτοματισμοί
-- [ ] Celery task για μηνιαίες υπενθυμίσεις
+### Φάση 3: Email Αυτοματισμοί ✅
+- [x] Celery tasks: υπενθυμίσεις προθεσμιών, ημερήσια σύνοψη, scheduled emails
+- [x] Email templates στα ελληνικά (seeded, migration 0025)
+- [x] Ρυθμίσεις ειδοποιήσεων ανά χρήστη (UserNotificationSettings)
 - [ ] Email ειδοποίησης για νέα έγγραφα
-- [ ] Email templates (στα ελληνικά)
 
-### Φάση 4: Αναζήτηση & Φίλτρα
-- [ ] Αναζήτηση πελάτη (ΑΦΜ, επωνυμία, τηλέφωνο)
-- [ ] Φίλτρα υποχρεώσεων (μήνας, κατάσταση, τύπος)
-- [ ] Full-text search με PostgreSQL SearchVector
+### Φάση 4: Αναζήτηση & Φίλτρα ✅ (εκτός SearchVector)
+- [x] Αναζήτηση πελάτη (ΑΦΜ, επωνυμία, τηλέφωνο) — global search
+- [x] Φίλτρα υποχρεώσεων (μήνας, κατάσταση, τύπος)
+- [x] Αναζήτηση στο περιεχόμενο εγγράφων (extracted_text)
+- [ ] Full-text search με PostgreSQL SearchVector (προαιρετικό, σε παραγωγή)
 
-### Φάση 5: Έτοιμο για Παραγωγή
-- [ ] Docker configuration
-- [ ] PostgreSQL setup
-- [ ] Redis/Celery configuration
-- [ ] Nginx configuration
-- [ ] Health checks
+### Φάση 5: Έτοιμο για Παραγωγή (σε εξέλιξη)
+- [x] Docker configuration (Dockerfile + docker-compose με db/redis/web/celery/beat)
+- [x] Redis/Celery configuration (beat: reminders, summary, backup, yearly folders)
+- [x] Health checks (/api/health/, /detailed, /ready, /live)
+- [x] Αυτόματο backup βάσης (Celery beat 02:00 + manage.py backup_database)
+- [ ] PostgreSQL setup σε παραγωγή
+- [ ] Nginx configuration + build του React frontend στο Dockerfile
+
+### Επόμενα (backlog με σειρά αξίας)
+1. **Portal πελάτη με upload** — ο πελάτης ανεβάζει έγγραφα μόνος του μέσω SharedLink (+ document requests με tracking)
+2. **Dashboard αναβάθμιση** — φόρτος ανά υπάλληλο, κατανομή προθεσμιών ανά τύπο, τάσεις
+3. **myDATA αποστολή τιμολογίων** — ο client υπάρχει (send_invoices), δεν εκτίθεται σε UI· tests για το mydata app
+4. **Frontend tests** — μηδενική κάλυψη React σήμερα
 
 ---
 

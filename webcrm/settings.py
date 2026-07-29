@@ -614,6 +614,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'accounting.tasks.ensure_yearly_folders',
         'schedule': crontab(hour=6, minute=0, day_of_month=1, month_of_year=1),  # 1η Ιανουαρίου 06:00
     },
+    'backup-database': {
+        'task': 'accounting.tasks.backup_database_task',
+        'schedule': crontab(hour=2, minute=0),  # Καθημερινά 02:00
+    },
 }
 
 # ==================== SITE CONFIGURATION ====================

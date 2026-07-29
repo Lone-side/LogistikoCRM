@@ -420,12 +420,6 @@ class MonthlyObligation(models.Model):
         help_text='Χρησιμοποιήστε ClientDocument αντί αυτού'
     )
 
-    attachments = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='[DEPRECATED] List of attachment paths - use ClientDocument'
-    )
-
     created_at = models.DateTimeField('Δημιουργήθηκε', auto_now_add=True)
     updated_at = models.DateTimeField('Ενημερώθηκε', auto_now=True)
     

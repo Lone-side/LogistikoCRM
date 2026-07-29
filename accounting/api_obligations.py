@@ -141,7 +141,7 @@ class ObligationDetailSerializer(serializers.ModelSerializer):
             'assigned_to', 'assigned_to_name',
             'notes', 'time_spent', 'hourly_rate', 'cost',
             'days_until_deadline', 'is_overdue', 'deadline_status',
-            'attachment', 'attachment_url', 'attachments', 'documents',
+            'attachment', 'attachment_url', 'documents',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at', 'completed_by']

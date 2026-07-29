@@ -1,7 +1,10 @@
 #!/bin/bash
 #
 # Automated backup script for LogistikoCRM
-# Add to crontab for production deployment
+#
+# ΣΗΜΕΙΩΣΗ: Αν τρέχει Celery beat, το backup γίνεται ήδη αυτόματα
+# (task accounting.tasks.backup_database_task, καθημερινά 02:00).
+# Αυτό το script χρειάζεται ΜΟΝΟ σε deployments χωρίς Celery.
 #
 # Example crontab entry (daily backup at 2 AM):
 # 0 2 * * * /path/to/LogistikoCRM/scripts/backup_cron.sh >> /var/log/logistikocrm_backup.log 2>&1
@@ -9,11 +12,12 @@
 
 set -e  # Exit on error
 
-# Configuration
-PROJECT_DIR="/path/to/LogistikoCRM"  # UPDATE THIS!
-VENV_DIR="/path/to/venv"              # UPDATE THIS!
-BACKUP_DIR="/var/backups/logistikocrm"
-KEEP_DAYS=30
+# Configuration — override με environment variables ή άλλαξε τα defaults
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${PROJECT_DIR:-$(dirname "$SCRIPT_DIR")}"
+VENV_DIR="${VENV_DIR:-$PROJECT_DIR/venv}"
+BACKUP_DIR="${BACKUP_DIR:-/var/backups/logistikocrm}"
+KEEP_DAYS="${KEEP_DAYS:-30}"
 
 # Activate virtual environment
 source "${VENV_DIR}/bin/activate"
