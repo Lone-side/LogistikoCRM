@@ -147,6 +147,11 @@ class Product(models.Model):
         verbose_name = 'Προϊόν'
         verbose_name_plural = 'Προϊόντα'
         ordering = ['code']
+        # Ονόματα ίδια με το migration 9999_add_performance_indexes
+        indexes = [
+            models.Index(fields=['active', 'code'], name='prod_active_code_idx'),
+            models.Index(fields=['category', 'active'], name='prod_cat_active_idx'),
+        ]
     
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -237,6 +242,12 @@ class StockMovement(models.Model):
         verbose_name = 'Κίνηση Αποθήκης'
         verbose_name_plural = 'Κινήσεις Αποθήκης'
         ordering = ['-date']
+        # Ονόματα ίδια με το migration 9999_add_performance_indexes
+        indexes = [
+            models.Index(fields=['product', 'date'], name='stock_prod_date_idx'),
+            models.Index(fields=['movement_type', 'date'], name='stock_type_date_idx'),
+            models.Index(fields=['invoice'], name='stock_invoice_idx'),
+        ]
     
     def __str__(self):
         return f"{self.get_movement_type_display()} - {self.product.code} - {self.quantity} {self.product.unit}"
@@ -359,6 +370,14 @@ class Invoice(models.Model):
         verbose_name_plural = 'Τιμολόγια'
         ordering = ['-issue_date', '-number']
         unique_together = [['series', 'number']]
+        # Ονόματα ίδια με το migration 9999_add_performance_indexes
+        indexes = [
+            models.Index(fields=['issue_date', 'counterpart'], name='inv_issue_cpty_idx'),
+            models.Index(fields=['mydata_mark'], name='inv_mydata_idx'),
+            models.Index(fields=['is_outgoing', 'issue_date'], name='inv_outgoing_date_idx'),
+            models.Index(fields=['counterpart_vat'], name='inv_cpty_vat_idx'),
+            models.Index(fields=['-issue_date'], name='inv_date_desc_idx'),
+        ]
     
     def __str__(self):
         return f"{self.series}/{self.number} - {self.counterpart_name} - {self.total_gross}€"

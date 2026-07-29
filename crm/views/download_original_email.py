@@ -21,6 +21,8 @@ def download_original_email(request: WSGIRequest, object_id: int) -> HttpRespons
         email_host_user=crm_email.email_host_user
     )
     crmimap = get_crmimap(ea, 'INBOX')
+    if crmimap is None:
+        return HttpResponse(err_msg)
     if crmimap.error:
         crmimap.release()
         return HttpResponse(f"Error: {crmimap.error}")

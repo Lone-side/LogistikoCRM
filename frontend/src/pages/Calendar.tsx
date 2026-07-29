@@ -860,7 +860,7 @@ export default function Calendar() {
           month: currentMonth,
           year: currentYear,
           status: selectedObligation.status,
-        } as Obligation : null}
+        } as unknown as Obligation : null}
         clientName={getSelectedClient()?.eponimia || selectedObligation?.client_name || ''}
         clientEmail={getSelectedClient()?.email || undefined}
         onComplete={handleCompleteAndNotify}

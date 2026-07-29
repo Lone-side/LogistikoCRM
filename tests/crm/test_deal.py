@@ -181,6 +181,15 @@ class TestDeal(BaseTestCase):
         self.assertEqual(response.status_code, 200, response.reason_phrase)
 
     def test_product_is_shipped(self):
+        # Το groups.json αυτού του fork δεν δίνει shipment perms στους
+        # co-workers - δίνουμε τα perms απευθείας στον χρήστη του test
+        from django.contrib.auth.models import Permission
+        self.storekeeper.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label='crm',
+                codename__in=('view_shipment', 'change_shipment')
+            )
+        )
         self.client.force_login(self.storekeeper)
         shipment_change_url = reverse(
             "site:crm_shipment_change", args=(self.output.id,)

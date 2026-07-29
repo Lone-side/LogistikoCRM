@@ -3,7 +3,7 @@
  * Hierarchical folder browser component for file manager
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -29,7 +29,7 @@ import {
   Mail,
   FileSignature,
 } from 'lucide-react';
-import { FolderTreeNode, CategoryMeta } from '../types/filingSettings';
+import type { FolderTreeNode } from '../types/filingSettings';
 
 // ============================================
 // ICON MAPPING

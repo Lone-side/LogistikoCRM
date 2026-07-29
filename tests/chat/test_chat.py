@@ -335,6 +335,7 @@ class TestChat(BaseTestCase):
         # get_for_model(project) works wrong due cache
         # content_type = ContentType.objects.get_for_model(instance)
         content_type = ContentType.objects.get(
+            app_label=instance._meta.app_label,
             model=instance._meta.model_name
         )
         params = {

@@ -12,35 +12,28 @@
 
 ## 🚀 Quick Start (Development)
 
-### Option 1: Auto-Generated (Recommended)
+> **📖 Για πλήρη εγκατάσταση από το μηδέν βλ. [SETUP_GUIDE.md](SETUP_GUIDE.md)**
+> (migrate → createcachetable → setupdata → runserver, με τη σωστή σειρά).
 
-The `.env` file is **already created** with minimal development settings:
-
-```bash
-# Check it exists
-cat .env
-
-# Start Django
-python manage.py runserver 0.0.0.0:8000
-```
-
-**That's it!** The system will use:
-- ✅ SQLite database (no setup required)
-- ✅ Console email backend (prints to terminal)
-- ✅ DEBUG=True (enables CORS for network access)
-- ✅ All optional features disabled
-
-### Option 2: Copy from Template
-
-If you want to customize or start fresh:
+On a fresh clone there is **no `.env` yet** — create it from the development
+template:
 
 ```bash
-# Copy development template
+# Copy development template (the correct one for local use)
 cp .env.development .env
 
 # Edit as needed
 nano .env  # or code .env
+
+# Start Django (after the SETUP_GUIDE.md database steps)
+python manage.py runserver 0.0.0.0:8000
 ```
+
+With the development template the system uses:
+- ✅ SQLite database (no setup required)
+- ✅ Console email backend (prints to terminal)
+- ✅ DEBUG=True (enables CORS for network access)
+- ✅ All optional features disabled
 
 ---
 

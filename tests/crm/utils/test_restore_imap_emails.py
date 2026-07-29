@@ -1,4 +1,5 @@
 from queue import Empty
+from unittest import skip
 from django.apps import apps
 from django.conf import settings
 from django.core import mail
@@ -18,6 +19,10 @@ from tests.utils.helpers import get_user
 # manage.py test tests.crm.utils.test_restore_imap_emails.TestRestoreImapEmails.test_restore_inquiry_email --keepdb
 
 
+@skip(
+    "Τα IMAP worker threads (RestoreImapEmails) είναι απενεργοποιημένα "
+    "σε αυτό το fork (crm/apps.py) — το eml_queue.join() θα κρεμούσε για πάντα."
+)
 class TestRestoreImapEmails(TransactionTestCase):
     # Inherit TransactionTestCase since creating and saving objects
     # happens in a separate thread.

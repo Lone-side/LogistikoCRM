@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponse
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -52,10 +53,17 @@ class ReminderAdmin(admin.ModelAdmin):
         return super().changelist_view(request, extra_context)
 
     def get_changeform_initial_data(self, request):
+        # Το κουμπί "Add Reminder" του admin ανοίγει τη σελίδα χωρίς
+        # παραμέτρους - χωρίς guard σκάει με ContentType.DoesNotExist (500)
         object_id = request.GET.get('object_id')
         content_type_id = request.GET.get('content_type')
-        content_type = ContentType.objects.get(pk=content_type_id)
-        content_object = content_type.get_object_for_this_type(pk=object_id)
+        if not (object_id and content_type_id):
+            return {}
+        try:
+            content_type = ContentType.objects.get(pk=content_type_id)
+            content_object = content_type.get_object_for_this_type(pk=object_id)
+        except (ContentType.DoesNotExist, ObjectDoesNotExist, ValueError):
+            return {}
         return {"subject": content_object.name}
 
     def get_queryset(self, request):

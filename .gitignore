@@ -143,6 +143,7 @@ backups/
 
 # Local files
 *.bat
+!setup_dev.bat
 redis.msi
 NewFile
 .py

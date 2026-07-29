@@ -238,10 +238,11 @@ class AFMValidationTest(TestCase):
             serializer.validate_afm('1234567890')  # 10 digits
 
     def test_invalid_afm_checksum(self):
-        """Test AFM with invalid checksum fails"""
-        from rest_framework import serializers
+        """Test AFM with invalid checksum logs a warning but is accepted"""
+        # Το checksum είναι warning-only: υπαρκτά ΑΦΜ μπορεί να αποτυγχάνουν
+        # στον αλγόριθμο, οπότε δεν μπλοκάρεται η αποθήκευση
         from accounting.api_clients import ClientCreateUpdateSerializer
         serializer = ClientCreateUpdateSerializer()
 
-        with self.assertRaises(serializers.ValidationError):
-            serializer.validate_afm('123456789')  # Invalid checksum
+        with self.assertLogs('accounting.api_clients', level='WARNING'):
+            self.assertEqual(serializer.validate_afm('123456789'), '123456789')

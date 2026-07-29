@@ -192,14 +192,18 @@ class MyTests(BaseTestCase):
 
         self.client.logout()        
 
+    # Singleton settings admins: το changelist_view κάνει redirect στο 1/change/
+    SINGLETON_CHANGELISTS = (
+        "settings/reminders/",
+        "settings/massmailsettings/",
+        "settings/backupsettings/",
+        "settings/filingsystemsettings/",
+    )
+
     def check_response(self, url: str, username: str) -> None:
         response = self.client.get(url, HTTP_ACCEPT_LANGUAGE='en')
-        if username == 'Adam.Admin' and "settings/reminders/" in url:
-            self.assertEqual(response.status_code, 302,
-                             "User {} got response status_code {} at url {}".format(
-                                 username, response.status_code, url
-                             ))
-        elif username == 'Adam.Admin' and "settings/massmailsettings/" in url:
+        if username == 'Adam.Admin' and any(
+                s in url for s in self.SINGLETON_CHANGELISTS):
             self.assertEqual(response.status_code, 302,
                              "User {} got response status_code {} at url {}".format(
                                  username, response.status_code, url

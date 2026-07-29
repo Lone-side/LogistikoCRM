@@ -18,19 +18,24 @@
     </div>
 
     <!-- Quick Stats - Shows pending/overdue count -->
+    {# Το URL υπάρχει μόνο στο default admin site — στο CRM site (namespace 'site') #}
+    {# το MonthlyObligation δεν είναι εγγεγραμμένο, οπότε το resolve γίνεται fail-silent #}
+    {% url 'admin:accounting_monthlyobligation_changelist' as obligation_changelist_url %}
+    {% if obligation_changelist_url %}
     <div class="sidebar-stats" style="background: #f8f9fa; padding: 10px 12px; margin-bottom: 10px; border-radius: 6px; border-left: 3px solid #667eea;">
         <div style="font-size: 11px; color: #6c757d; text-transform: uppercase; margin-bottom: 6px;">Quick Status</div>
         <div style="display: flex; gap: 12px;">
-            <a href="{% url 'admin:accounting_monthlyobligation_changelist' %}?status=pending" style="text-decoration: none; text-align: center;">
+            <a href="{{ obligation_changelist_url }}?status=pending" style="text-decoration: none; text-align: center;">
                 <div style="font-size: 16px; font-weight: bold; color: #f59e0b;">-</div>
                 <div style="font-size: 10px; color: #6c757d;">Pending</div>
             </a>
-            <a href="{% url 'admin:accounting_monthlyobligation_changelist' %}?status=overdue" style="text-decoration: none; text-align: center;">
+            <a href="{{ obligation_changelist_url }}?status=overdue" style="text-decoration: none; text-align: center;">
                 <div style="font-size: 16px; font-weight: bold; color: #ef4444;">-</div>
                 <div style="font-size: 10px; color: #6c757d;">Overdue</div>
             </a>
         </div>
     </div>
+    {% endif %}
 
     <!-- Search Box -->
     <div class="module filtered" id="nav-filter">

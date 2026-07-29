@@ -4,6 +4,7 @@ Critical for production email functionality
 """
 from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import User
+from django.utils import timezone
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.messages import get_messages
 from unittest.mock import patch, MagicMock, Mock
@@ -67,7 +68,7 @@ class SendEmailTest(TestCase):
         )
 
         self.company = Company.objects.create(
-            company_name="Test Company",
+            full_name="Test Company",
             email="company@example.com"
         )
 
@@ -79,12 +80,14 @@ class SendEmailTest(TestCase):
         )
 
         self.deal = Deal.objects.create(
-            name="Test Deal"
+            name="Test Deal",
+            next_step_date=timezone.now().date()
         )
 
         # Create email account
         self.email_account = EmailAccount.objects.create(
-            email="sender@example.com",
+            name="Test Account",
+            from_email="sender@example.com",
             owner=self.user,
             main=True,
             email_host="smtp.example.com",
@@ -116,7 +119,7 @@ class SendEmailTest(TestCase):
 
         # Should redirect back to email edit
         self.assertEqual(response.status_code, 302)
-        self.assertIn("crm_crmemail_change", response.url)
+        self.assertIn("/crm/crmemail/", response.url)
 
         # Should have error message
         messages_list = list(get_messages(request))
@@ -187,7 +190,7 @@ class SendEmailTest(TestCase):
         self.assertTrue(email.sent)
 
         # Should redirect to email list
-        self.assertIn("crm_crmemail_changelist", response.url)
+        self.assertIn("/crm/crmemail/", response.url)
 
         # Should have success message
         messages_list = list(get_messages(request))
@@ -265,7 +268,7 @@ class SendEmailTest(TestCase):
         self.assertFalse(email.sent)
 
         # Should redirect back to email edit
-        self.assertIn("crm_crmemail_change", response.url)
+        self.assertIn("/crm/crmemail/", response.url)
 
         # Should have error message
         messages_list = list(get_messages(request))
@@ -319,7 +322,8 @@ class SendEmailTest(TestCase):
 
         # Check that TO was parsed correctly
         call_args = mock_email_creator.call_args
-        to_list = call_args[0][1]
+        # email_creator(obj, eac, to, ...) - το to είναι το 3ο positional
+        to_list = call_args[0][2]
         self.assertEqual(len(to_list), 3)
 
 
@@ -333,7 +337,7 @@ class CrmEmailModelTest(TestCase):
         )
 
         self.company = Company.objects.create(
-            company_name="Test Company",
+            full_name="Test Company",
             email="company@example.com"
         )
 
@@ -375,7 +379,8 @@ class CrmEmailModelTest(TestCase):
     def test_crm_email_with_deal(self):
         """Test CRM email linked to deal"""
         deal = Deal.objects.create(
-            name="Test Deal"
+            name="Test Deal",
+            next_step_date=timezone.now().date()
         )
 
         email = CrmEmail.objects.create(
@@ -441,5 +446,5 @@ class CrmEmailModelTest(TestCase):
         )
 
         url = email.get_absolute_url()
-        self.assertIn("crm_crmemail_change", url)
+        self.assertIn("/crm/crmemail/", url)
         self.assertIn(str(email.id), url)

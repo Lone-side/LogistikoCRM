@@ -53,7 +53,9 @@ DATABASES = {
 
 # Email Configuration
 # For testing without real SMTP, set EMAIL_BACKEND_CONSOLE=true in .env
-if os.getenv('EMAIL_BACKEND_CONSOLE', 'false').lower() in ('true', '1', 'yes'):
+# Σε development (DEBUG=True) το default είναι console ώστε να μη γίνει
+# ποτέ κατά λάθος πραγματική αποστολή SMTP
+if os.getenv('EMAIL_BACKEND_CONSOLE', os.getenv('DEBUG', 'False')).lower() in ('true', '1', 'yes'):
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -137,7 +139,10 @@ LOCALE_PATHS = [
     BASE_DIR / 'locale',
 ]
 
-LOGIN_URL = '/admin/login/'
+# Το admin ζει κάτω από το SECRET_ADMIN_PREFIX (μέσα σε i18n_patterns) -
+# το reverse_lazy βρίσκει το σωστό URL αντί για το ανύπαρκτο /admin/login/
+from django.urls import reverse_lazy
+LOGIN_URL = reverse_lazy('admin:login')
 
 # Application definition
 # Application definition
@@ -366,6 +371,8 @@ if TESTING:
     SECURE_SSL_REDIRECT = False
     LANGUAGE_CODE = 'en'
     LANGUAGES = [('en', ''), ('uk', '')]
+    # Τα tests ελέγχουν ειδοποιήσεις μέσω mail_admins - χρειάζεται μη κενό ADMINS
+    ADMINS = [('Admin', 'admin@example.com')]
 
 
     # CORS Settings - Επιτρέπει πρόσβαση από τοπικό δίκτυο

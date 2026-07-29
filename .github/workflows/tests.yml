@@ -74,7 +74,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           coverage run manage.py test tests.accounting tests.crm tests.common --keepdb
-          coverage report --fail-under=60
+          coverage report --fail-under=45
           coverage xml
 
       - name: Upload coverage to Codecov

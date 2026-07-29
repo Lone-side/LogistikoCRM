@@ -108,19 +108,37 @@ class ClientProfileFolderCreationSignalTest(TestCase):
         )
 
         # Check that folder structure was created
+        # Η δομή είναι ιεραρχική: 00_ΜΟΝΙΜΑ/, {έτος}/{μήνας}/{κατηγορία}/
+        # βάσει FilingSystemSettings
+        from datetime import datetime
         from accounting.models import get_client_folder
-        base_path = os.path.join(settings.MEDIA_ROOT, get_client_folder(client))
+        from settings.models import FilingSystemSettings
 
-        # Categories that should be created
-        expected_categories = [
-            'contracts', 'invoices', 'tax', 'myf', 'vat', 'payroll', 'general'
-        ]
+        filing_settings = FilingSystemSettings.get_settings()
+        base_path = os.path.join(
+            filing_settings.get_archive_root(), get_client_folder(client)
+        )
 
-        for category in expected_categories:
-            category_path = os.path.join(base_path, category)
+        # Μόνιμος φάκελος με τις κατηγορίες του
+        permanent_path = os.path.join(
+            base_path, filing_settings.permanent_folder_name
+        )
+        for category in filing_settings.get_permanent_folder_categories():
             self.assertTrue(
-                os.path.exists(category_path),
-                f"Category folder '{category}' was not created"
+                os.path.exists(os.path.join(permanent_path, category)),
+                f"Permanent category folder '{category}' was not created"
+            )
+
+        # Μηνιαίοι φάκελοι τρέχοντος έτους
+        year_path = os.path.join(base_path, str(datetime.now().year))
+        month_name = (
+            filing_settings.get_month_folder_name(1)
+            if filing_settings.use_greek_month_names else '01'
+        )
+        for category in filing_settings.get_monthly_folder_categories():
+            self.assertTrue(
+                os.path.exists(os.path.join(year_path, month_name, category)),
+                f"Monthly category folder '{category}' was not created"
             )
 
         # Check INFO.txt was created

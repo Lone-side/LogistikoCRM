@@ -5,7 +5,6 @@ import {
   TrendingDown,
   Calendar,
   Download,
-  Filter,
   Users,
   ClipboardList,
   RefreshCw,
@@ -46,11 +45,10 @@ export default function Reports() {
   const [period, setPeriod] = useState<ReportPeriod>('month');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const { data: stats, isLoading, isError, error, refetch } = useReportsStats(period);
-  const { data: exportData } = useReportsExport();
+  useReportsExport();
   const {
     isExporting,
     exportType,
-    error: exportError,
     exportClients,
     exportObligations,
     exportMonthlyPdf,

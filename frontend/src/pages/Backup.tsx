@@ -5,7 +5,6 @@ import {
   Upload,
   RotateCcw,
   Plus,
-  Trash2,
   Check,
   X,
   Loader2,
@@ -26,7 +25,7 @@ export default function Backup() {
 
   // State
   const [backups, setBackups] = useState<BackupItem[]>([]);
-  const [settings, setSettings] = useState<BackupSettings | null>(null);
+  const [, setSettings] = useState<BackupSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [restoringId, setRestoringId] = useState<number | null>(null);

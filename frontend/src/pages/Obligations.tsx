@@ -18,7 +18,6 @@ import {
 import { useCompleteAndNotify, useBulkCompleteWithDocuments, useSendObligationNotice } from '../hooks/useEmail';
 import { useUploadToObligation } from '../hooks/useDocuments';
 import type { GenerateMonthResult, Client } from '../types';
-import type { ClientWithObligationStatus } from '../hooks/useObligations';
 import { useClients } from '../hooks/useClients';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
@@ -435,7 +434,7 @@ export default function Obligations() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link to="/settings/obligations">
-            <Button variant="outline" title="Ρυθμίσεις τύπων υποχρεώσεων">
+            <Button variant="secondary" title="Ρυθμίσεις τύπων υποχρεώσεων">
               <Settings className="w-4 h-4 mr-2" />
               Ρυθμίσεις
             </Button>

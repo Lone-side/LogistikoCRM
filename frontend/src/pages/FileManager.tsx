@@ -6,9 +6,9 @@
 import { useState, useCallback, useMemo } from 'react';
 import {
   FolderOpen, Upload, Search, Grid, List, Filter, Star, Share2, Trash2,
-  Download, Eye, ChevronRight, Home, Tag, Clock, HardDrive,
-  FolderPlus, MoreVertical, CheckSquare, Square, X, Link2,
-  FileText, Image, FileSpreadsheet, File, RefreshCw, Settings
+  Download, Eye, ChevronRight, Clock, HardDrive,
+  MoreVertical, CheckSquare, Square, X, Link2,
+  FileText, Image, FileSpreadsheet, File, RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
@@ -16,7 +16,6 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   useFileManagerDocuments,
   useFileManagerStats,
-  useRecentDocuments,
   useBrowseFolders,
   useTags,
   useFavorites,
@@ -28,7 +27,6 @@ import {
   useRemoveFavorite,
   useCreateSharedLink,
   downloadDocument,
-  getFileIcon,
   getFileColor,
 } from '../hooks/useFileManager';
 import type {
@@ -925,8 +923,8 @@ export default function FileManager() {
   const { data: documentsData, isLoading, refetch } = useFileManagerDocuments(filters);
   const { data: stats } = useFileManagerStats();
   const { data: tags } = useTags();
-  const { data: favorites } = useFavorites();
-  const { data: collectionsData } = useCollections();
+  useFavorites();
+  useCollections();
 
   // Mutation hooks
   const uploadMutation = useUploadDocuments();
@@ -938,7 +936,6 @@ export default function FileManager() {
 
   const documents = documentsData?.results || [];
   const totalCount = documentsData?.count || 0;
-  const collections = collectionsData?.results || [];
 
   // Handlers
   const handleSearch = useCallback(() => {
