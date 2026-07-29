@@ -532,21 +532,16 @@ class MonthlyObligation(models.Model):
         Returns:
             ClientDocument instance
         """
-        # Import here to avoid circular import
-        from accounting.models import ClientDocument
+        # Ενιαία διαδρομή αρχειοθέτησης (validation + ονομασία + versioning)
+        from accounting.services import filing
 
-        doc = ClientDocument(
+        return filing.create_client_document(
             client=self.client,
+            uploaded_file=uploaded_file,
             obligation=self,
-            file=uploaded_file,
-            original_filename=os.path.basename(uploaded_file.name),
+            user=user,
             description=description,
-            uploaded_by=user,
-            year=self.year,
-            month=self.month,
         )
-        doc.save()
-        return doc
 
     def get_email_attachments(self):
         """
@@ -1764,6 +1759,38 @@ class ClientDocument(models.Model):
         blank=True,
         verbose_name='Περιγραφή'
     )
+
+    # === Εξαγωγή κειμένου (για αναζήτηση περιεχομένου & έλεγχο ΑΦΜ) ===
+    OCR_STATUS_CHOICES = [
+        ('pending', 'Εκκρεμεί'),
+        ('done', 'Ολοκληρώθηκε'),
+        ('failed', 'Απέτυχε'),
+        ('skipped', 'Παραλείφθηκε'),
+    ]
+    extracted_text = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Εξαγόμενο Κείμενο',
+        help_text='Κείμενο από το PDF για αναζήτηση περιεχομένου'
+    )
+    ocr_status = models.CharField(
+        max_length=10,
+        choices=OCR_STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+        verbose_name='Κατάσταση Εξαγωγής'
+    )
+    ocr_processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Ημ/νία Εξαγωγής'
+    )
+    afm_mismatch = models.BooleanField(
+        default=False,
+        verbose_name='Αναντιστοιχία ΑΦΜ',
+        help_text='Το έγγραφο περιέχει ΑΦΜ που δεν ταιριάζει με τον πελάτη'
+    )
+
     uploaded_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Ημ/νία Upload'
@@ -1868,7 +1895,7 @@ class ClientDocument(models.Model):
 
         return qs.first()
 
-    def create_new_version(self, new_file, user=None):
+    def create_new_version(self, new_file, user=None, original_filename=None):
         """
         Δημιουργεί νέα έκδοση του εγγράφου.
         Το παλιό γίνεται is_current=False.
@@ -1879,12 +1906,17 @@ class ClientDocument(models.Model):
         self.is_current = False
         self.save(update_fields=['is_current'])
 
+        # Ρητό _v{n} στο όνομα ώστε οι εκδόσεις να ξεχωρίζουν στον φάκελο
+        # (αντί για τα τυχαία suffixes του Django storage)
+        base, ext = os.path.splitext(os.path.basename(new_file.name))
+        new_file.name = f"{base}_v{self.version + 1}{ext}"
+
         # Create new version
         new_doc = ClientDocument(
             client=self.client,
             obligation=self.obligation,
             file=new_file,
-            original_filename=os.path.basename(new_file.name),
+            original_filename=original_filename or os.path.basename(new_file.name),
             document_category=self.document_category,
             year=self.year,
             month=self.month,

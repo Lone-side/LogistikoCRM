@@ -31,6 +31,7 @@ tendo>=0.3.0  # Singleton instance control
 openpyxl>=3.1.2  # Excel export/import
 Pillow>=10.1.0  # Image processing
 python-magic>=0.4.27  # File type validation (SECURITY)
+pypdf>=4.0  # Εξαγωγή κειμένου από ψηφιακά PDF (αρχειοθέτηση/αναζήτηση)
 xhtml2pdf>=0.2.11  # PDF report generation (Windows compatible)
 XlsxWriter>=3.2.0  # Excel writing
 pandas>=2.0.0  # Data analysis

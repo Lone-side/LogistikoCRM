@@ -118,6 +118,7 @@ from .api_document_upload import (
     check_existing_document,
     upload_document_with_version,
     document_preview,
+    suggest_document_metadata,
 )
 from .api_file_manager import (
     DocumentViewSet as FileManagerDocumentViewSet,
@@ -297,6 +298,10 @@ urlpatterns = [
     path("api/v1/obligations/<int:obligation_id>/complete-and-notify/", complete_and_notify, name="api_v1_complete_and_notify"),
     path("api/v1/obligations/bulk-complete-notify/", bulk_complete_with_notify, name="api_v1_bulk_complete_notify"),
     path("api/v1/obligations/bulk-complete-with-documents/", bulk_complete_with_documents, name="api_v1_bulk_complete_with_documents"),
+
+    # Πριν το router ώστε να μην το «πιάνει» το detail route documents/<pk>/
+    path("api/documents/suggest/", suggest_document_metadata, name="api_suggest_document_metadata_legacy"),
+    path("api/v1/documents/suggest/", suggest_document_metadata, name="api_suggest_document_metadata"),
 
     # REST ROUTER
     path("api/", include(router.urls)),

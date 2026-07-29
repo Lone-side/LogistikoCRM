@@ -396,6 +396,7 @@ export default function ClientDetails() {
           }}
           isLoading={uploadMutation.isPending}
           errorMessage={uploadError}
+          clientId={clientId}
         />
       )}
 

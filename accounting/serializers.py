@@ -118,14 +118,24 @@ class ClientDocumentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
     category_display = serializers.CharField(source='get_document_category_display', read_only=True)
     
+    file_size_display = serializers.CharField(read_only=True)
+    uploaded_by = serializers.CharField(
+        source='uploaded_by.get_full_name', read_only=True, allow_null=True, default=None
+    )
+
     class Meta:
         model = ClientDocument
         fields = [
             'id', 'client', 'client_name', 'obligation', 'obligation_type',
-            'file', 'file_url', 'filename', 'file_type', 
-            'document_category', 'category_display', 'description', 'uploaded_at'
+            'file', 'file_url', 'filename', 'original_filename', 'file_type',
+            'file_size', 'file_size_display',
+            'document_category', 'category_display', 'description',
+            'year', 'month', 'version', 'is_current',
+            'ocr_status', 'afm_mismatch',
+            'uploaded_at', 'uploaded_by',
         ]
-        read_only_fields = ['filename', 'file_type', 'uploaded_at', 'category_display']
+        read_only_fields = ['filename', 'file_type', 'uploaded_at', 'category_display',
+                            'ocr_status', 'afm_mismatch']
     
     def get_file_url(self, obj):
         if obj.file:

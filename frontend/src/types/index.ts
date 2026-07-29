@@ -299,6 +299,18 @@ export interface ClientDocument {
   year?: number;
   month?: number;
   uploaded_by?: string | null;
+  // Εξαγωγή κειμένου / έλεγχος ΑΦΜ
+  ocr_status?: 'pending' | 'done' | 'failed' | 'skipped';
+  afm_mismatch?: boolean;
+}
+
+// Απάντηση του POST /api/v1/documents/suggest/
+export interface DocumentSuggestion {
+  suggested_category: string | null;
+  detected_afm: string | null;
+  afm_matches_client: boolean | null;
+  suggested_filename: string;
+  has_text: boolean;
 }
 
 // Document Categories — αντιστοιχούν στα ClientDocument.CATEGORY_CHOICES του backend,

@@ -294,7 +294,10 @@ class ClientViewSet(viewsets.ModelViewSet):
         GET /api/clients/{id}/documents/
         Returns all documents for a specific client
         """
-        client = self.get_object()
+        # Όχι self.get_object(): το ClientFilter θα εφάρμοζε το ?search=
+        # στον ίδιο τον πελάτη και θα γύριζε 404
+        from django.shortcuts import get_object_or_404
+        client = get_object_or_404(ClientProfile, pk=pk)
         documents = client.documents.select_related(
             'obligation', 'obligation__obligation_type'
         ).order_by('-year', '-month', '-uploaded_at')
@@ -315,7 +318,8 @@ class ClientViewSet(viewsets.ModelViewSet):
             documents = documents.filter(
                 Q(filename__icontains=search) |
                 Q(original_filename__icontains=search) |
-                Q(description__icontains=search)
+                Q(description__icontains=search) |
+                Q(extracted_text__icontains=search)
             )
         if request.query_params.get('current_only') in ('1', 'true', 'True'):
             documents = documents.filter(is_current=True)
@@ -376,10 +380,17 @@ class ClientViewSet(viewsets.ModelViewSet):
             )
 
         serializer = ClientDocumentSerializer(document, context={'request': request})
-        return Response({
+        response = {
             'message': 'Το αρχείο μεταφορτώθηκε επιτυχώς.',
             'document': serializer.data
-        }, status=status.HTTP_201_CREATED)
+        }
+        # Σε sync εξαγωγή το instance έχει ήδη ενημερωθεί — προειδοποίηση ΑΦΜ
+        if document.afm_mismatch:
+            response['warning'] = (
+                'Το ΑΦΜ μέσα στο έγγραφο δεν αντιστοιχεί στον πελάτη — '
+                'έλεγξε μήπως ανέβηκε σε λάθος φάκελο.'
+            )
+        return Response(response, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['delete'], url_path='documents/(?P<doc_id>[^/.]+)/delete')
     def delete_document(self, request, pk=None, doc_id=None):

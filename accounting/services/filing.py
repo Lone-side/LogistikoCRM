@@ -116,6 +116,38 @@ def validate_upload(uploaded_file):
         )
 
 
+def apply_naming(uploaded_file, client, category=None, year=None, month=None):
+    """
+    Εφαρμόζει τον Κανόνα Ονοματολογίας των ρυθμίσεων στο όνομα του αρχείου
+    (original/structured/date_prefix/afm_prefix) και το καθαρίζει (sanitize).
+
+    Η ημερομηνία αναφοράς προκύπτει από year/month (1η του μήνα) ώστε το
+    όνομα να συμφωνεί με τον φάκελο περιόδου, όχι με την ημέρα του upload.
+    """
+    from common.utils.file_validation import sanitize_filename
+
+    filing_settings = _get_filing_settings()
+    new_name = uploaded_file.name
+    if filing_settings:
+        try:
+            ref_date = None
+            if year and month:
+                ref_date = datetime(int(year), int(month), 1)
+            elif year:
+                ref_date = datetime(int(year), 1, 1)
+            new_name = filing_settings.generate_filename(
+                uploaded_file.name,
+                client=client,
+                category=category,
+                date=ref_date,
+            )
+        except Exception as e:
+            logger.warning(f"Αποτυχία εφαρμογής κανόνα ονοματολογίας: {e}")
+            new_name = uploaded_file.name
+    uploaded_file.name = sanitize_filename(new_name)
+    return uploaded_file.name
+
+
 def ensure_folders(client, year=None):
     """
     Δημιουργεί (idempotent) το πλήρες δέντρο φακέλων του πελάτη για το
@@ -203,14 +235,17 @@ def _write_info_file(client, base_path):
 
 
 def create_client_document(client, uploaded_file, category='general', obligation=None,
-                           year=None, month=None, user=None, description=''):
+                           year=None, month=None, user=None, description='',
+                           on_existing='version'):
     """
     Το μοναδικό σημείο δημιουργίας ClientDocument από upload.
 
     - Επικυρώνει το αρχείο βάσει ρυθμίσεων (validate_upload)
-    - Καθαρίζει το όνομα αρχείου (sanitize)
+    - Κρατά το ΠΡΑΓΜΑΤΙΚΟ αρχικό όνομα και μετά εφαρμόζει τον Κανόνα
+      Ονοματολογίας των ρυθμίσεων + sanitize (apply_naming)
     - Παίρνει κατηγορία/έτος/μήνα από την υποχρέωση αν δεν δόθηκαν
-    - Αν υπάρχει ήδη τρέχον έγγραφο για τον ίδιο συνδυασμό → νέα έκδοση
+    - Αν υπάρχει ήδη τρέχον έγγραφο για τον ίδιο συνδυασμό:
+      on_existing='version' → νέα έκδοση, 'replace' → αντικατάσταση (v1)
     - Δημιουργεί on-demand τους φακέλους για το έτος του εγγράφου
       (αυτό καλύπτει και το πέρασμα σε νέα χρονιά)
 
@@ -218,10 +253,9 @@ def create_client_document(client, uploaded_file, category='general', obligation
     Raises: ValidationError για μη αποδεκτό αρχείο
     """
     from accounting.models import ClientDocument
-    from common.utils.file_validation import sanitize_filename
 
     validate_upload(uploaded_file)
-    uploaded_file.name = sanitize_filename(uploaded_file.name)
+    original_name = os.path.basename(uploaded_file.name or '') or 'unnamed_file'
 
     if obligation:
         year = year or obligation.year
@@ -229,6 +263,8 @@ def create_client_document(client, uploaded_file, category='general', obligation
     now = datetime.now()
     year = int(year or now.year)
     month = int(month or now.month)
+
+    apply_naming(uploaded_file, client, category=category, year=year, month=month)
 
     # Φάκελοι για το έτος του εγγράφου (idempotent, καλύπτει νέα χρονιά)
     ensure_folders(client, year=year)
@@ -239,17 +275,29 @@ def create_client_document(client, uploaded_file, category='general', obligation
         category=category if category and category != 'general' else None,
     )
     if existing and existing.year == year and existing.month == month:
-        doc = existing.create_new_version(new_file=uploaded_file, user=user)
-        if description:
-            doc.description = description
-            doc.save(update_fields=['description'])
-        return doc
+        if on_existing == 'replace':
+            old_path = existing.file.path if existing.file else None
+            existing.delete()
+            if old_path and os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except OSError as e:
+                    logger.warning(f"Δεν διαγράφηκε το παλιό αρχείο {old_path}: {e}")
+        else:
+            doc = existing.create_new_version(
+                new_file=uploaded_file, user=user, original_filename=original_name
+            )
+            if description:
+                doc.description = description
+                doc.save(update_fields=['description'])
+            _queue_text_extraction(doc)
+            return doc
 
     doc = ClientDocument(
         client=client,
         obligation=obligation,
         file=uploaded_file,
-        original_filename=uploaded_file.name,
+        original_filename=original_name,
         document_category=category or 'general',
         year=year,
         month=month,
@@ -259,4 +307,14 @@ def create_client_document(client, uploaded_file, category='general', obligation
         uploaded_by=user,
     )
     doc.save()
+    _queue_text_extraction(doc)
     return doc
+
+
+def _queue_text_extraction(doc):
+    """Δρομολόγηση εξαγωγής κειμένου — δεν πρέπει ποτέ να σπάσει το upload."""
+    try:
+        from accounting.services import text_extraction
+        text_extraction.queue_extraction(doc)
+    except Exception as e:
+        logger.warning(f"Αποτυχία δρομολόγησης εξαγωγής κειμένου: {e}")

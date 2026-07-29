@@ -783,3 +783,27 @@ def ensure_yearly_folders(year=None):
     result = f"Φάκελοι έτους {year}: {created} πελάτες OK, {failed} αποτυχίες"
     logger.info(result)
     return result
+
+
+# ============================================
+# DOCUMENT TEXT EXTRACTION
+# ============================================
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def extract_document_text(self, document_id):
+    """
+    Εξαγωγή κειμένου από έγγραφο πελάτη (async).
+    Ενημερώνει extracted_text/ocr_status/afm_mismatch.
+    """
+    from .models import ClientDocument
+    from .services import text_extraction
+
+    try:
+        document = ClientDocument.objects.get(id=document_id)
+    except ClientDocument.DoesNotExist:
+        logger.info(f"Document {document_id} no longer exists - skipping extraction")
+        return None
+
+    status = text_extraction.process_document(document)
+    logger.info(f"Text extraction for document {document_id}: {status}")
+    return status

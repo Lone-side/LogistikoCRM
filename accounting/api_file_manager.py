@@ -118,6 +118,7 @@ class DocumentFilter(FilterSet):
                 Q(filename__icontains=value) |
                 Q(description__icontains=value) |
                 Q(original_filename__icontains=value) |
+                Q(extracted_text__icontains=value) |
                 Q(client__eponimia__icontains=value) |
                 Q(client__afm__icontains=value)
             )
@@ -190,6 +191,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             'file', 'file_url', 'filename', 'original_filename', 'file_type', 'file_size', 'file_size_display',
             'document_category', 'category_display', 'description',
             'year', 'month', 'version', 'is_current',
+            'ocr_status', 'afm_mismatch',
             'uploaded_at', 'uploaded_by',
             'tags', 'is_favorite', 'can_preview', 'shared_links_count'
         ]

@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../../components';
 import { FilePreviewModal } from '../FilePreviewModal';
@@ -267,6 +268,15 @@ export default function ClientDocumentsTab({
                                       <VersionBadge version={doc.version} />
                                       {doc.is_current === false && (
                                         <span className="text-xs text-gray-400">παλιά έκδοση</span>
+                                      )}
+                                      {doc.afm_mismatch && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
+                                          title="Το ΑΦΜ μέσα στο έγγραφο δεν αντιστοιχεί στον πελάτη — πιθανώς λάθος φάκελος"
+                                        >
+                                          <AlertTriangle className="w-3 h-3" />
+                                          ΑΦΜ;
+                                        </span>
                                       )}
                                     </div>
                                   </div>
