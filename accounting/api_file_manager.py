@@ -273,11 +273,14 @@ class SharedLinkSerializer(serializers.ModelSerializer):
             'id', 'document', 'document_filename', 'client', 'client_name',
             'token', 'name', 'access_level',
             'requires_email', 'expires_at', 'max_downloads',
+            'allow_upload', 'upload_category', 'upload_note',
+            'max_uploads', 'upload_count',
             'download_count', 'view_count', 'last_accessed_at',
             'is_active', 'is_expired', 'is_valid',
             'public_url', 'created_at', 'created_by', 'created_by_name'
         ]
-        read_only_fields = ['token', 'download_count', 'view_count', 'last_accessed_at', 'created_at']
+        read_only_fields = ['token', 'download_count', 'view_count', 'upload_count',
+                            'last_accessed_at', 'created_at']
 
     def get_public_url(self, obj):
         request = self.context.get('request')
@@ -296,10 +299,20 @@ class SharedLinkCreateSerializer(serializers.Serializer):
     requires_email = serializers.BooleanField(default=False)
     expires_in_days = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=365)
     max_downloads = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+    allow_upload = serializers.BooleanField(default=False)
+    upload_category = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    upload_note = serializers.CharField(required=False, allow_blank=True)
+    max_uploads = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
     def validate(self, data):
         if not data.get('document_id') and not data.get('client_id'):
             raise serializers.ValidationError("Πρέπει να δοθεί document_id ή client_id")
+        from .models import ClientDocument
+        category = data.get('upload_category')
+        if category and category not in dict(ClientDocument.CATEGORY_CHOICES):
+            raise serializers.ValidationError(
+                {'upload_category': 'Μη έγκυρη κατηγορία εγγράφων'}
+            )
         return data
 
 
@@ -606,6 +619,10 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
             requires_email=data.get('requires_email', False),
             expires_at=expires_at,
             max_downloads=data.get('max_downloads'),
+            allow_upload=data.get('allow_upload', False),
+            upload_category=data.get('upload_category', ''),
+            upload_note=data.get('upload_note', ''),
+            max_uploads=data.get('max_uploads'),
             created_by=request.user
         )
 
@@ -649,6 +666,57 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
 # ============================================
 # PUBLIC SHARED LINK ACCESS (NO AUTH)
 # ============================================
+
+# Υπογεγραμμένο access token: εκδίδεται ΜΟΝΟ μετά από επιτυχή έλεγχο
+# κωδικού/email και απαιτείται για download/upload σε προστατευμένα links
+# (το download είναι GET από window.open — δεν μπορεί να ξαναστείλει κωδικό).
+ACCESS_TOKEN_SALT = 'accounting.shared-link-access'
+ACCESS_TOKEN_MAX_AGE = 4 * 3600  # 4 ώρες
+
+
+def _password_fingerprint(shared_link):
+    """Σύντομο αποτύπωμα του password_hash — αλλαγή κωδικού ακυρώνει τα tokens"""
+    import hashlib
+    return hashlib.sha256((shared_link.password_hash or '').encode()).hexdigest()[:16]
+
+
+def make_shared_access_token(shared_link):
+    from django.core import signing
+    return signing.dumps(
+        {'t': shared_link.token, 'p': _password_fingerprint(shared_link)},
+        salt=ACCESS_TOKEN_SALT,
+    )
+
+
+def verify_shared_access_token(shared_link, token_value):
+    from django.core import signing
+    if not token_value:
+        return False
+    try:
+        data = signing.loads(token_value, salt=ACCESS_TOKEN_SALT,
+                             max_age=ACCESS_TOKEN_MAX_AGE)
+    except signing.BadSignature:
+        return False
+    return (
+        data.get('t') == shared_link.token
+        and data.get('p') == _password_fingerprint(shared_link)
+    )
+
+
+def shared_link_auth_ok(shared_link, request):
+    """
+    Έλεγχος εξουσιοδότησης για ενέργεια σε προστατευμένο link:
+    είτε έγκυρο υπογεγραμμένο access token, είτε σωστός κωδικός στο request.
+    Τα links χωρίς κωδικό είναι πάντα OK.
+    """
+    if not shared_link.password_hash:
+        return True
+    token_value = request.query_params.get('auth') or request.data.get('auth')
+    if verify_shared_access_token(shared_link, token_value):
+        return True
+    password = request.data.get('password', '')
+    return bool(password) and shared_link.check_password(password)
+
 
 class PublicSharedLinkView(APIView):
     """
@@ -715,6 +783,14 @@ class PublicSharedLinkView(APIView):
 
     def _get_content_response(self, request, shared_link):
         """Get the content based on link type"""
+        # Access token για επόμενες ενέργειες (download/upload) χωρίς
+        # επανάληψη κωδικού — εκδίδεται μόνο εδώ, μετά τον έλεγχο
+        common = {
+            'access_level': shared_link.access_level,
+            'access_token': make_shared_access_token(shared_link),
+            'allow_upload': shared_link.can_upload,
+            'upload_note': shared_link.upload_note if shared_link.can_upload else '',
+        }
         if shared_link.document:
             doc = shared_link.document
             return Response({
@@ -728,7 +804,7 @@ class PublicSharedLinkView(APIView):
                     'preview_url': request.build_absolute_uri(doc.file.url) if doc.file else None,
                     'can_download': shared_link.access_level == 'download'
                 },
-                'access_level': shared_link.access_level
+                **common,
             })
         elif shared_link.client:
             # Return list of client documents
@@ -752,7 +828,7 @@ class PublicSharedLinkView(APIView):
                     'category': doc.get_document_category_display(),
                     'uploaded_at': doc.uploaded_at
                 } for doc in docs],
-                'access_level': shared_link.access_level
+                **common,
             })
 
     def _log_access(self, request, shared_link, action, email=''):
@@ -785,7 +861,24 @@ class PublicSharedLinkDownloadView(APIView):
         if shared_link.access_level != 'download':
             return Response({'error': 'Δεν επιτρέπεται η λήψη'}, status=status.HTTP_403_FORBIDDEN)
 
-        if not shared_link.document or not shared_link.document.file:
+        # SECURITY: σε προστατευμένα links απαιτείται το access token που
+        # εκδόθηκε μετά τον έλεγχο κωδικού — πριν, το download δεν έλεγχε
+        # καθόλου τον κωδικό
+        if shared_link.password_hash and not verify_shared_access_token(
+            shared_link, request.query_params.get('auth')
+        ):
+            return Response({'error': 'Απαιτείται έλεγχος κωδικού'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        # Εύρεση αρχείου: document link ή folder link με ?doc_id=
+        doc = shared_link.document
+        if not doc and shared_link.client:
+            doc_id = request.query_params.get('doc_id')
+            if doc_id:
+                doc = ClientDocument.objects.filter(
+                    id=doc_id, client=shared_link.client, is_current=True
+                ).first()
+        if not doc or not doc.file:
             raise Http404("Το αρχείο δεν βρέθηκε")
 
         # Record download
@@ -800,7 +893,6 @@ class PublicSharedLinkDownloadView(APIView):
         )
 
         try:
-            doc = shared_link.document
             file_handle = doc.file.open('rb')
             response = FileResponse(file_handle, as_attachment=True, filename=doc.filename)
             content_type, _ = mimetypes.guess_type(doc.filename)
@@ -809,6 +901,122 @@ class PublicSharedLinkDownloadView(APIView):
             return response
         except Exception:
             raise Http404("Σφάλμα κατά τη λήψη")
+
+
+class PublicSharedLinkUploadView(APIView):
+    """
+    Upload εγγράφων από τον πελάτη μέσω shared link (χωρίς login).
+
+    POST /share/{token}/upload/ (multipart)
+        - files: ένα ή περισσότερα αρχεία (μέχρι 10 ανά αίτημα)
+        - auth: το access token από το GET/POST του link (για προστατευμένα)
+        - email: αν το link απαιτεί email
+
+    Τα αρχεία περνούν από την ενιαία υπηρεσία αρχειοθέτησης (validation
+    βάσει ρυθμίσεων, αυτόματη ονομασία, φάκελος πελάτη, έλεγχος ΑΦΜ).
+    """
+    permission_classes = [AllowAny]
+    throttle_scope = 'shared_link_upload'
+
+    def get_throttles(self):
+        from rest_framework.throttling import ScopedRateThrottle
+        return [ScopedRateThrottle()]
+
+    MAX_FILES_PER_REQUEST = 10
+
+    def post(self, request, token):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from .services import filing
+
+        shared_link = get_object_or_404(SharedLink, token=token)
+
+        if not shared_link.can_upload:
+            return Response(
+                {'error': 'Ο σύνδεσμος δεν δέχεται μεταφορτώσεις'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if not shared_link_auth_ok(shared_link, request):
+            return Response({'error': 'Απαιτείται έλεγχος κωδικού'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        email = request.data.get('email', '')
+        if shared_link.requires_email and not email:
+            return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = shared_link.upload_target_client
+        if not client:
+            return Response({'error': 'Μη έγκυρος σύνδεσμος'}, status=status.HTTP_410_GONE)
+
+        files = request.FILES.getlist('files') or request.FILES.getlist('file')
+        if not files:
+            return Response({'error': 'Δεν επιλέχθηκε αρχείο'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(files) > self.MAX_FILES_PER_REQUEST:
+            return Response(
+                {'error': f'Μέχρι {self.MAX_FILES_PER_REQUEST} αρχεία ανά αποστολή'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Σεβασμός του ορίου uploads και μέσα στο ίδιο αίτημα
+        if shared_link.max_uploads:
+            remaining = shared_link.max_uploads - shared_link.upload_count
+            if len(files) > remaining:
+                return Response(
+                    {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        sender = email or 'πελάτη'
+        uploaded = []
+        errors = []
+        for f in files:
+            try:
+                # on_existing='keep': τα uploads πελατών δεν εκτοπίζουν ΠΟΤΕ
+                # υπάρχοντα έγγραφα του γραφείου ως «νέα έκδοση»
+                doc = filing.create_client_document(
+                    client=client,
+                    uploaded_file=f,
+                    category=shared_link.upload_category or 'general',
+                    user=None,
+                    description=f'Μεταφόρτωση από {sender} μέσω portal',
+                    on_existing='keep',
+                )
+            except DjangoValidationError as e:
+                errors.append({'filename': f.name, 'error': '; '.join(e.messages)})
+                continue
+            entry = {
+                'filename': doc.original_filename,
+                'stored_as': doc.filename,
+                'file_size_display': doc.file_size_display,
+            }
+            if doc.afm_mismatch:
+                entry['warning'] = 'Το ΑΦΜ στο έγγραφο δεν αντιστοιχεί στον πελάτη'
+            uploaded.append(entry)
+
+        if uploaded:
+            shared_link.record_upload(count=len(uploaded))
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            ip_address = (
+                x_forwarded_for.split(',')[0].strip()
+                if x_forwarded_for else request.META.get('REMOTE_ADDR')
+            )
+            SharedLinkAccess.objects.create(
+                shared_link=shared_link,
+                ip_address=ip_address,
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+                email_provided=email,
+                action='upload',
+            )
+
+        return Response({
+            'success': bool(uploaded),
+            'uploaded': uploaded,
+            'errors': errors,
+            'message': (
+                f'Μεταφορτώθηκαν {len(uploaded)} αρχεία'
+                if uploaded else 'Δεν μεταφορτώθηκε κανένα αρχείο'
+            ),
+        }, status=status.HTTP_201_CREATED if uploaded else status.HTTP_400_BAD_REQUEST)
 
 
 # ============================================

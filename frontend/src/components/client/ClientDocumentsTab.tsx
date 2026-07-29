@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Folder,
   AlertTriangle,
+  Link2,
 } from 'lucide-react';
 import { Button } from '../../components';
 import { FilePreviewModal } from '../FilePreviewModal';
@@ -33,6 +34,7 @@ export interface ClientDocumentsTabProps {
   onFiltersChange: (filters: ClientDocumentFilters) => void;
   onUpload: () => void;
   onDelete: (docId: number) => void;
+  onCreatePortalLink?: () => void;
 }
 
 // File type icon mapping
@@ -104,6 +106,7 @@ export default function ClientDocumentsTab({
   onFiltersChange,
   onUpload,
   onDelete,
+  onCreatePortalLink,
 }: ClientDocumentsTabProps) {
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -147,10 +150,18 @@ export default function ClientDocumentsTab({
         <h3 className="text-sm font-medium text-gray-700">
           {data ? `${data.documents.length} έγγραφα` : 'Έγγραφα'}
         </h3>
-        <Button onClick={onUpload}>
-          <Upload className="w-4 h-4 mr-2" />
-          Μεταφόρτωση
-        </Button>
+        <div className="flex gap-2">
+          {onCreatePortalLink && (
+            <Button variant="secondary" onClick={onCreatePortalLink}>
+              <Link2 className="w-4 h-4 mr-2" />
+              Portal Πελάτη
+            </Button>
+          )}
+          <Button onClick={onUpload}>
+            <Upload className="w-4 h-4 mr-2" />
+            Μεταφόρτωση
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

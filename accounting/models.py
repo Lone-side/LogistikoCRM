@@ -2156,6 +2156,36 @@ class SharedLink(models.Model):
         help_text='Αν είναι κενό, απεριόριστες'
     )
 
+    # Upload από τον πελάτη (portal)
+    allow_upload = models.BooleanField(
+        default=False,
+        verbose_name='Επιτρέπεται Upload',
+        help_text='Ο πελάτης μπορεί να ανεβάζει έγγραφα μέσω του συνδέσμου'
+    )
+    upload_category = models.CharField(
+        max_length=20,
+        blank=True,
+        default='',
+        verbose_name='Κατηγορία Uploads',
+        help_text='Προεπιλεγμένη κατηγορία για τα αρχεία του πελάτη (κενό = Γενικά)'
+    )
+    upload_note = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Οδηγίες προς Πελάτη',
+        help_text='Π.χ. λίστα εγγράφων που ζητάμε — εμφανίζεται στο portal'
+    )
+    max_uploads = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Μέγιστα Uploads',
+        help_text='Αν είναι κενό, απεριόριστα'
+    )
+    upload_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Πλήθος Uploads'
+    )
+
     # Statistics
     download_count = models.PositiveIntegerField(
         default=0,
@@ -2230,6 +2260,35 @@ class SharedLink(models.Model):
             not self.is_download_limit_reached
         )
 
+    @property
+    def is_upload_limit_reached(self):
+        """Έλεγχος αν έχει φτάσει το όριο uploads"""
+        if not self.max_uploads:
+            return False
+        return self.upload_count >= self.max_uploads
+
+    @property
+    def can_upload(self):
+        """
+        Μπορεί ο πελάτης να ανεβάσει; Ανεξάρτητο από το όριο λήψεων —
+        ένα εξαντλημένο σε λήψεις link επιτρέπεται να δέχεται αρχεία.
+        """
+        return (
+            self.is_active and
+            not self.is_expired and
+            self.allow_upload and
+            not self.is_upload_limit_reached
+        )
+
+    @property
+    def upload_target_client(self):
+        """Ο πελάτης στον φάκελο του οποίου καταλήγουν τα uploads"""
+        if self.client:
+            return self.client
+        if self.document:
+            return self.document.client
+        return None
+
     def set_password(self, password):
         """Ορισμός κωδικού (hashed)"""
         from django.contrib.auth.hashers import make_password
@@ -2249,6 +2308,15 @@ class SharedLink(models.Model):
         if is_download:
             self.download_count += 1
         self.save(update_fields=['last_accessed_at', 'view_count', 'download_count'])
+
+    def record_upload(self, count=1):
+        """Καταγραφή upload(s) από τον πελάτη — ατομική αύξηση (F expression)"""
+        from django.db.models import F
+        SharedLink.objects.filter(pk=self.pk).update(
+            last_accessed_at=timezone.now(),
+            upload_count=F('upload_count') + count,
+        )
+        self.refresh_from_db(fields=['last_accessed_at', 'upload_count'])
 
     def get_public_url(self):
         """Δημιουργία public URL"""
@@ -2284,6 +2352,7 @@ class SharedLinkAccess(models.Model):
         choices=[
             ('view', 'Προβολή'),
             ('download', 'Λήψη'),
+            ('upload', 'Μεταφόρτωση'),
         ],
         default='view',
         verbose_name='Ενέργεια'

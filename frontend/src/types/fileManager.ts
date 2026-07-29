@@ -152,6 +152,11 @@ export interface SharedLink {
   requires_email: boolean;
   expires_at?: string | null;
   max_downloads?: number | null;
+  allow_upload?: boolean;
+  upload_category?: string;
+  upload_note?: string;
+  max_uploads?: number | null;
+  upload_count?: number;
   download_count: number;
   view_count: number;
   last_accessed_at?: string | null;
@@ -174,6 +179,11 @@ export interface CreateSharedLinkRequest {
   requires_email?: boolean;
   expires_in_days?: number | null;
   max_downloads?: number | null;
+  // Upload από τον πελάτη (portal)
+  allow_upload?: boolean;
+  upload_category?: string;
+  upload_note?: string;
+  max_uploads?: number | null;
 }
 
 // Document Favorite
@@ -310,11 +320,25 @@ export interface AccessLogEntry {
   email_provided?: string;
 }
 
+// Αποτέλεσμα upload από το portal πελάτη
+export interface PortalUploadResult {
+  success: boolean;
+  message: string;
+  uploaded: { filename: string; stored_as: string; file_size_display: string; warning?: string }[];
+  errors: { filename: string; error: string }[];
+}
+
 // Public shared content
 export interface PublicSharedContent {
   type: 'document' | 'folder';
   name: string;
   access_level: 'view' | 'download';
+  /** Υπογεγραμμένο token για download/upload σε προστατευμένα links */
+  access_token?: string;
+  /** Ο πελάτης μπορεί να ανεβάσει έγγραφα μέσω αυτού του link */
+  allow_upload?: boolean;
+  /** Οδηγίες/λίστα ζητούμενων εγγράφων προς τον πελάτη */
+  upload_note?: string;
   document?: {
     id: number;
     filename: string;
