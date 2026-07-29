@@ -17,7 +17,26 @@
 
 ---
 
-## Βήματα Εγκατάστασης
+## Αυτόματη Εγκατάσταση (μία εντολή)
+
+Τα scripts εκτελούν όλα τα βήματα της επόμενης ενότητας με τη σωστή σειρά:
+
+```bash
+./setup_dev.sh        # Linux/Mac
+setup_dev.bat         # Windows
+```
+
+Στο τέλος τυπώνονται τα credentials του superuser (**IamSUPER** + τυχαίος
+κωδικός) — **σημείωσέ τα**. Μετά απλώς:
+
+```bash
+source venv/bin/activate   # Windows: venv\Scripts\activate
+python manage.py runserver
+```
+
+---
+
+## Βήματα Εγκατάστασης (χειροκίνητα)
 
 Η **σειρά έχει σημασία** — ειδικά το `setupdata` πρέπει να τρέξει
 **πριν** δημιουργηθεί οποιοσδήποτε χρήστης.
