@@ -69,11 +69,11 @@ jobs:
 
       - name: Run tests
         run: |
-          python manage.py test tests.accounting tests.crm tests.common tests.inventory --keepdb -v 2
+          python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata --keepdb -v 2
 
       - name: Run tests with coverage
         run: |
-          coverage run manage.py test tests.accounting tests.crm tests.common --keepdb
+          coverage run manage.py test tests.accounting tests.crm tests.common tests.mydata --keepdb
           coverage report --fail-under=45
           coverage xml
 
