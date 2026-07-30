@@ -877,3 +877,41 @@ def backup_database_task(self):
     except Exception as exc:
         logger.error(f"❌ Scheduled backup failed: {exc}")
         raise self.retry(exc=exc)
+
+
+# ============================================
+# STALE SYNC LOG CLEANUP (Celery beat, κάθε 30')
+# ============================================
+
+@shared_task
+def cleanup_stale_sync_logs(stale_minutes=60):
+    """
+    Μαρκάρει ως ERROR τα myDATA sync logs που έμειναν PENDING επειδή ο
+    worker διακόπηκε στη μέση (π.χ. restart/crash). Χωρίς αυτό τα rows
+    μένουν PENDING για πάντα και μπερδεύουν το ιστορικό συγχρονισμών.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+    from inventory.models import MyDataSyncLog
+    from mydata.models import VATSyncLog
+
+    cutoff = timezone.now() - timedelta(minutes=stale_minutes)
+    message = (
+        f'Sync διακόπηκε — επισημάνθηκε ως stale από το cleanup task '
+        f'(PENDING > {stale_minutes} λεπτά). Άγνωστο αποτέλεσμα: έλεγξε '
+        f'τα δεδομένα στην ΑΑΔΕ πριν ξανατρέξεις.'
+    )
+
+    invoice_logs = MyDataSyncLog.objects.filter(
+        status='PENDING', started_at__lt=cutoff
+    ).update(status='ERROR', completed_at=timezone.now(), error_message=message)
+
+    vat_logs = VATSyncLog.objects.filter(
+        status='PENDING', started_at__lt=cutoff
+    ).update(status='ERROR', completed_at=timezone.now(), error_message=message)
+
+    if invoice_logs or vat_logs:
+        logger.warning(
+            f'Stale sync logs: {invoice_logs} MyDataSyncLog, {vat_logs} VATSyncLog'
+        )
+    return f'Cleaned {invoice_logs + vat_logs} stale sync logs'

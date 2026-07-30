@@ -314,12 +314,9 @@ class ClientViewSet(viewsets.ModelViewSet):
             documents = documents.filter(month=int(month))
         search = request.query_params.get('search')
         if search:
-            from django.db.models import Q
-            documents = documents.filter(
-                Q(filename__icontains=search) |
-                Q(original_filename__icontains=search) |
-                Q(description__icontains=search) |
-                Q(extracted_text__icontains=search)
+            from .services.search import apply_document_search
+            documents = apply_document_search(
+                documents, search, include_client_fields=False
             )
         if request.query_params.get('current_only') in ('1', 'true', 'True'):
             documents = documents.filter(is_current=True)
