@@ -200,3 +200,75 @@ class VatInfoParseTest(ClientTestBase):
         records, pagination = self.client_obj._parse_vat_info_response('')
         self.assertEqual(records, [])
         self.assertFalse(pagination.has_more)
+
+
+VAT_PAGE_1 = """<RequestedVatInfo>
+  <continuationToken>
+    <nextPartitionKey>P2</nextPartitionKey>
+    <nextRowKey>R2</nextRowKey>
+  </continuationToken>
+  <VatInfo>
+    <Mark>900000000000001</Mark>
+    <IssueDate>2026-07-10</IssueDate>
+    <Vat303>200.00</Vat303>
+    <Vat333>48.00</Vat333>
+  </VatInfo>
+</RequestedVatInfo>"""
+
+VAT_PAGE_2 = """<RequestedVatInfo>
+  <VatInfo>
+    <Mark>900000000000002</Mark>
+    <IssueDate>2026-07-11</IssueDate>
+    <Vat361>100.00</Vat361>
+    <Vat381>24.00</Vat381>
+  </VatInfo>
+</RequestedVatInfo>"""
+
+
+class RequestVatInfoTest(ClientTestBase):
+    def test_pagination_and_record_parsing(self):
+        from datetime import date
+        from decimal import Decimal
+
+        with patch.object(
+            self.client_obj, '_make_request',
+            side_effect=[VAT_PAGE_1, VAT_PAGE_2],
+        ) as mock_request:
+            records = list(self.client_obj.request_vat_info(
+                date_from=date(2026, 7, 1), date_to=date(2026, 7, 31)
+            ))
+
+        self.assertEqual(len(records), 2)
+        # Σελίδα 1: εκροές (rec_type=1)
+        self.assertEqual(records[0].mark, 900000000000001)
+        self.assertEqual(records[0].rec_type, 1)
+        self.assertEqual(records[0].net_value, Decimal('200.00'))
+        self.assertEqual(records[0].vat_amount, Decimal('48.00'))
+        self.assertEqual(records[0].issue_date, date(2026, 7, 10))
+        # Σελίδα 2: εισροές (rec_type=2)
+        self.assertEqual(records[1].mark, 900000000000002)
+        self.assertEqual(records[1].rec_type, 2)
+        self.assertEqual(records[1].net_value, Decimal('100.00'))
+
+        # Δύο requests: το δεύτερο με τα pagination keys του πρώτου
+        self.assertEqual(mock_request.call_count, 2)
+        second_params = mock_request.call_args_list[1].kwargs.get(
+            'params'
+        ) or mock_request.call_args_list[1][0][2]
+        self.assertEqual(second_params.get('nextPartitionKey'), 'P2')
+        self.assertEqual(second_params.get('nextRowKey'), 'R2')
+
+    def test_wcf_wrapped_response_is_unwrapped(self):
+        wrapped = (
+            '<string xmlns="http://schemas.microsoft.com/2003/10/Serialization/">'
+            '&lt;RequestedVatInfo&gt;&lt;VatInfo&gt;'
+            '&lt;Mark&gt;900000000000003&lt;/Mark&gt;'
+            '&lt;IssueDate&gt;2026-07-12&lt;/IssueDate&gt;'
+            '&lt;Vat303&gt;10.00&lt;/Vat303&gt;&lt;Vat333&gt;2.40&lt;/Vat333&gt;'
+            '&lt;/VatInfo&gt;&lt;/RequestedVatInfo&gt;'
+            '</string>'
+        )
+        records, pagination = self.client_obj._parse_vat_info_response(wrapped)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].mark, 900000000000003)
+        self.assertFalse(pagination.has_more)
