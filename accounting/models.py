@@ -2557,3 +2557,110 @@ class DoorAccessLog(models.Model):
             user_agent=user_agent,
             response_data=response_data
         )
+
+# =============================================================================
+# ΑΙΤΗΜΑΤΑ ΕΓΓΡΑΦΩΝ (Document Requests μέσω portal)
+# =============================================================================
+
+class DocumentRequest(models.Model):
+    """
+    Αίτημα συγκεκριμένων εγγράφων από πελάτη μέσω του SharedLink portal.
+
+    Ο λογιστής ορίζει τι χρειάζεται (items), ο πελάτης ανεβάζει μέσω του
+    portal και κάθε upload «τσεκάρει» το αντίστοιχο item. Όταν όλα τα
+    items παραληφθούν, το αίτημα ολοκληρώνεται αυτόματα.
+    """
+
+    STATUS_CHOICES = [
+        ('open', 'Ανοιχτό'),
+        ('completed', 'Ολοκληρώθηκε'),
+        ('cancelled', 'Ακυρώθηκε'),
+    ]
+
+    client = models.ForeignKey(
+        ClientProfile,
+        on_delete=models.CASCADE,
+        related_name='document_requests',
+        verbose_name='Πελάτης',
+    )
+    shared_link = models.ForeignKey(
+        'SharedLink',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='document_requests',
+        verbose_name='Σύνδεσμος Portal',
+    )
+    title = models.CharField('Τίτλος', max_length=200)
+    notes = models.TextField('Σημειώσεις', blank=True)
+    status = models.CharField(
+        'Κατάσταση', max_length=10, choices=STATUS_CHOICES,
+        default='open', db_index=True,
+    )
+    due_date = models.DateField('Προθεσμία', null=True, blank=True)
+
+    # Υπενθυμίσεις (beat task send_document_request_reminders)
+    last_reminder_sent_at = models.DateTimeField(
+        'Τελευταία Υπενθύμιση', null=True, blank=True
+    )
+    reminder_count = models.PositiveSmallIntegerField('Υπενθυμίσεις', default=0)
+
+    completed_at = models.DateTimeField('Ολοκληρώθηκε', null=True, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='document_requests_created',
+        verbose_name='Δημιουργήθηκε από',
+    )
+    created_at = models.DateTimeField('Δημιουργήθηκε', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Αίτημα Εγγράφων'
+        verbose_name_plural = 'Αιτήματα Εγγράφων'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} — {self.client.eponimia} [{self.get_status_display()}]"
+
+    @property
+    def received_items_count(self):
+        return self.items.filter(is_received=True).count()
+
+    @property
+    def pending_items_count(self):
+        return self.items.filter(is_received=False).count()
+
+
+class DocumentRequestItem(models.Model):
+    """Ένα ζητούμενο έγγραφο μέσα σε αίτημα (π.χ. «Τιμολόγια αγορών Ιουλίου»)."""
+
+    request = models.ForeignKey(
+        DocumentRequest,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='Αίτημα',
+    )
+    label = models.CharField('Περιγραφή', max_length=200)
+    category = models.CharField(
+        'Κατηγορία', max_length=20,
+        choices=ClientDocument.CATEGORY_CHOICES, blank=True,
+    )
+    is_received = models.BooleanField('Ελήφθη', default=False)
+    # SET_NULL: αν διαγραφεί το έγγραφο, το item παραμένει «ελήφθη»
+    received_document = models.ForeignKey(
+        ClientDocument,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='request_items',
+        verbose_name='Παραληφθέν Έγγραφο',
+    )
+    received_at = models.DateTimeField('Ελήφθη στις', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Ζητούμενο Έγγραφο'
+        verbose_name_plural = 'Ζητούμενα Έγγραφα'
+        ordering = ['id']
+
+    def __str__(self):
+        status = '✓' if self.is_received else '…'
+        return f"{status} {self.label} ({self.request.title})"

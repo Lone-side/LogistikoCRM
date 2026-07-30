@@ -58,6 +58,7 @@ from common.utils.media_tokens import signed_media_url
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import timedelta
+import logging
 import os
 import mimetypes
 
@@ -66,6 +67,8 @@ from .models import (
     DocumentTag, DocumentTagAssignment, SharedLink, SharedLinkAccess,
     DocumentFavorite, DocumentCollection, get_client_folder
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================
@@ -779,6 +782,7 @@ class PublicSharedLinkView(APIView):
             'access_token': make_shared_access_token(shared_link),
             'allow_upload': shared_link.can_upload,
             'upload_note': shared_link.upload_note if shared_link.can_upload else '',
+            'document_request': self._get_document_request(shared_link),
         }
         if shared_link.document:
             doc = shared_link.document
@@ -819,6 +823,33 @@ class PublicSharedLinkView(APIView):
                 } for doc in docs],
                 **common,
             })
+
+    def _get_document_request(self, shared_link):
+        """Το ανοιχτό αίτημα εγγράφων του link (ή None) — για το portal checklist."""
+        if not shared_link.can_upload:
+            return None
+        doc_request = (
+            shared_link.document_requests.filter(status='open')
+            .prefetch_related('items')
+            .first()
+        )
+        if not doc_request:
+            return None
+        return {
+            'id': doc_request.id,
+            'title': doc_request.title,
+            'notes': doc_request.notes,
+            'due_date': doc_request.due_date.isoformat() if doc_request.due_date else None,
+            'items': [
+                {
+                    'id': item.id,
+                    'label': item.label,
+                    'category': item.category,
+                    'is_received': item.is_received,
+                }
+                for item in doc_request.items.all()
+            ],
+        }
 
     def _log_access(self, request, shared_link, action, email=''):
         """Log access to shared link"""
@@ -955,8 +986,26 @@ class PublicSharedLinkUploadView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # Προαιρετική αντιστοίχιση σε item αιτήματος εγγράφων
+        request_item = None
+        request_item_id = request.data.get('request_item_id')
+        if request_item_id:
+            from .models import DocumentRequestItem
+            request_item = DocumentRequestItem.objects.filter(
+                pk=request_item_id,
+                request__shared_link=shared_link,
+                request__status='open',
+                is_received=False,
+            ).select_related('request').first()
+            if request_item is None:
+                return Response(
+                    {'error': 'Μη έγκυρο ή ήδη παραληφθέν ζητούμενο έγγραφο'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         sender = email or 'πελάτη'
         uploaded = []
+        uploaded_docs = []
         errors = []
         for f in files:
             try:
@@ -965,7 +1014,10 @@ class PublicSharedLinkUploadView(APIView):
                 doc = filing.create_client_document(
                     client=client,
                     uploaded_file=f,
-                    category=shared_link.upload_category or 'general',
+                    category=(
+                        (request_item.category if request_item else '')
+                        or shared_link.upload_category or 'general'
+                    ),
                     user=None,
                     description=f'Μεταφόρτωση από {sender} μέσω portal',
                     on_existing='keep',
@@ -981,8 +1033,13 @@ class PublicSharedLinkUploadView(APIView):
             if doc.afm_mismatch:
                 entry['warning'] = 'Το ΑΦΜ στο έγγραφο δεν αντιστοιχεί στον πελάτη'
             uploaded.append(entry)
+            uploaded_docs.append(doc)
+
+        if uploaded and request_item:
+            self._mark_item_received(request_item, uploaded_docs[0])
 
         if uploaded:
+            self._dispatch_upload_notification(shared_link, uploaded_docs)
             shared_link.record_upload(count=len(uploaded))
             x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
             ip_address = (
@@ -1006,6 +1063,60 @@ class PublicSharedLinkUploadView(APIView):
                 if uploaded else 'Δεν μεταφορτώθηκε κανένα αρχείο'
             ),
         }, status=status.HTTP_201_CREATED if uploaded else status.HTTP_400_BAD_REQUEST)
+
+
+    def _mark_item_received(self, request_item, document):
+        """
+        Race-safe παραλαβή item: conditional UPDATE — σε double-submit το
+        δεύτερο update γυρίζει 0 rows και απλώς δεν ξαναμαρκάρει (το αρχείο
+        έχει ανέβει κανονικά, δεν είναι σφάλμα για τον πελάτη).
+        """
+        from django.utils import timezone
+        from .models import DocumentRequest, DocumentRequestItem
+
+        updated = DocumentRequestItem.objects.filter(
+            pk=request_item.pk, is_received=False
+        ).update(
+            is_received=True,
+            received_document=document,
+            received_at=timezone.now(),
+        )
+        if not updated:
+            return
+        # Auto-complete όταν δεν απομένει κανένα εκκρεμές item
+        pending = DocumentRequestItem.objects.filter(
+            request_id=request_item.request_id, is_received=False
+        ).exists()
+        if not pending:
+            DocumentRequest.objects.filter(
+                pk=request_item.request_id, status='open'
+            ).update(status='completed', completed_at=timezone.now())
+
+    def _dispatch_upload_notification(self, shared_link, documents):
+        """Ειδοποίηση γραφείου για νέα έγγραφα — ποτέ δεν ρίχνει το upload."""
+        from django.conf import settings as dj_settings
+        from django.db import transaction
+
+        doc_ids = [d.pk for d in documents]
+
+        # Sync fallback χωρίς broker (runserver/tests) — ίδιο pattern με το OCR
+        sync_mode = getattr(dj_settings, 'PORTAL_EMAIL_SYNC', dj_settings.DEBUG)
+
+        def _send():
+            from .tasks import notify_portal_upload
+            try:
+                notify_portal_upload.delay(shared_link.pk, doc_ids)
+            except Exception:
+                if sync_mode:
+                    try:
+                        notify_portal_upload(shared_link.pk, doc_ids)
+                    except Exception:
+                        logger.warning('notify_portal_upload sync fallback failed',
+                                       exc_info=True)
+                else:
+                    logger.warning('notify_portal_upload dispatch failed', exc_info=True)
+
+        transaction.on_commit(_send)
 
 
 # ============================================

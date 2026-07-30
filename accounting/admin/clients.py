@@ -685,3 +685,27 @@ class ArchiveConfigurationAdmin(admin.ModelAdmin):
     list_display = ['obligation_type', 'filename_pattern', 'folder_pattern', 'create_subfolder']
     list_filter = ['create_subfolder', 'allow_multiple_files']
     search_fields = ['obligation_type__name', 'obligation_type__code']
+
+
+# ============================================
+# ΑΙΤΗΜΑΤΑ ΕΓΓΡΑΦΩΝ
+# ============================================
+from accounting.models import DocumentRequest, DocumentRequestItem  # noqa: E402
+
+
+class DocumentRequestItemInline(admin.TabularInline):
+    model = DocumentRequestItem
+    extra = 1
+    fields = ['label', 'category', 'is_received', 'received_document', 'received_at']
+    readonly_fields = ['received_at']
+
+
+@admin.register(DocumentRequest)
+class DocumentRequestAdmin(admin.ModelAdmin):
+    list_display = ['title', 'client', 'status', 'due_date',
+                    'reminder_count', 'created_by', 'created_at']
+    list_filter = ['status', 'created_at']
+    search_fields = ['title', 'client__eponimia', 'client__afm']
+    inlines = [DocumentRequestItemInline]
+    readonly_fields = ['last_reminder_sent_at', 'reminder_count',
+                       'completed_at', 'created_at']
