@@ -20,6 +20,28 @@ interface DashboardStats {
   upcoming_count: number;
   status_breakdown: Record<string, number>;
   top_obligation_types: Array<{ obligation_type__name: string; count: number }>;
+  type_breakdown: Array<{
+    obligation_type__name: string;
+    obligation_type__code: string;
+    total: number;
+    completed: number;
+    pending: number;
+    overdue: number;
+  }>;
+  team_workload: Array<{
+    user_id: number | null;
+    name: string;
+    open: number;
+    overdue: number;
+    completed_this_month: number;
+  }>;
+  monthly_trend: Array<{
+    year: number;
+    month: number;
+    label: string;
+    total: number;
+    completed: number;
+  }>;
   current_period: {
     month: number;
     year: number;

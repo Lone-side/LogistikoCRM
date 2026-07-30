@@ -8,13 +8,26 @@ import { Button, DeadlineListSkeleton } from '../components';
 import VoIPWidget from '../components/dashboard/VoIPWidget';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+  LineChart, Line,
 } from 'recharts';
 import {
-  OBLIGATION_STATUS_COLORS_HEX,
   OBLIGATION_STATUS_LABELS_PLURAL,
   GREEK_DAY_NAMES,
 } from '../constants';
+
+// Χρώματα καταστάσεων για τα charts — validated παλέτα (CVD-safe, 3:1 contrast):
+// το κλασικό κίτρινο/πράσινο/κόκκινο αποτυγχάνει σε πρωτανοπία/δευτερανοπία,
+// γι' αυτό τα «εκκρεμή» είναι μπλε
+const CHART_STATUS_COLORS: Record<string, string> = {
+  completed: '#0ca30c',
+  pending: '#3B82F6',
+  in_progress: '#2563EB',
+  overdue: '#d03b3b',
+  cancelled: '#6B7280',
+};
+// Σταθερή σειρά ώστε τα χρώματα να μην «κυκλώνουν» ανάλογα με τα δεδομένα
+const CHART_STATUS_ORDER = ['completed', 'in_progress', 'pending', 'overdue', 'cancelled'];
 
 export default function Dashboard() {
   const { data: stats, isLoading, isError, error, refetch } = useDashboardStats();
@@ -27,21 +40,30 @@ export default function Dashboard() {
     return value;
   };
 
-  // Prepare pie chart data from status_breakdown
+  // Prepare pie chart data from status_breakdown (σταθερή σειρά/χρώμα ανά κατάσταση)
   const pieChartData = stats?.status_breakdown
-    ? Object.entries(stats.status_breakdown)
-        .filter(([, count]) => count > 0)
-        .map(([status, count]) => ({
+    ? CHART_STATUS_ORDER.filter((status) => (stats.status_breakdown[status] || 0) > 0)
+        .map((status) => ({
           name: OBLIGATION_STATUS_LABELS_PLURAL[status] || status,
-          value: count,
-          color: OBLIGATION_STATUS_COLORS_HEX[status] || '#6B7280',
+          value: stats.status_breakdown[status],
+          color: CHART_STATUS_COLORS[status] || '#6B7280',
         }))
     : [];
 
-  // Prepare bar chart data from top_obligation_types
-  const barChartData = stats?.top_obligation_types?.slice(0, 6).map((item) => ({
+  // Κατανομή μήνα ανά τύπο με ανάλυση κατάστασης (stacked)
+  const typeChartData = stats?.type_breakdown?.map((item) => ({
     name: item.obligation_type__name || 'Άλλο',
-    count: item.count,
+    completed: item.completed,
+    pending: item.pending,
+    overdue: item.overdue,
+  })) || [];
+
+  // Φόρτος εργασίας ανά υπάλληλο
+  const workloadData = stats?.team_workload?.map((item) => ({
+    name: item.name,
+    open: item.open,
+    overdue: item.overdue,
+    completed: item.completed_this_month,
   })) || [];
 
   // Get current week dates for mini calendar
@@ -231,34 +253,115 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Top Obligation Types Bar Chart */}
+        {/* Κατανομή μήνα ανά τύπο (stacked by status) */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Τύποι Υποχρεώσεων</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Προθεσμίες Μήνα ανά Τύπο
+          </h3>
           {isLoading ? (
             <div className="h-64 flex items-end justify-around gap-2 animate-pulse">
               {[70, 50, 85, 40, 60, 45].map((h, i) => (
                 <div key={i} className="bg-gray-200 rounded-t flex-1" style={{ height: `${h}%` }} />
               ))}
             </div>
-          ) : barChartData.length > 0 ? (
+          ) : typeChartData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={barChartData}
+                  data={typeChartData}
                   layout="vertical"
+                  barSize={18}
                   margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                  <XAxis type="number" />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={75}
-                    tick={{ fontSize: 12 }}
-                  />
-                  <Tooltip formatter={(value: number) => [`${value}`, 'Υποχρεώσεις']} />
-                  <Bar dataKey="count" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" width={75} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="completed" name="Ολοκληρωμένες" stackId="s"
+                       fill={CHART_STATUS_COLORS.completed} stroke="#fff" strokeWidth={2} />
+                  <Bar dataKey="pending" name="Εκκρεμείς" stackId="s"
+                       fill={CHART_STATUS_COLORS.pending} stroke="#fff" strokeWidth={2} />
+                  <Bar dataKey="overdue" name="Εκπρόθεσμες" stackId="s"
+                       fill={CHART_STATUS_COLORS.overdue} stroke="#fff" strokeWidth={2}
+                       radius={[0, 4, 4, 0]} />
                 </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              Δεν υπάρχουν δεδομένα
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Φόρτος Εργασίας + Τάση 6 Μηνών */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Φόρτος ανά υπάλληλο */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Φόρτος ανά Υπάλληλο</h3>
+          {isLoading ? (
+            <div className="h-64 flex flex-col justify-around gap-2 animate-pulse">
+              {[80, 60, 45, 30].map((w, i) => (
+                <div key={i} className="bg-gray-200 rounded h-6" style={{ width: `${w}%` }} />
+              ))}
+            </div>
+          ) : workloadData.length > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={workloadData}
+                  layout="vertical"
+                  barSize={18}
+                  margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <YAxis type="category" dataKey="name" width={75} tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="completed" name="Ολοκληρωμένες (μήνας)" stackId="w"
+                       fill={CHART_STATUS_COLORS.completed} stroke="#fff" strokeWidth={2} />
+                  <Bar dataKey="open" name="Ανοιχτές" stackId="w"
+                       fill={CHART_STATUS_COLORS.pending} stroke="#fff" strokeWidth={2} />
+                  <Bar dataKey="overdue" name="Εκπρόθεσμες" stackId="w"
+                       fill={CHART_STATUS_COLORS.overdue} stroke="#fff" strokeWidth={2}
+                       radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              Δεν υπάρχουν ανατεθειμένες υποχρεώσεις
+            </div>
+          )}
+        </div>
+
+        {/* Τάση 6 μηνών */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Τάση 6 Μηνών</h3>
+          {isLoading ? (
+            <div className="h-64 bg-gray-100 rounded animate-pulse" />
+          ) : (stats?.monthly_trend?.length || 0) > 0 ? (
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={stats!.monthly_trend}
+                  margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} width={35} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="total" name="Σύνολο"
+                        stroke={CHART_STATUS_COLORS.pending} strokeWidth={2}
+                        dot={false} activeDot={{ r: 4 }} />
+                  <Line type="monotone" dataKey="completed" name="Ολοκληρωμένες"
+                        stroke={CHART_STATUS_COLORS.completed} strokeWidth={2}
+                        dot={false} activeDot={{ r: 4 }} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (

@@ -95,6 +95,80 @@ def dashboard_stats(request):
         count=Count('id')
     ).order_by('-count')[:5]
 
+    # === Κατανομή μήνα ανά τύπο υποχρέωσης, με ανάλυση κατάστασης ===
+    type_breakdown = list(
+        MonthlyObligation.objects.filter(year=current_year, month=current_month)
+        .values('obligation_type__name', 'obligation_type__code')
+        .annotate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status='completed')),
+            pending=Count('id', filter=Q(status__in=['pending', 'in_progress'])),
+            overdue=Count('id', filter=Q(status='overdue')),
+        )
+        .order_by('-total')[:8]
+    )
+
+    # === Φόρτος εργασίας ανά υπάλληλο ===
+    # Ανοιχτές (pending/overdue) ανά assigned_to + ολοκληρωμένες μήνα ανά completed_by
+    open_by_user = (
+        MonthlyObligation.objects.filter(status__in=['pending', 'in_progress', 'overdue'])
+        .values('assigned_to__id', 'assigned_to__username',
+                'assigned_to__first_name', 'assigned_to__last_name')
+        .annotate(
+            open_count=Count('id', filter=Q(status__in=['pending', 'in_progress'])),
+            overdue_count=Count('id', filter=Q(status='overdue')),
+        )
+    )
+    completed_by_user = {
+        row['completed_by__id']: row['done']
+        for row in MonthlyObligation.objects.filter(
+            status='completed',
+            completed_date__year=current_year,
+            completed_date__month=current_month,
+        ).values('completed_by__id').annotate(done=Count('id'))
+    }
+
+    def _user_label(row):
+        full = f"{row['assigned_to__first_name'] or ''} {row['assigned_to__last_name'] or ''}".strip()
+        return full or row['assigned_to__username'] or 'Χωρίς ανάθεση'
+
+    team_workload = sorted(
+        (
+            {
+                'user_id': row['assigned_to__id'],
+                'name': _user_label(row),
+                'open': row['open_count'],
+                'overdue': row['overdue_count'],
+                'completed_this_month': completed_by_user.get(row['assigned_to__id'], 0),
+            }
+            for row in open_by_user
+        ),
+        key=lambda r: r['open'] + r['overdue'],
+        reverse=True,
+    )[:10]
+
+    # === Τάση 6 μηνών (σωστή αριθμητική μηνών — όχι timedelta(30*i)) ===
+    greek_months_short = ['Ιαν', 'Φεβ', 'Μάρ', 'Απρ', 'Μάι', 'Ιούν',
+                          'Ιούλ', 'Αύγ', 'Σεπ', 'Οκτ', 'Νοέ', 'Δεκ']
+    monthly_trend = []
+    year, month = current_year, current_month
+    for _ in range(6):
+        counts = MonthlyObligation.objects.filter(year=year, month=month).aggregate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status='completed')),
+        )
+        monthly_trend.append({
+            'year': year,
+            'month': month,
+            'label': f"{greek_months_short[month - 1]} {str(year)[2:]}",
+            'total': counts['total'],
+            'completed': counts['completed'],
+        })
+        month -= 1
+        if month == 0:
+            month, year = 12, year - 1
+    monthly_trend.reverse()
+
     return Response({
         'total_clients': total_clients,
         'total_obligations_pending': total_obligations_pending,
@@ -104,6 +178,9 @@ def dashboard_stats(request):
         'upcoming_count': len(upcoming_deadlines),
         'status_breakdown': status_breakdown,
         'top_obligation_types': list(top_types),
+        'type_breakdown': type_breakdown,
+        'team_workload': team_workload,
+        'monthly_trend': monthly_trend,
         'current_period': {
             'month': current_month,
             'year': current_year
