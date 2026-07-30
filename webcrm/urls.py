@@ -41,9 +41,15 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
 
-# Media files (development only)
+# Media files: ελεύθερα σε development, προστατευμένα σε production
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+else:
+    from django.urls import re_path
+    from common.views.protected_media import serve_protected_media
+    urlpatterns += [
+        re_path(r'^media/(?P<path>.*)$', serve_protected_media, name='protected_media'),
+    ]
 
 # Rosetta (translations)
 if 'rosetta' in settings.INSTALLED_APPS:

@@ -99,6 +99,19 @@ ALLOWED_HOSTS = [
     '10.*.*.*',         # Εταιρικά δίκτυα 10.x.x.x
     '172.16.*.*',       # Private networks 172.16.x.x
 ]
+# Επιπλέον hosts παραγωγής από env (comma-separated, π.χ. crm.example.gr)
+ALLOWED_HOSTS += [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
+
+# CSRF trusted origins για παραγωγή πίσω από HTTPS proxy
+# (comma-separated, π.χ. https://crm.example.gr)
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
+
+# Πίσω από reverse proxy (nginx): εμπιστεύσου το X-Forwarded-Proto για HTTPS
+if os.environ.get('USE_X_FORWARDED_PROTO', 'False').lower() in ('true', '1', 'yes'):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
 
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
@@ -233,6 +246,15 @@ STATIC_ROOT = BASE_DIR / 'static'
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# ==================== PROTECTED MEDIA ====================
+# Σε production (DEBUG=False) τα /media/ σερβίρονται από authenticated view
+# με signed tokens (common/views/protected_media.py).
+# Διάρκεια ζωής των signed media tokens (?mt=...) σε δευτερόλεπτα
+MEDIA_TOKEN_MAX_AGE = int(os.environ.get('MEDIA_TOKEN_MAX_AGE', 4 * 3600))
+# Με nginx μπροστά: X-Accel-Redirect στο internal location (μηδενικό φορτίο Django)
+MEDIA_ACCEL_REDIRECT = os.environ.get('MEDIA_ACCEL_REDIRECT', 'False').lower() in ('true', '1', 'yes')
+MEDIA_ACCEL_PREFIX = os.environ.get('MEDIA_ACCEL_PREFIX', '/protected-media/')
 
 # Archive root for client files - can be configured to network path
 # Examples:
@@ -443,6 +465,11 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
 }
 
+# Πίσω από reverse proxy: πόσα proxies μεσολαβούν, ώστε το throttling ανά IP
+# να χρησιμοποιεί την πραγματική IP από το X-Forwarded-For (π.χ. NUM_PROXIES=1)
+if os.environ.get('NUM_PROXIES'):
+    REST_FRAMEWORK['NUM_PROXIES'] = int(os.environ['NUM_PROXIES'])
+
 # JWT Settings
 from datetime import timedelta
 SIMPLE_JWT = {
@@ -624,7 +651,7 @@ CELERY_BEAT_SCHEDULE = {
 # ==================== SITE CONFIGURATION ====================
 
 # Used for emails and external links
-SITE_URL = 'http://127.0.0.1:8000'  # Change for production!
+SITE_URL = os.environ.get('SITE_URL', 'http://127.0.0.1:8000')
 
 # ==================== IoT DEVICE CONFIGURATION ====================
 # SECURITY: IP addresses moved from hardcoded values to environment variables

@@ -34,7 +34,9 @@ services:
 
   # Django Web Application
   web:
-    build: .
+    build:
+      context: .
+      target: app
     container_name: logistiko_web
     restart: unless-stopped
     ports:
@@ -68,7 +70,9 @@ services:
 
   # Celery Worker
   celery:
-    build: .
+    build:
+      context: .
+      target: app
     container_name: logistiko_celery
     restart: unless-stopped
     environment:
@@ -93,7 +97,9 @@ services:
 
   # Celery Beat Scheduler
   celery-beat:
-    build: .
+    build:
+      context: .
+      target: app
     container_name: logistiko_beat
     restart: unless-stopped
     environment:

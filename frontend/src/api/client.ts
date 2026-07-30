@@ -1,6 +1,10 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/accounting';
+// Σε production build (πίσω από nginx) το API είναι same-origin στο /accounting.
+// Σε development ο Vite dev server (5173) μιλά απευθείας στο Django (8000).
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? 'http://localhost:8000/accounting' : '/accounting');
 
 // Create axios instance
 export const apiClient = axios.create({
