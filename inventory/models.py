@@ -359,6 +359,19 @@ class Invoice(models.Model):
     mydata_uid = models.CharField('UID myDATA', max_length=100, blank=True)
     mydata_sent = models.BooleanField('Απεσταλμένο στο myDATA', default=False)
     mydata_sent_at = models.DateTimeField('Ημ/νία Αποστολής myDATA', null=True, blank=True)
+    # Ακύρωση στο myDATA (δομημένα — όχι μόνο σημείωση)
+    mydata_cancelled = models.BooleanField('Ακυρωμένο στο myDATA', default=False)
+    mydata_cancellation_mark = models.BigIntegerField(
+        'MARK Ακύρωσης', null=True, blank=True
+    )
+    mydata_cancelled_at = models.DateTimeField(
+        'Ημ/νία Ακύρωσης myDATA', null=True, blank=True
+    )
+    # Για πιστωτικά 5.1: MARK του συσχετιζόμενου αρχικού παραστατικού
+    correlated_mark = models.BigIntegerField(
+        'MARK Συσχετιζόμενου', null=True, blank=True,
+        help_text='Υποχρεωτικό για πιστωτικά τύπου 5.1'
+    )
     
     # Metadata
     notes = models.TextField('Σημειώσεις', blank=True)
@@ -434,6 +447,11 @@ class InvoiceItem(models.Model):
     vat_category = models.IntegerField(
         'Κατηγορία ΦΠΑ',
         choices=VAT_CATEGORY_CHOICES
+    )
+    vat_exemption_category = models.IntegerField(
+        'Κατηγορία Εξαίρεσης ΦΠΑ',
+        null=True, blank=True,
+        help_text='Υποχρεωτικό όταν η κατηγορία ΦΠΑ είναι 7 (Χωρίς ΦΠΑ) — κωδικοί ΑΑΔΕ 1-31'
     )
     vat_amount = models.DecimalField(
         'Ποσό ΦΠΑ',

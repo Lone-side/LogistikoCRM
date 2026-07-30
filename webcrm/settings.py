@@ -513,11 +513,15 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
-# myDATA Configuration (DUMMY για testing)
-MYDATA_USER_ID = "ddiplas"
+# myDATA Configuration (credentials του γραφείου για αποστολή/λήψη παραστατικών)
+MYDATA_USER_ID = os.getenv('MYDATA_USER_ID', '')
 MYDATA_SUBSCRIPTION_KEY = os.getenv('MYDATA_SUBSCRIPTION_KEY', '')
-
-MYDATA_IS_SANDBOX = True  
+# ΑΦΜ εκδότη για την αποστολή τιμολογίων (το ΑΦΜ του γραφείου —
+# ΔΕΝ είναι το ίδιο με το MYDATA_USER_ID που είναι username της ΑΑΔΕ)
+MYDATA_ISSUER_VAT = os.getenv('MYDATA_ISSUER_VAT', '')
+# Fail-closed: sandbox (mydataapidev) εκτός αν οριστεί ΡΗΤΑ 'False'/'0'/'no'.
+# Κενό, λάθος ή τυπογραφικό στη μεταβλητή = sandbox, ΠΟΤΕ κατά λάθος production.
+MYDATA_IS_SANDBOX = os.getenv('MYDATA_IS_SANDBOX', 'true').strip().lower() not in ('false', '0', 'no')
 
 
 Q_CLUSTER = {

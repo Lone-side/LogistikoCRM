@@ -39,6 +39,7 @@ from .views import (
     MonthlyTrendView,
     VATPeriodResultViewSet,
     VATPeriodCalculatorView,
+    InvoiceViewSet,
 )
 
 app_name = 'mydata'
@@ -49,6 +50,7 @@ router.register(r'credentials', MyDataCredentialsViewSet, basename='credentials'
 router.register(r'records', VATRecordViewSet, basename='records')
 router.register(r'logs', VATSyncLogViewSet, basename='logs')
 router.register(r'periods', VATPeriodResultViewSet, basename='periods')
+router.register(r'invoices', InvoiceViewSet, basename='invoices')
 
 # URL patterns
 urlpatterns = [

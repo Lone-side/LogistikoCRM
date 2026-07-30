@@ -304,15 +304,16 @@ class MyDataClient:
                 response_text=error_text
             )
 
-    @retry_with_backoff()
-    def _make_request(
+    def _make_request_once(
         self,
         method: str,
         endpoint: str,
         **kwargs
     ) -> Union[str, Dict]:
         """
-        Helper για API requests με retry και rate limiting.
+        Ένα API request ΧΩΡΙΣ retry — για μη-idempotent POSTs (SendInvoices,
+        CancelInvoice) όπου ένα retry μετά από timeout θα μπορούσε να
+        υποβάλει το παραστατικό ΔΥΟ φορές στην ΑΑΔΕ.
 
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -360,6 +361,16 @@ class MyDataClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"myDATA API Network Error: {method} {endpoint} - {str(e)}")
             raise
+
+    @retry_with_backoff()
+    def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        **kwargs
+    ) -> Union[str, Dict]:
+        """Idempotent requests (GET) με retry/backoff πάνω στο _make_request_once."""
+        return self._make_request_once(method, endpoint, **kwargs)
 
     @staticmethod
     def _format_date(d: Union[date, datetime, None]) -> Optional[str]:
@@ -552,17 +563,7 @@ class MyDataClient:
             # Try finding all elements with local name VatInfo
             vat_info_elements = [elem for elem in root.iter() if elem.tag.endswith('VatInfo')]
 
-        # === DEBUG LOGGING: Δες τι επιστρέφει το API ===
-        print(f"[DEBUG] RequestVatInfo: Found {len(vat_info_elements)} VatInfo elements")
-        for i, vat_elem in enumerate(vat_info_elements[:5]):  # Πρώτα 5 για debugging
-            xml_str = ET.tostring(vat_elem, encoding='unicode')
-            print(f"[DEBUG] VatInfo[{i}] RAW XML:\n{xml_str}")
-            # Έλεγχος για RecType field
-            rec_type_check = self._get_xml_text_flexible(vat_elem, 'RecType', ns)
-            vat303_check = self._get_xml_text_flexible(vat_elem, 'Vat303', ns)
-            vat333_check = self._get_xml_text_flexible(vat_elem, 'Vat333', ns)
-            print(f"[DEBUG] VatInfo[{i}] Fields: RecType={rec_type_check}, Vat303={vat303_check}, Vat333={vat333_check}")
-        # === END DEBUG LOGGING ===
+        logger.debug(f"RequestVatInfo: Found {len(vat_info_elements)} VatInfo elements")
 
         # Parse continuation token (pagination) - try both with and without namespace
         continuation = root.find('aade:continuationToken', ns)
@@ -958,36 +959,37 @@ class MyDataClient:
     # SEND / CANCEL INVOICES
     # =========================================================================
 
-    def send_invoices(self, invoices_data: List[Dict]) -> Dict:
+    def send_invoices(self, invoices_xml: str) -> str:
         """
-        Αποστολή παραστατικών στο myDATA.
+        Αποστολή παραστατικών στο myDATA (επίσημο συμβόλαιο ΑΑΔΕ).
 
         Args:
-            invoices_data: List με invoice objects
+            invoices_xml: Το XML InvoicesDoc (βλ. mydata.invoice_xml.build_invoices_doc)
 
         Returns:
-            Dict με response (περιέχει MARK για κάθε παραστατικό)
+            Το raw XML ResponseDoc — parse με mydata.invoice_xml.parse_response_doc
         """
-        self.session.headers['Content-Type'] = 'application/json'
-        payload = {"invoices": invoices_data}
-        return self._make_request('POST', '/SendInvoices', json=payload)
+        # Per-request header — ΔΕΝ αλλάζουμε τα session headers (θα «μόλυνε»
+        # τα επόμενα GET requests του ίδιου client instance)
+        # ΧΩΡΙΣ auto-retry: αν το request πετύχει στην ΑΑΔΕ αλλά χαθεί η
+        # απάντηση (timeout), ένα retry θα υπέβαλλε το παραστατικό δεύτερη φορά
+        return self._make_request_once(
+            'POST', '/SendInvoices',
+            data=invoices_xml.encode('utf-8'),
+            headers={'Content-Type': 'application/xml'},
+        )
 
-    def cancel_invoice(self, mark: int) -> Dict:
+    def cancel_invoice(self, mark: int) -> str:
         """
-        Ακύρωση παραστατικού.
+        Ακύρωση παραστατικού (επίσημο συμβόλαιο: query param mark, κενό body).
 
         Args:
             mark: Το MARK του παραστατικού προς ακύρωση
 
         Returns:
-            Dict με response
+            Το raw XML ResponseDoc (περιέχει cancellationMark σε επιτυχία)
         """
-        self.session.headers['Content-Type'] = 'application/json'
-        payload = {
-            "cancellationMark": mark,
-            "cancellationDate": self._format_date(datetime.now())
-        }
-        return self._make_request('POST', '/CancelInvoice', json=payload)
+        return self._make_request_once('POST', '/CancelInvoice', params={'mark': mark})
 
     # =========================================================================
     # LEGACY PARSER (για backwards compatibility)

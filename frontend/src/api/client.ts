@@ -510,7 +510,63 @@ export const mydataApi = {
     const response = await apiClient.get('api/mydata/calculator/', { params });
     return response.data;
   },
+
+  // Τιμολόγια — αποστολή/ακύρωση στο myDATA
+  invoices: {
+    getAll: async (params?: {
+      direction?: 'outgoing' | 'incoming' | 'all';
+      mydata_sent?: boolean;
+      year?: number;
+      page?: number;
+    }): Promise<{ results: MyDataInvoice[]; count: number } | MyDataInvoice[]> => {
+      const response = await apiClient.get('api/mydata/invoices/', { params });
+      return response.data;
+    },
+
+    send: async (id: number): Promise<{ success: boolean; mark: number; uid: string; invoice: MyDataInvoice }> => {
+      const response = await apiClient.post(`api/mydata/invoices/${id}/send/`);
+      return response.data;
+    },
+
+    cancel: async (id: number): Promise<{ success: boolean; cancellation_mark: number; invoice: MyDataInvoice }> => {
+      const response = await apiClient.post(`api/mydata/invoices/${id}/cancel/`);
+      return response.data;
+    },
+  },
 };
+
+export interface MyDataInvoiceItem {
+  line_number: number;
+  description: string;
+  quantity: string;
+  net_value: string;
+  vat_category: number;
+  vat_amount: string;
+}
+
+export interface MyDataInvoice {
+  id: number;
+  series: string;
+  number: string;
+  invoice_type: string;
+  invoice_type_display: string;
+  issue_date: string;
+  counterpart_name: string;
+  counterpart_vat: string;
+  is_outgoing: boolean;
+  total_net: string;
+  total_vat: string;
+  total_gross: string;
+  mydata_mark: number | null;
+  mydata_uid: string;
+  mydata_sent: boolean;
+  mydata_sent_at: string | null;
+  mydata_cancelled: boolean;
+  mydata_cancellation_mark: number | null;
+  correlated_mark: number | null;
+  notes: string;
+  items: MyDataInvoiceItem[];
+}
 
 // Backup API
 export interface BackupItem {

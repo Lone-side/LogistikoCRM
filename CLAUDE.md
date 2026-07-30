@@ -51,10 +51,11 @@
 - [x] Protected media: signed URLs + X-Accel-Redirect (common/views/protected_media.py)
 
 ### Επόμενα (backlog με σειρά αξίας)
-1. **Portal πελάτη με upload** — ο πελάτης ανεβάζει έγγραφα μόνος του μέσω SharedLink (+ document requests με tracking)
-2. **Dashboard αναβάθμιση** — φόρτος ανά υπάλληλο, κατανομή προθεσμιών ανά τύπο, τάσεις
-3. **myDATA αποστολή τιμολογίων** — ο client υπάρχει (send_invoices), δεν εκτίθεται σε UI· tests για το mydata app
+1. ~~Portal πελάτη με upload~~ ✅ (SharedLink uploads, PR #162)
+2. ~~Dashboard αναβάθμιση~~ ✅ (PR #163)
+3. ~~myDATA αποστολή τιμολογίων~~ ✅ (επίσημο XML συμβόλαιο, tab «Τιμολόγια», admin action, tests/mydata)
 4. **Frontend tests** — μηδενική κάλυψη React σήμερα
+5. **myDATA sandbox δοκιμή** — end-to-end υποβολή σε mydataapidev με πραγματικά credentials (χειροκίνητο βήμα)
 
 ---
 

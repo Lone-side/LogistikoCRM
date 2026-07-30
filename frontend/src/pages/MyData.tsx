@@ -15,6 +15,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { Button, VATPeriodCalculator } from '../components';
+import MyDataInvoices from '../components/MyDataInvoices';
 import { mydataApi, clientsApi, type ClientVATDetailResponse } from '../api/client';
 
 // Types
@@ -47,7 +48,7 @@ function formatDateTime(dateStr: string | null): string {
 }
 
 // Tab types
-type TabType = 'overview' | 'calculator';
+type TabType = 'overview' | 'calculator' | 'invoices';
 
 export default function MyData() {
   // Tab state
@@ -214,6 +215,17 @@ export default function MyData() {
           >
             <Calculator size={18} />
             Υπολογισμός Περιόδου
+          </button>
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
+              activeTab === 'invoices'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <FileText size={18} />
+            Τιμολόγια
           </button>
         </nav>
       </div>
@@ -453,9 +465,12 @@ export default function MyData() {
             </>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'calculator' ? (
         /* Calculator Tab */
         <VATPeriodCalculator />
+      ) : (
+        /* Invoices Tab — αποστολή στο myDATA */
+        <MyDataInvoices />
       )}
     </div>
   );
