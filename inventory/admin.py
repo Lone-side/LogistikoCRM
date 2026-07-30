@@ -72,8 +72,35 @@ class InvoiceAdmin(admin.ModelAdmin):
         }),
     )
     
-    actions = ['fetch_from_mydata', 'register_to_stock']
-    
+    actions = ['fetch_from_mydata', 'register_to_stock', 'send_to_mydata']
+
+    @admin.action(description='📤 Αποστολή στο myDATA')
+    def send_to_mydata(self, request, queryset):
+        """Αποστολή επιλεγμένων εξερχόμενων τιμολογίων στο myDATA."""
+        from mydata.services import MyDataService
+
+        service = MyDataService()
+        sent = 0
+        for invoice in queryset:
+            try:
+                result = service.submit_invoice(invoice)
+                sent += 1
+                self.message_user(
+                    request,
+                    f'✅ {invoice.series}/{invoice.number} → MARK {result["mark"]}',
+                    messages.SUCCESS,
+                )
+            except Exception as e:
+                self.message_user(
+                    request,
+                    f'❌ {invoice.series}/{invoice.number}: {e}',
+                    messages.ERROR,
+                )
+        if sent:
+            self.message_user(
+                request, f'Εστάλησαν {sent} παραστατικά στο myDATA', messages.INFO
+            )
+
     def register_to_stock(self, request, queryset):
         """Custom action: Καταχώρηση τιμολογίων στην αποθήκη"""
         

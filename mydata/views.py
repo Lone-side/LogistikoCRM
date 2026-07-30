@@ -954,20 +954,19 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
             if not credentials.has_credentials:
                 return
 
+            from django.core.management import call_command
+            from io import StringIO
+
             for month in period.months_in_period:
-                from datetime import date
-                import calendar
-
-                # Calculate date range for month
-                first_day = date(period.year, month, 1)
-                last_day = date(period.year, month, calendar.monthrange(period.year, month)[1])
-
-                # Sync this month
-                from .services import sync_vat_records_for_client
-                sync_vat_records_for_client(
-                    client=period.client,
-                    date_from=first_day,
-                    date_to=last_day
+                # Sync μήνα μέσω του ίδιου command με το credentials.sync action
+                # (το παλιό `from .services import sync_vat_records_for_client`
+                # έκανε ImportError και το sync_first ήταν σιωπηλό no-op)
+                call_command(
+                    'mydata_sync_vat',
+                    '--client', period.client.afm,
+                    '--year', str(period.year),
+                    '--month', str(month),
+                    stdout=StringIO(),
                 )
 
                 # Track synced month
@@ -1148,4 +1147,88 @@ class VATPeriodCalculatorView(APIView):
             'last_calculated_at': period_result.last_calculated_at.isoformat() if period_result.last_calculated_at else None,
             'months_synced': period_result.months_synced,
             'created': created,
+        })
+
+
+# =============================================================================
+# INVOICE SUBMISSION (Αποστολή τιμολογίων στο myDATA)
+# =============================================================================
+
+class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Τιμολόγια (inventory.Invoice) με actions αποστολής/ακύρωσης στο myDATA.
+
+    list:   GET  /api/mydata/invoices/?direction=outgoing&mydata_sent=false
+    send:   POST /api/mydata/invoices/{id}/send/
+    cancel: POST /api/mydata/invoices/{id}/cancel/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        from inventory.models import Invoice
+        from .serializers import InvoiceListSerializer  # noqa: F401 (import check)
+
+        qs = Invoice.objects.select_related('counterpart').prefetch_related('items')
+
+        direction = self.request.query_params.get('direction', 'outgoing')
+        if direction == 'outgoing':
+            qs = qs.filter(is_outgoing=True)
+        elif direction == 'incoming':
+            qs = qs.filter(is_outgoing=False)
+
+        sent = self.request.query_params.get('mydata_sent')
+        if sent is not None:
+            qs = qs.filter(mydata_sent=sent.lower() in ('true', '1', 'yes'))
+
+        year = self.request.query_params.get('year')
+        if year and year.isdigit():
+            qs = qs.filter(issue_date__year=int(year))
+
+        return qs.order_by('-issue_date', '-number')
+
+    def get_serializer_class(self):
+        from .serializers import InvoiceListSerializer
+        return InvoiceListSerializer
+
+    @action(detail=True, methods=['post'])
+    def send(self, request, pk=None):
+        """Αποστολή του τιμολογίου στο myDATA."""
+        from .client import MyDataAPIError
+        from .services import MyDataService
+
+        invoice = self.get_object()
+        try:
+            result = MyDataService().submit_invoice(invoice)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except MyDataAPIError as e:
+            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        invoice.refresh_from_db()
+        return Response({
+            'success': True,
+            'mark': result['mark'],
+            'uid': result['uid'],
+            'invoice': self.get_serializer(invoice).data,
+        })
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        """Ακύρωση του απεσταλμένου τιμολογίου στο myDATA."""
+        from .client import MyDataAPIError
+        from .services import MyDataService
+
+        invoice = self.get_object()
+        try:
+            result = MyDataService().cancel_invoice(invoice)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except MyDataAPIError as e:
+            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        invoice.refresh_from_db()
+        return Response({
+            'success': True,
+            'cancellation_mark': result['cancellation_mark'],
+            'invoice': self.get_serializer(invoice).data,
         })

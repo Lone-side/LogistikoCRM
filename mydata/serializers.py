@@ -324,3 +324,37 @@ class VATPeriodResultDetailSerializer(VATPeriodResultSerializer):
         if obj.locked_by:
             return obj.locked_by.get_full_name() or obj.locked_by.username
         return None
+
+
+class InvoiceItemSerializer(serializers.Serializer):
+    """Γραμμή τιμολογίου (read-only, για την οθόνη αποστολής myDATA)."""
+    line_number = serializers.IntegerField()
+    description = serializers.CharField()
+    quantity = serializers.DecimalField(max_digits=12, decimal_places=3)
+    net_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    vat_category = serializers.IntegerField()
+    vat_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class InvoiceListSerializer(serializers.Serializer):
+    """inventory.Invoice για τη λίστα/αποστολή myDATA (read-only)."""
+    id = serializers.IntegerField(read_only=True)
+    series = serializers.CharField()
+    number = serializers.CharField()
+    invoice_type = serializers.CharField()
+    invoice_type_display = serializers.CharField(
+        source='get_invoice_type_display', read_only=True
+    )
+    issue_date = serializers.DateField()
+    counterpart_name = serializers.CharField()
+    counterpart_vat = serializers.CharField()
+    is_outgoing = serializers.BooleanField()
+    total_net = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_vat = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_gross = serializers.DecimalField(max_digits=12, decimal_places=2)
+    mydata_mark = serializers.IntegerField(allow_null=True)
+    mydata_uid = serializers.CharField(allow_blank=True)
+    mydata_sent = serializers.BooleanField()
+    mydata_sent_at = serializers.DateTimeField(allow_null=True)
+    notes = serializers.CharField(allow_blank=True)
+    items = InvoiceItemSerializer(many=True, read_only=True)

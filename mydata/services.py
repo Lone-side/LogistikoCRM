@@ -266,110 +266,184 @@ class MyDataService:
     
     def submit_invoice(self, invoice: Invoice) -> Dict:
         """
-        Αποστολή τιμολογίου στο myDATA
-        
-        Args:
-            invoice: To Invoice object
-            
+        Αποστολή τιμολογίου στο myDATA (επίσημο XML συμβόλαιο ΑΑΔΕ).
+
         Returns:
-            Dict με response (περιέχει MARK)
+            Dict: {'success': True, 'mark': ..., 'uid': ...}
+
+        Raises:
+            ValueError: για guard αποτυχίες (ήδη απεσταλμένο, χωρίς γραμμές,
+                        μη ρυθμισμένο MYDATA_ISSUER_VAT)
+            MyDataValidationError: όταν η ΑΑΔΕ απορρίψει το παραστατικό
         """
+        from .client import MyDataValidationError
+        from .invoice_xml import build_invoices_doc, parse_response_doc
+
+        # --- Guards πριν από οποιοδήποτε API call ---
+        if invoice.mydata_sent and invoice.mydata_mark:
+            raise ValueError(
+                f'Το παραστατικό {invoice} έχει ήδη σταλεί στο myDATA '
+                f'(MARK: {invoice.mydata_mark})'
+            )
+        if not invoice.is_outgoing:
+            raise ValueError('Μόνο εξερχόμενα παραστατικά αποστέλλονται στο myDATA')
+        issuer_vat = getattr(settings, 'MYDATA_ISSUER_VAT', '')
+        if not issuer_vat:
+            raise ValueError(
+                'Δεν έχει ρυθμιστεί το ΑΦΜ εκδότη (MYDATA_ISSUER_VAT στο .env)'
+            )
+        items = list(invoice.items.all())
+        if not items:
+            raise ValueError('Το παραστατικό δεν έχει γραμμές')
+
         log = MyDataSyncLog.objects.create(
             sync_type='PUSH_INVOICE',
             status='PENDING'
         )
-        
+
         try:
-            # Convert invoice to myDATA format
-            invoice_data = self._invoice_to_mydata_format(invoice)
-            
-            # Submit
-            response = self.client.send_invoices([invoice_data])
-            
-            # Parse response
-            if 'response' in response and len(response['response']) > 0:
-                result = response['response'][0]
-                
-                if result.get('statusCode') == 'Success':
-                    # Update invoice
-                    invoice.mydata_mark = result.get('mark')
-                    invoice.mydata_uid = result.get('uid')
-                    invoice.mydata_sent = True
-                    invoice.mydata_sent_at = timezone.now()
-                    invoice.save()
-                    
-                    log.status = 'SUCCESS'
-                    log.records_processed = 1
-                    log.records_created = 1
-                    log.details = result
-                else:
-                    error_msg = result.get('errors', 'Unknown error')
-                    log.status = 'ERROR'
-                    log.error_message = str(error_msg)
-                    raise Exception(error_msg)
-            
-            log.completed_at = timezone.now()
-            log.save()
-            
-            return response
-            
-        except Exception as e:
+            xml_doc = build_invoices_doc([self._invoice_to_mydata_format(invoice, issuer_vat)])
+            raw_response = self.client.send_invoices(xml_doc)
+            result = parse_response_doc(raw_response)[0]
+
+            if result['status_code'] == 'Success':
+                invoice.mydata_mark = result['invoice_mark']
+                invoice.mydata_uid = result['invoice_uid'] or ''
+                invoice.mydata_sent = True
+                invoice.mydata_sent_at = timezone.now()
+                invoice.save(update_fields=[
+                    'mydata_mark', 'mydata_uid', 'mydata_sent', 'mydata_sent_at',
+                    'updated_at',
+                ])
+
+                log.status = 'SUCCESS'
+                log.records_processed = 1
+                log.records_created = 1
+                log.details = result
+                log.completed_at = timezone.now()
+                log.save()
+
+                logger.info(
+                    f'myDATA: Εστάλη {invoice.series}/{invoice.number} '
+                    f'- MARK {result["invoice_mark"]}'
+                )
+                return {
+                    'success': True,
+                    'mark': result['invoice_mark'],
+                    'uid': result['invoice_uid'],
+                }
+
+            # ΑΑΔΕ επέστρεψε ValidationError/XMLSyntaxError κλπ
+            error_messages = '; '.join(
+                f"[{e['code']}] {e['message']}" for e in result['errors']
+            ) or f"statusCode: {result['status_code']}"
             log.status = 'ERROR'
+            log.error_message = error_messages
+            log.details = result
             log.completed_at = timezone.now()
-            log.error_message = str(e)
             log.save()
+            raise MyDataValidationError(
+                f'Το myDATA απέρριψε το παραστατικό: {error_messages}'
+            )
+
+        except Exception as e:
+            if log.status == 'PENDING':
+                log.status = 'ERROR'
+                log.error_message = str(e)
+                log.completed_at = timezone.now()
+                log.save()
             raise
-    
-    def _invoice_to_mydata_format(self, invoice: Invoice) -> Dict:
+
+    def cancel_invoice(self, invoice: Invoice) -> Dict:
         """
-        Μετατροπή Invoice σε myDATA format
+        Ακύρωση απεσταλμένου παραστατικού στο myDATA.
+
+        Returns:
+            Dict: {'success': True, 'cancellation_mark': ...}
         """
-        # Company info (από settings)
-        my_vat = settings.MYDATA_USER_ID
-        
-        invoice_data = {
-            "issuer": {
-                "vatNumber": my_vat,
-                "country": "GR",
-                "branch": 0
-            },
-            "counterpart": {
-                "vatNumber": invoice.counterpart_vat,
-                "country": "GR",
-                "branch": 0
-            },
-            "invoiceHeader": {
-                "series": invoice.series,
-                "aa": invoice.number,
-                "issueDate": invoice.issue_date.strftime('%Y-%m-%d'),
-                "invoiceType": invoice.invoice_type,
-                "currency": "EUR"
-            },
-            "invoiceDetails": [],
-            "invoiceSummary": {
-                "totalNetValue": float(invoice.total_net),
-                "totalVatAmount": float(invoice.total_vat),
-                "totalWithheldAmount": 0.00,
-                "totalFeesAmount": 0.00,
-                "totalStampDutyAmount": 0.00,
-                "totalOtherTaxesAmount": 0.00,
-                "totalDeductionsAmount": 0.00,
-                "totalGrossValue": float(invoice.total_gross)
-            }
+        from .client import MyDataValidationError
+        from .invoice_xml import parse_response_doc
+
+        if not invoice.mydata_sent or not invoice.mydata_mark:
+            raise ValueError('Το παραστατικό δεν έχει σταλεί στο myDATA')
+
+        log = MyDataSyncLog.objects.create(
+            sync_type='CANCEL_INVOICE',
+            status='PENDING'
+        )
+
+        try:
+            raw_response = self.client.cancel_invoice(invoice.mydata_mark)
+            result = parse_response_doc(raw_response)[0]
+
+            if result['status_code'] == 'Success':
+                cancellation_mark = result['cancellation_mark']
+                stamp = timezone.now().strftime('%d/%m/%Y %H:%M')
+                note = (
+                    f'Ακυρώθηκε στο myDATA {stamp} '
+                    f'(cancellationMark: {cancellation_mark})'
+                )
+                invoice.notes = f'{invoice.notes}\n{note}'.strip()
+                invoice.save(update_fields=['notes', 'updated_at'])
+
+                log.status = 'SUCCESS'
+                log.records_processed = 1
+                log.details = result
+                log.completed_at = timezone.now()
+                log.save()
+
+                logger.info(
+                    f'myDATA: Ακυρώθηκε {invoice.series}/{invoice.number} '
+                    f'- cancellationMark {cancellation_mark}'
+                )
+                return {'success': True, 'cancellation_mark': cancellation_mark}
+
+            error_messages = '; '.join(
+                f"[{e['code']}] {e['message']}" for e in result['errors']
+            ) or f"statusCode: {result['status_code']}"
+            log.status = 'ERROR'
+            log.error_message = error_messages
+            log.details = result
+            log.completed_at = timezone.now()
+            log.save()
+            raise MyDataValidationError(
+                f'Το myDATA απέρριψε την ακύρωση: {error_messages}'
+            )
+
+        except Exception as e:
+            if log.status == 'PENDING':
+                log.status = 'ERROR'
+                log.error_message = str(e)
+                log.completed_at = timezone.now()
+                log.save()
+            raise
+
+    def _invoice_to_mydata_format(self, invoice: Invoice, issuer_vat: str) -> Dict:
+        """
+        Μετατροπή Invoice στο dict format του invoice_xml.build_invoices_doc.
+        """
+        return {
+            'issuer_vat': issuer_vat,
+            'counterpart_vat': invoice.counterpart_vat,
+            'series': invoice.series,
+            'aa': invoice.number,
+            'issue_date': invoice.issue_date,
+            'invoice_type': invoice.invoice_type,
+            'currency': 'EUR',
+            'lines': [
+                {
+                    'line_number': item.line_number,
+                    'net_value': item.net_value,
+                    'vat_category': item.vat_category,
+                    'vat_amount': item.vat_amount,
+                }
+                for item in invoice.items.all()
+            ],
+            'total_net': invoice.total_net,
+            'total_vat': invoice.total_vat,
+            'total_gross': invoice.total_gross,
         }
-        
-        # Add items
-        for item in invoice.items.all():
-            invoice_data["invoiceDetails"].append({
-                "lineNumber": item.line_number,
-                "netValue": float(item.net_value),
-                "vatCategory": item.vat_category,
-                "vatAmount": float(item.vat_amount),
-                "itemDescr": item.description[:300]  # Max 300 chars
-            })
-        
-        return invoice_data
-    
+
     # =====================================================
     # HELPER METHODS
     # =====================================================
