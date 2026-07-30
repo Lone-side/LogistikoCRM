@@ -650,6 +650,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'accounting.tasks.backup_database_task',
         'schedule': crontab(hour=2, minute=0),  # Καθημερινά 02:00
     },
+    'cleanup-stale-sync-logs': {
+        'task': 'accounting.tasks.cleanup_stale_sync_logs',
+        'schedule': crontab(minute='*/30'),  # Κολλημένα PENDING sync logs
+    },
 }
 
 # ==================== SITE CONFIGURATION ====================

@@ -115,14 +115,8 @@ class DocumentFilter(FilterSet):
 
     def filter_search(self, queryset, name, value):
         if value:
-            return queryset.filter(
-                Q(filename__icontains=value) |
-                Q(description__icontains=value) |
-                Q(original_filename__icontains=value) |
-                Q(extracted_text__icontains=value) |
-                Q(client__eponimia__icontains=value) |
-                Q(client__afm__icontains=value)
-            )
+            from .services.search import apply_document_search
+            return apply_document_search(queryset, value, include_client_fields=True)
         return queryset
 
     def filter_tag(self, queryset, name, value):
