@@ -276,3 +276,23 @@ class CancelInvoiceTest(TestCase):
 
         log = MyDataSyncLog.objects.get(sync_type='CANCEL_INVOICE')
         self.assertEqual(log.status, 'ERROR')
+
+
+@override_settings(
+    MYDATA_USER_ID='office_user',
+    MYDATA_SUBSCRIPTION_KEY='office_key',
+    MYDATA_IS_SANDBOX=True,
+)
+class ProcessInvoiceMarkGuardTest(TestCase):
+    """Τιμολόγιο από myDATA χωρίς MARK δεν πρέπει να αποθηκεύεται."""
+
+    def test_missing_mark_raises_and_creates_nothing(self):
+        service = MyDataService()
+        service.client = MagicMock()
+
+        for bad in ({}, {'mark': ''}, {'mark': None}):
+            with self.assertRaises(ValueError):
+                service._process_invoice(
+                    {**bad, 'series': 'Α', 'aa': '1'}, is_outgoing=False
+                )
+        self.assertEqual(Invoice.objects.count(), 0)

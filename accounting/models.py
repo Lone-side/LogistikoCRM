@@ -851,6 +851,7 @@ class ScheduledEmail(models.Model):
 
     STATUS_CHOICES = (
         ('pending', '⏳ Εκκρεμεί'),
+        ('sending', '📤 Αποστέλλεται'),
         ('sent', '✅ Στάλθηκε'),
         ('failed', '❌ Απέτυχε'),
         ('cancelled', '🚫 Ακυρώθηκε'),

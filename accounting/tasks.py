@@ -579,6 +579,15 @@ def process_scheduled_emails():
     total_recipients = 0
 
     for scheduled_email in pending_emails:
+        # Atomic claim (test-and-set στη βάση): αν τρέξουν δύο workers ή
+        # καθυστερήσει το beat, μόνο ένας στέλνει το κάθε email
+        claimed = ScheduledEmail.objects.filter(
+            pk=scheduled_email.pk, status='pending'
+        ).update(status='sending')
+        if not claimed:
+            logger.info(f"Scheduled email #{scheduled_email.id} already claimed, skipping")
+            continue
+
         try:
             # Get list of recipient emails (supports comma/newline separated)
             recipients = scheduled_email.get_recipients_list()

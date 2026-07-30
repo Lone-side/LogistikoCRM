@@ -548,9 +548,14 @@ class MyDataClient:
         try:
             root = ET.fromstring(response)
         except ET.ParseError as e:
+            # Μη αναγνώσιμη απάντηση ≠ κενή περίοδος — αν επιστρέφαμε [] εδώ,
+            # το sync θα καταγραφόταν ως επιτυχία με 0 εγγραφές
             logger.error(f"XML Parse Error in VatInfo response: {e}")
             logger.debug(f"Response preview: {response[:500]}")
-            return records, pagination
+            raise MyDataAPIError(
+                message=f'Μη αναγνώσιμη XML απάντηση από RequestVatInfo: {e}',
+                status_code=None,
+            ) from e
 
         # Define namespace (ΑΑΔΕ uses this)
         ns = {'aade': 'http://www.aade.gr/myDATA/invoice/v1.0'}
