@@ -58,9 +58,12 @@ export default function Obligations() {
   const [page, setPage] = useState(1);
   const pageSize = 100;
 
+  // Αρχικό φίλτρο κατάστασης από το URL (π.χ. /obligations?status=overdue από τα tiles του dashboard)
+  const initialStatus = new URLSearchParams(window.location.search).get('status');
+
   // Filters state
   const [filters, setFilters] = useState<Filters>({
-    status: 'all',
+    status: initialStatus && initialStatus in STATUS_LABELS ? initialStatus : 'all',
     client: null,
     type: '',
     month: null,

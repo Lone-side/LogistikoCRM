@@ -94,7 +94,7 @@ export default function VoIPWidget() {
   const isLoading = callsLoading || ticketsLoading;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
