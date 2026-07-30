@@ -216,6 +216,7 @@ export default function ClientTicketsTab({
                               onClick={() => setEditingTicketId(null)}
                               className="p-1 text-green-600 hover:bg-green-50 rounded"
                               title="Κλείσιμο"
+                              aria-label="Κλείσιμο"
                             >
                               <CheckCircle className="w-4 h-4" />
                             </button>
@@ -224,6 +225,7 @@ export default function ClientTicketsTab({
                               onClick={() => setEditingTicketId(ticket.id)}
                               className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                               title="Επεξεργασία"
+                              aria-label="Επεξεργασία"
                             >
                               <Pencil className="w-4 h-4" />
                             </button>
@@ -232,6 +234,7 @@ export default function ClientTicketsTab({
                             onClick={() => setConfirmDeleteId(ticket.id)}
                             className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                             title="Διαγραφή"
+                            aria-label="Διαγραφή"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
