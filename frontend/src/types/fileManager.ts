@@ -329,6 +329,73 @@ export interface PortalUploadResult {
 }
 
 // Public shared content
+export interface PortalRequestItem {
+  id: number;
+  label: string;
+  category: string;
+  is_received: boolean;
+}
+
+export interface PortalDocumentRequest {
+  id: number;
+  title: string;
+  notes: string;
+  due_date: string | null;
+  items: PortalRequestItem[];
+}
+
+export interface DocumentRequestItem {
+  id: number;
+  label: string;
+  category: string;
+  is_received: boolean;
+  received_at: string | null;
+  received_document: number | null;
+}
+
+export interface DocumentRequestLink {
+  id: number;
+  token: string;
+  public_url: string;
+  expires_at: string | null;
+  is_valid: boolean;
+  can_upload: boolean;
+  upload_count: number;
+  max_uploads: number | null;
+}
+
+export interface DocumentRequest {
+  id: number;
+  client: number;
+  client_name: string;
+  client_afm: string;
+  shared_link: DocumentRequestLink | null;
+  title: string;
+  notes: string;
+  status: 'open' | 'completed' | 'cancelled';
+  due_date: string | null;
+  items: DocumentRequestItem[];
+  received_count: number;
+  total_count: number;
+  last_reminder_sent_at: string | null;
+  reminder_count: number;
+  max_reminders: number;
+  completed_at: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface CreateDocumentRequestPayload {
+  client_id: number;
+  title: string;
+  notes?: string;
+  due_date?: string | null;
+  items: Array<{ label: string; category?: string }>;
+  expires_in_days?: number;
+  password?: string;
+  send_email?: boolean;
+}
+
 export interface PublicSharedContent {
   type: 'document' | 'folder';
   name: string;
@@ -339,6 +406,8 @@ export interface PublicSharedContent {
   allow_upload?: boolean;
   /** Οδηγίες/λίστα ζητούμενων εγγράφων προς τον πελάτη */
   upload_note?: string;
+  /** Ανοιχτό αίτημα εγγράφων (checklist) του link */
+  document_request?: PortalDocumentRequest | null;
   document?: {
     id: number;
     filename: string;

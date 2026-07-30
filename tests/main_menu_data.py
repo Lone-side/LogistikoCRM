@@ -889,6 +889,15 @@ ADMIN_DATA = [
                 'add_url': '/en/456-admin/accounting/clientdocument/add/',
             },
             {
+                'model': django_apps.get_model('accounting', 'DocumentRequest'),
+                'name': 'Αιτήματα Εγγράφων',
+                'object_name': 'DocumentRequest',
+                'perms': {'add': True, 'change': True, 'delete': True, 'view': True},
+                'admin_url': '/en/456-admin/accounting/documentrequest/',
+                'view_only': False,
+                'add_url': '/en/456-admin/accounting/documentrequest/add/',
+            },
+            {
                 'model': django_apps.get_model('accounting', 'EmailLog'),
                 'name': 'Ιστορικό Email',
                 'object_name': 'EmailLog',

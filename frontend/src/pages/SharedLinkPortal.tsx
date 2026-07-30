@@ -3,11 +3,13 @@
  * Public page for accessing shared files/folders (no authentication required)
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   File, FileText, FileSpreadsheet, Image, Download, Lock, Mail,
-  AlertCircle, Loader2, FolderOpen, Upload, CheckCircle, X, AlertTriangle
+  AlertCircle, Loader2, FolderOpen, Upload, CheckCircle, X, AlertTriangle,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import apiClient from '../api/client';
@@ -29,25 +31,34 @@ function FileIcon({ fileType, size = 24 }: { fileType: string; size?: number }) 
 }
 
 // Περιοχή upload για τον πελάτη (εμφανίζεται όταν το link επιτρέπει upload)
-function PortalUploadSection({
+export function PortalUploadSection({
   token,
   content,
   email,
+  onUploaded,
 }: {
   token: string;
   content: PublicSharedContent;
   email: string;
+  onUploaded?: () => void;
 }) {
+  const request = content.document_request || null;
+  const pendingItems = request ? request.items.filter((i) => !i.is_received) : [];
   const [files, setFiles] = useState<File[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<number | ''>(
+    pendingItems.length > 0 ? pendingItems[0].id : ''
+  );
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<PortalUploadResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const maxFiles = selectedItemId !== '' ? 1 : 10;
+
   const addFiles = (list: FileList | null) => {
     if (!list) return;
-    setFiles((prev) => [...prev, ...Array.from(list)].slice(0, 10));
+    setFiles((prev) => [...prev, ...Array.from(list)].slice(0, maxFiles));
     setResult(null);
     setUploadError(null);
   };
@@ -61,6 +72,7 @@ function PortalUploadSection({
       files.forEach((f) => formData.append('files', f));
       if (content.access_token) formData.append('auth', content.access_token);
       if (email) formData.append('email', email);
+      if (selectedItemId !== '') formData.append('request_item_id', String(selectedItemId));
       const response = await apiClient.post<PortalUploadResult>(
         `/accounting/share/${token}/upload/`,
         formData,
@@ -68,6 +80,7 @@ function PortalUploadSection({
       );
       setResult(response.data);
       setFiles([]);
+      if (onUploaded) onUploaded();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: PortalUploadResult & { error?: string } } };
       if (axiosErr.response?.data?.errors?.length) {
@@ -87,6 +100,61 @@ function PortalUploadSection({
         <Upload className="w-5 h-5 text-blue-500" />
         <h2 className="font-bold text-gray-900">Αποστολή Εγγράφων στο Λογιστήριο</h2>
       </div>
+
+      {request && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+          <p className="font-semibold text-orange-900 mb-2">
+            Ζητούμενα έγγραφα — {request.title}
+          </p>
+          {request.notes && (
+            <p className="text-sm text-orange-800 mb-2 whitespace-pre-line">{request.notes}</p>
+          )}
+          <ul className="space-y-1.5">
+            {request.items.map((item) => (
+              <li key={item.id} className="flex items-center gap-2 text-sm">
+                {item.is_received ? (
+                  <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                ) : (
+                  <Circle className="w-4 h-4 text-orange-400 flex-shrink-0" />
+                )}
+                <span className={item.is_received ? 'text-gray-400 line-through' : 'text-gray-800'}>
+                  {item.label}
+                </span>
+                {item.is_received && (
+                  <span className="text-xs text-green-600">Ελήφθη</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {request.due_date && (
+            <p className="text-xs text-orange-700 mt-2">
+              Προθεσμία: {new Date(request.due_date).toLocaleDateString('el-GR')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {pendingItems.length > 0 && (
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Σε ποιο έγγραφο αντιστοιχεί το αρχείο;
+          </label>
+          <select
+            value={selectedItemId}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedItemId(value === '' ? '' : Number(value));
+              setFiles([]);
+            }}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            {pendingItems.map((item) => (
+              <option key={item.id} value={item.id}>{item.label}</option>
+            ))}
+            <option value="">Άλλο / χωρίς αντιστοίχιση</option>
+          </select>
+        </div>
+      )}
 
       {content.upload_note && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800 whitespace-pre-line">
@@ -124,7 +192,7 @@ function PortalUploadSection({
         >
           επιλέξτε αρχεία
         </button>
-        <p className="text-xs text-gray-400 mt-2">Έως 10 αρχεία ανά αποστολή</p>
+        <p className="text-xs text-gray-400 mt-2">{selectedItemId !== '' ? 'Ένα αρχείο για το επιλεγμένο έγγραφο' : 'Έως 10 αρχεία ανά αποστολή'}</p>
       </div>
 
       {/* Selected files */}
@@ -217,40 +285,40 @@ export default function SharedLinkPortal() {
 
 
   // Initial load
+  const fetchSharedContent = useCallback(async () => {
+    try {
+      const response = await apiClient.get(`/accounting/share/${token}/`);
+      const data = response.data;
+
+      if (data.requires_auth) {
+        setRequiresAuth(true);
+        setNeedsPassword(data.needs_password);
+        setNeedsEmail(data.needs_email);
+        setLinkName(data.name);
+        setAccessLevel(data.access_level);
+      } else {
+        setContent(data);
+      }
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
+      if (axiosErr.response?.status === 410) {
+        setError(axiosErr.response?.data?.error || 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος');
+      } else {
+        setError('Σφάλμα κατά τη φόρτωση');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (!token) {
       setError('Μη έγκυρος σύνδεσμος');
       setLoading(false);
       return;
     }
-
-    const fetchSharedContent = async () => {
-      try {
-        const response = await apiClient.get(`/accounting/share/${token}/`);
-        const data = response.data;
-
-        if (data.requires_auth) {
-          setRequiresAuth(true);
-          setNeedsPassword(data.needs_password);
-          setNeedsEmail(data.needs_email);
-          setLinkName(data.name);
-          setAccessLevel(data.access_level);
-        } else {
-          setContent(data);
-        }
-      } catch (err: any) {
-        if (err.response?.status === 410) {
-          setError(err.response?.data?.error || 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος');
-        } else {
-          setError('Σφάλμα κατά τη φόρτωση');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchSharedContent();
-  }, [token]);
+  }, [token, fetchSharedContent]);
 
   // Handle authentication
   const handleAuthenticate = async () => {
@@ -445,7 +513,7 @@ export default function SharedLinkPortal() {
         {/* Preview */}
         <div className="max-w-6xl mx-auto p-4">
           {content.allow_upload && token && (
-            <PortalUploadSection token={token} content={content} email={email} />
+            <PortalUploadSection token={token} content={content} email={email} onUploaded={fetchSharedContent} />
           )}
           {isPdf && doc.preview_url ? (
             <div className="bg-white rounded-lg shadow-lg overflow-hidden">
@@ -508,7 +576,7 @@ export default function SharedLinkPortal() {
         {/* Documents list */}
         <div className="max-w-6xl mx-auto p-4">
           {content.allow_upload && token && (
-            <PortalUploadSection token={token} content={content} email={email} />
+            <PortalUploadSection token={token} content={content} email={email} onUploaded={fetchSharedContent} />
           )}
           <div className="bg-white rounded-lg shadow-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">

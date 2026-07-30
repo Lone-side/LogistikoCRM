@@ -327,6 +327,8 @@ export default function ClientDetails() {
           {/* DOCUMENTS TAB */}
           {activeTab === 'documents' && (
             <ClientDocumentsTab
+              clientId={client?.id}
+              clientName={client?.eponimia || ''}
               data={documentsData}
               isLoading={docsLoading}
               filters={docFilters}

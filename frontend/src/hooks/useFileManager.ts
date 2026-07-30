@@ -19,6 +19,8 @@ import type {
   BrowseResponse,
   UploadResponse,
   AccessLogEntry,
+  DocumentRequest,
+  CreateDocumentRequestPayload,
 } from '../types/fileManager';
 import type { PaginatedResponse } from '../types';
 
@@ -707,4 +709,91 @@ export function getFileColor(fileType: string): string {
     rar: '#F59E0B',
   };
   return colorMap[type] || '#6B7280';
+}
+
+
+// ============================================
+// DOCUMENT REQUESTS (Αιτήματα εγγράφων)
+// ============================================
+
+const DOCUMENT_REQUESTS_KEY = 'document-requests';
+
+export function useDocumentRequests(clientId?: number, status?: string) {
+  return useQuery({
+    queryKey: [DOCUMENT_REQUESTS_KEY, clientId, status],
+    queryFn: async () => {
+      const params: Record<string, string | number> = {};
+      if (clientId) params.client = clientId;
+      if (status) params.status = status;
+      const response = await apiClient.get<
+        PaginatedResponse<DocumentRequest> | DocumentRequest[]
+      >('api/v1/document-requests/', { params });
+      const data = response.data;
+      return Array.isArray(data) ? data : data.results;
+    },
+    staleTime: 15000,
+  });
+}
+
+export function useCreateDocumentRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateDocumentRequestPayload) => {
+      const response = await apiClient.post<DocumentRequest & { email_sent: boolean }>(
+        'api/v1/document-requests/', payload
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DOCUMENT_REQUESTS_KEY] });
+    },
+  });
+}
+
+export function useSendRequestReminder() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (requestId: number) => {
+      const response = await apiClient.post(
+        `api/v1/document-requests/${requestId}/send-reminder/`
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DOCUMENT_REQUESTS_KEY] });
+    },
+  });
+}
+
+export function useMarkRequestItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ requestId, itemId, isReceived = true }: {
+      requestId: number; itemId: number; isReceived?: boolean;
+    }) => {
+      const response = await apiClient.post<DocumentRequest>(
+        `api/v1/document-requests/${requestId}/mark-item/`,
+        { item_id: itemId, is_received: isReceived }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DOCUMENT_REQUESTS_KEY] });
+    },
+  });
+}
+
+export function useCancelDocumentRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (requestId: number) => {
+      const response = await apiClient.patch<DocumentRequest>(
+        `api/v1/document-requests/${requestId}/`, { status: 'cancelled' }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [DOCUMENT_REQUESTS_KEY] });
+    },
+  });
 }
