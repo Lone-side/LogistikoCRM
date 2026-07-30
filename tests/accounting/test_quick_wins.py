@@ -45,6 +45,13 @@ class ObligationReminderTaskTest(TestCase):
 
     def test_uses_greek_seeded_template(self):
         """Το seeded «Υπενθύμιση Προθεσμίας» πρέπει να βρίσκεται και να στέλνεται HTML."""
+        # Με --keepdb στο CI, προηγούμενα TransactionTestCase κάνουν truncate
+        # τα migration seeds — ξανατρέχουμε το seeding του 0025 αν λείπει
+        if not EmailTemplate.objects.filter(name='Υπενθύμιση Προθεσμίας').exists():
+            from importlib import import_module
+            from django.apps import apps as global_apps
+            seed = import_module('accounting.migrations.0025_default_email_templates')
+            seed.create_default_templates(global_apps, None)
         self.assertTrue(
             EmailTemplate.objects.filter(name='Υπενθύμιση Προθεσμίας').exists(),
             'Λείπει το seeded template — έλεγξε το migration 0025',
