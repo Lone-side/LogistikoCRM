@@ -186,9 +186,23 @@ class FileInline(GenericStackedInline):
 
     @staticmethod
     def clarify_permission(request, obj):
+        # Το Django 5.1+ περνά εδώ το αντικείμενο με τα ΝΕΑ (μη αποθηκευμένα)
+        # δεδομένα της φόρμας. Το κλείδωμα «REVIEWED» πρέπει να κρίνεται από την
+        # αποθηκευμένη κατάσταση, αλλιώς αρχείο που ανεβαίνει μαζί με το review
+        # απορρίπτεται σιωπηλά.
+        saved_stage = getattr(obj, 'stage', None)
+        if hasattr(obj, 'REVIEWED') and obj.pk:
+            db_obj = type(obj)._base_manager.filter(pk=obj.pk).only('stage').first()
+            if db_obj is not None:
+                saved_stage = db_obj.stage
+        # Ο παραλήπτης ενός memo (πεδίο «to») πρέπει να μπορεί να επισυνάπτει
+        # αρχεία όσο το memo δεν έχει ολοκληρωθεί (π.χ. κατά το review).
+        if hasattr(obj, 'REVIEWED') and saved_stage != obj.REVIEWED \
+                and getattr(obj, 'to_id', None) == request.user.id:
+            return True
         if hasattr(obj, 'owner'):
             if obj.owner == request.user or not obj.owner:
-                if any((hasattr(obj, 'REVIEWED') and obj.stage == obj.REVIEWED,
+                if any((hasattr(obj, 'REVIEWED') and saved_stage == obj.REVIEWED,
                         hasattr(obj, 'incoming') and obj.incoming,
                         hasattr(obj, 'uid') and obj.uid,
                         not obj.owner and request.user.is_chief)):
