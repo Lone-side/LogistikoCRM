@@ -20,6 +20,7 @@ from django.template.defaultfilters import linebreaks
 from django.http import HttpResponseRedirect
 from django.http import QueryDict
 from django.http import HttpResponse
+from django.utils.html import escape
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import gettext
@@ -254,7 +255,9 @@ class ChatMessageAdmin(admin.ModelAdmin):
     @staticmethod
     def message(obj):
         if obj.content:
-            text = linebreaks(obj.content)
+            # escape πριν το linebreaks: το linebreaks μόνο του ΔΕΝ κάνει
+            # autoescape και το content είναι κείμενο χρήστη
+            text = linebreaks(escape(obj.content))
             if getattr(obj, 'is_unread', None):
                 text = f'<span style="font-weight:bold;font-size:120%;">{text}</span>'
             if not obj.answer_to:

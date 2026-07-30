@@ -128,11 +128,22 @@ _DANGEROUS_MIME_TYPES = {
 }
 
 
+_MAGIC_MISSING_WARNED = False
+
+
 def _reject_dangerous_content(uploaded_file):
     """Best-effort έλεγχος πραγματικού περιεχομένου με python-magic (αν υπάρχει)."""
+    global _MAGIC_MISSING_WARNED
     try:
         import magic
     except ImportError:
+        if not _MAGIC_MISSING_WARNED:
+            _MAGIC_MISSING_WARNED = True
+            logger.warning(
+                'python-magic/libmagic δεν είναι εγκατεστημένο — ο έλεγχος '
+                'πραγματικού περιεχομένου των uploads ΔΕΝ εκτελείται. '
+                'Εγκατάσταση: pip install python-magic (+ libmagic1).'
+            )
         return
     try:
         uploaded_file.seek(0)

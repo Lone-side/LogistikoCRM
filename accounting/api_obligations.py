@@ -8,7 +8,7 @@ Description: REST API ViewSet for MonthlyObligation management
 from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import (
     DjangoFilterBackend, FilterSet, CharFilter,
@@ -238,6 +238,13 @@ class ObligationViewSet(viewsets.ModelViewSet):
     queryset = MonthlyObligation.objects.all()
     permission_classes = [IsAuthenticated]
     pagination_class = ObligationPagination
+
+    def get_permissions(self):
+        # Διαγραφή υποχρέωσης μόνο από admins — οι υπόλοιποι τη σημειώνουν
+        # ως «Ακυρώθηκε» αντί να σβήνουν ιστορικό
+        if self.action == 'destroy':
+            return [IsAuthenticated(), IsAdminUser()]
+        return super().get_permissions()
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ObligationFilter
     ordering_fields = ['deadline', 'client__eponimia', 'status', 'created_at']

@@ -6,7 +6,6 @@ from email import policy
 from email.message import Message
 from typing import Optional
 from django.core.handlers.wsgi import WSGIRequest
-from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from django.shortcuts import render
 from django.template.defaultfilters import linebreaks
@@ -93,7 +92,10 @@ def get_context(msg: Message):
         context['to'] = msg['To']
         context['cc'] = msg['CC']
         context['subject'] = ensure_decoding(msg['Subject'])
-        context['body'] = mark_safe(body)
+        # ΟΧΙ mark_safe: το body είναι HTML από τρίτους (εισερχόμενο email).
+        # Αποδίδεται σε sandboxed iframe στο template ώστε να μην εκτελείται
+        # script στη συνεδρία του χρήστη.
+        context['body'] = body
         context['attachments'] = attachments
     except Exception as e:
         err = e

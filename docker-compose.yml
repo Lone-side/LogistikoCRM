@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_DB: logistikocrm
       POSTGRES_USER: logistiko
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-logistiko_secure_2025}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -44,11 +44,11 @@ services:
     environment:
       - DJANGO_ENV=${DJANGO_ENV:-development}
       - DEBUG=${DEBUG:-True}
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
       - DB_ENGINE=django.db.backends.postgresql
       - DB_NAME=logistikocrm
       - DB_USER=logistiko
-      - DB_PASSWORD=${DB_PASSWORD:-logistiko_secure_2025}
+      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - DB_HOST=db
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
@@ -77,11 +77,11 @@ services:
     restart: unless-stopped
     environment:
       - DJANGO_ENV=${DJANGO_ENV:-development}
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
       - DB_ENGINE=django.db.backends.postgresql
       - DB_NAME=logistikocrm
       - DB_USER=logistiko
-      - DB_PASSWORD=${DB_PASSWORD:-logistiko_secure_2025}
+      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - DB_HOST=db
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0
@@ -104,11 +104,11 @@ services:
     restart: unless-stopped
     environment:
       - DJANGO_ENV=${DJANGO_ENV:-development}
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env}
       - DB_ENGINE=django.db.backends.postgresql
       - DB_NAME=logistikocrm
       - DB_USER=logistiko
-      - DB_PASSWORD=${DB_PASSWORD:-logistiko_secure_2025}
+      - DB_PASSWORD=${DB_PASSWORD:?Set DB_PASSWORD in .env}
       - DB_HOST=db
       - DB_PORT=5432
       - REDIS_URL=redis://redis:6379/0

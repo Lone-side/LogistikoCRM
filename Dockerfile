@@ -42,6 +42,11 @@ RUN mkdir -p logs media static backups
 # Collect static files (dummy env — δεν χρειάζεται βάση/secret για static)
 RUN SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput
 
+# Μη-root χρήστης: περιορίζει τη ζημιά σε περίπτωση RCE/container escape
+RUN useradd --create-home --shell /usr/sbin/nologin app \
+    && chown -R app:app /app
+USER app
+
 EXPOSE 8000
 
 CMD ["gunicorn", "webcrm.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]

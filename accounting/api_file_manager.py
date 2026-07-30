@@ -49,6 +49,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, NumberFilter, CharFilter, BooleanFilter
 from django.db.models import Q, Count, Sum
@@ -710,6 +711,15 @@ def shared_link_auth_ok(shared_link, request):
     return bool(password) and shared_link.check_password(password)
 
 
+class SharedLinkAuthThrottle(ScopedRateThrottle):
+    """Scoped throttle ΜΟΝΟ για POST (δοκιμές κωδικού) — το GET μένει στο anon rate."""
+
+    def allow_request(self, request, view):
+        if request.method != 'POST':
+            return True
+        return super().allow_request(request, view)
+
+
 class PublicSharedLinkView(APIView):
     """
     Public endpoint for accessing shared links
@@ -718,6 +728,10 @@ class PublicSharedLinkView(APIView):
     GET /share/{token}/download/ - Download file
     """
     permission_classes = [AllowAny]
+    throttle_scope = 'shared_link_auth'
+
+    def get_throttles(self):
+        return [SharedLinkAuthThrottle()]
 
     def get(self, request, token):
         shared_link = get_object_or_404(SharedLink, token=token)
@@ -939,7 +953,6 @@ class PublicSharedLinkUploadView(APIView):
     throttle_scope = 'shared_link_upload'
 
     def get_throttles(self):
-        from rest_framework.throttling import ScopedRateThrottle
         return [ScopedRateThrottle()]
 
     MAX_FILES_PER_REQUEST = 10

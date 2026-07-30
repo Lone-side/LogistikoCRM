@@ -26,6 +26,9 @@ nano .env
 | `DB_PASSWORD` | Ισχυρός κωδικός PostgreSQL |
 | `SITE_URL` | π.χ. `https://crm.example.gr` (μπαίνει σε emails/links) |
 | `ALLOWED_HOSTS` | π.χ. `crm.example.gr` |
+| `FRITZ_API_TOKEN` | `openssl rand -hex 32` — υποχρεωτικό ακόμη κι αν δεν χρησιμοποιείς Fritz!Box |
+
+> Με `DEBUG=False` το app **αρνείται να ξεκινήσει** αν τα `SECRET_KEY`/`FRITZ_API_TOKEN` έχουν μείνει στα defaults — αυτό είναι σκόπιμο (security hard-fail).
 
 ### 2. Εκκίνηση
 

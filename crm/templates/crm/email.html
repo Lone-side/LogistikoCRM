@@ -21,9 +21,8 @@
         {% if attachments %}<i class="material-icons" style="font-size: small; color: var(--body-quiet-color);">attach_file</i> {% endif %}
         <b>Subject:</b> {{ subject }}</p>
 	<hr><br>
-	<div>
-	{{ body }}
-	</div><br>
+	{# sandbox χωρίς allow-scripts/allow-same-origin: το HTML του email δεν μπορεί να τρέξει κώδικα στο origin του CRM #}
+	<iframe sandbox srcdoc="{{ body }}" style="width: 100%; min-height: 60vh; border: none;"></iframe><br>
 	<hr>
 	{% if attachments %}
 		<h4>{{ attachments|length }} {% translate 'Attachments' %}</h4>
