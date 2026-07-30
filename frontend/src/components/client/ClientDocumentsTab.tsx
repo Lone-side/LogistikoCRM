@@ -294,6 +294,7 @@ export default function ClientDocumentsTab({
                                         <span
                                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800"
                                           title="Το ΑΦΜ μέσα στο έγγραφο δεν αντιστοιχεί στον πελάτη — πιθανώς λάθος φάκελος"
+                                          aria-label="Το ΑΦΜ μέσα στο έγγραφο δεν αντιστοιχεί στον πελάτη — πιθανώς λάθος φάκελος"
                                         >
                                           <AlertTriangle className="w-3 h-3" />
                                           ΑΦΜ;
@@ -315,6 +316,7 @@ export default function ClientDocumentsTab({
                                         onClick={() => setPreviewDoc(doc)}
                                         className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                                         title="Προεπισκόπηση"
+                                        aria-label="Προεπισκόπηση"
                                       >
                                         <Eye className="w-4 h-4" />
                                       </button>
@@ -325,6 +327,7 @@ export default function ClientDocumentsTab({
                                         download={doc.filename}
                                         className="p-1.5 text-green-600 hover:bg-green-50 rounded transition-colors"
                                         title="Λήψη"
+                                        aria-label="Λήψη"
                                       >
                                         <Download className="w-4 h-4" />
                                       </a>
@@ -333,6 +336,7 @@ export default function ClientDocumentsTab({
                                       onClick={() => onDelete(doc.id)}
                                       className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                                       title="Διαγραφή"
+                                      aria-label="Διαγραφή"
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>

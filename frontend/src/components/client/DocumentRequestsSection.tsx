@@ -91,6 +91,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
               <button
                 onClick={handleCopy}
                 title="Αντιγραφή συνδέσμου"
+                aria-label="Αντιγραφή συνδέσμου"
                 className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
               >
                 <Copy className="w-4 h-4" />
@@ -100,6 +101,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
               onClick={handleReminder}
               disabled={sendReminder.isPending || linkExpired}
               title="Αποστολή υπενθύμισης"
+              aria-label="Αποστολή υπενθύμισης"
               className="p-1.5 rounded hover:bg-gray-100 text-gray-500 disabled:opacity-40"
             >
               <Bell className="w-4 h-4" />
@@ -107,6 +109,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
             <button
               onClick={handleCancel}
               title="Ακύρωση αιτήματος"
+              aria-label="Ακύρωση αιτήματος"
               className="p-1.5 rounded hover:bg-red-50 text-red-500"
             >
               <Trash2 className="w-4 h-4" />
@@ -234,6 +237,7 @@ export function DocumentRequestModal({
                   onClick={() => navigator.clipboard.writeText(created.url!)}
                   className="p-1.5 rounded hover:bg-gray-200"
                   title="Αντιγραφή"
+                  aria-label="Αντιγραφή"
                 >
                   <Copy className="w-4 h-4 text-gray-500" />
                 </button>

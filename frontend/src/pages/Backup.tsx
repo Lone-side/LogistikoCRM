@@ -385,7 +385,8 @@ export default function Backup() {
                             <button
                               onClick={() => handleDownload(backup)}
                               className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Download"
+                              title="Λήψη"
+                              aria-label="Λήψη"
                             >
                               <Download size={18} />
                             </button>
@@ -396,7 +397,8 @@ export default function Backup() {
                               }}
                               disabled={restoringId === backup.id}
                               className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
-                              title="Restore"
+                              title="Επαναφορά"
+                              aria-label="Επαναφορά"
                             >
                               {restoringId === backup.id ? (
                                 <Loader2 size={18} className="animate-spin" />
@@ -422,7 +424,7 @@ export default function Backup() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Δημιουργία Backup</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Κλείσιμο" onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
@@ -486,7 +488,7 @@ export default function Backup() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Επαναφορά Backup</h3>
-              <button onClick={() => setShowRestoreModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Κλείσιμο" onClick={() => setShowRestoreModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
@@ -590,7 +592,7 @@ export default function Backup() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Upload & Restore</h3>
-              <button onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Κλείσιμο" onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
@@ -703,7 +705,7 @@ export default function Backup() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Ρυθμίσεις Backup</h3>
-              <button onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600">
+              <button aria-label="Κλείσιμο" onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>

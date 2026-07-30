@@ -641,6 +641,7 @@ export default function Obligations() {
               }}
               className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
               title="Ακύρωση επιλογής"
+              aria-label="Ακύρωση επιλογής"
             >
               <X className="w-4 h-4" />
             </button>
@@ -693,6 +694,8 @@ export default function Obligations() {
                         <th className="px-4 py-3 text-left">
                           <button
                             onClick={handleSelectAll}
+                            aria-label="Επιλογή όλων"
+                            aria-pressed={selectAll}
                             className="text-gray-400 hover:text-gray-600"
                           >
                             {selectAll ? (
@@ -789,6 +792,7 @@ export default function Obligations() {
                                   onClick={() => handleCompleteClick(obligation)}
                                   className="text-green-600 hover:text-green-900 p-1.5 hover:bg-green-50 rounded"
                                   title="Ολοκλήρωση"
+                                  aria-label="Ολοκλήρωση"
                                 >
                                   <CheckCircle className="w-4 h-4" />
                                 </button>
@@ -798,6 +802,7 @@ export default function Obligations() {
                                 onClick={() => handleUploadClick(obligation)}
                                 className="text-purple-600 hover:text-purple-900 p-1.5 hover:bg-purple-50 rounded"
                                 title="Επισύναψη εγγράφου"
+                                aria-label="Επισύναψη εγγράφου"
                               >
                                 <Paperclip className="w-4 h-4" />
                               </button>
@@ -806,6 +811,7 @@ export default function Obligations() {
                                 onClick={() => handleEmailClick(obligation)}
                                 className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded"
                                 title="Αποστολή email"
+                                aria-label="Αποστολή email"
                               >
                                 <Mail className="w-4 h-4" />
                               </button>
@@ -814,6 +820,7 @@ export default function Obligations() {
                                 onClick={() => handleEdit(obligation)}
                                 className="text-gray-600 hover:text-gray-900 p-1.5 hover:bg-gray-100 rounded"
                                 title="Επεξεργασία"
+                                aria-label="Επεξεργασία"
                               >
                                 <Edit2 className="w-4 h-4" />
                               </button>
@@ -822,6 +829,7 @@ export default function Obligations() {
                                 onClick={() => handleDeleteClick(obligation)}
                                 className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded"
                                 title="Διαγραφή"
+                                aria-label="Διαγραφή"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -851,6 +859,7 @@ export default function Obligations() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         title="Νέα Υποχρέωση"
+        aria-label="Νέα Υποχρέωση"
         size="lg"
       >
         <ObligationForm
@@ -869,6 +878,7 @@ export default function Obligations() {
           setSelectedObligation(null);
         }}
         title="Επεξεργασία Υποχρέωσης"
+        aria-label="Επεξεργασία Υποχρέωσης"
         size="lg"
       >
         <ObligationForm
@@ -888,6 +898,7 @@ export default function Obligations() {
         isOpen={isBulkCreateModalOpen}
         onClose={() => setIsBulkCreateModalOpen(false)}
         title="Μαζική Δημιουργία Υποχρεώσεων"
+        aria-label="Μαζική Δημιουργία Υποχρεώσεων"
         size="xl"
       >
         <div className="space-y-4">
@@ -1023,6 +1034,7 @@ export default function Obligations() {
         }}
         onConfirm={handleDeleteConfirm}
         title="Διαγραφή Υποχρέωσης"
+        aria-label="Διαγραφή Υποχρέωσης"
         message={`Είστε σίγουροι ότι θέλετε να διαγράψετε την υποχρέωση για ${selectedObligation?.client_name || 'τον πελάτη'};`}
         confirmText="Διαγραφή"
         cancelText="Ακύρωση"
@@ -1036,6 +1048,7 @@ export default function Obligations() {
         onClose={() => setIsBulkDeleteDialogOpen(false)}
         onConfirm={handleBulkDeleteConfirm}
         title="Διαγραφή Επιλεγμένων Υποχρεώσεων"
+        aria-label="Διαγραφή Επιλεγμένων Υποχρεώσεων"
         message={`Είστε σίγουροι ότι θέλετε να διαγράψετε ${selectedIds.size} υποχρεώσεις;`}
         confirmText="Διαγραφή"
         cancelText="Ακύρωση"
@@ -1229,13 +1242,13 @@ function GenerateMonthModal({
     const hasClientsWithoutProfile = result.details?.some(d => d.note?.includes('προφίλ'));
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
             <div className="flex items-center">
               <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
               <h2 className="text-lg font-semibold text-gray-900">Ολοκληρώθηκε</h2>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
               <X className="w-5 h-5 text-gray-400" />
             </button>
           </div>
@@ -1327,13 +1340,13 @@ function GenerateMonthModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center">
             <CalendarPlus className="w-6 h-6 text-yellow-600 mr-2" />
             <h2 className="text-lg font-semibold text-gray-900">Δημιουργία Υποχρεώσεων Μήνα</h2>
           </div>
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
+          <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
             <X className="w-5 h-5 text-gray-400" />
           </button>
         </div>
@@ -1481,6 +1494,7 @@ function GenerateMonthModal({
                 <input
                   type="text"
                   placeholder="Αναζήτηση πελάτη..."
+                  aria-label="Αναζήτηση πελάτη"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
@@ -1740,13 +1754,13 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
   if (result) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
             <div className="flex items-center">
               <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
               <h2 className="text-lg font-semibold text-gray-900">Ολοκληρώθηκε</h2>
             </div>
-            <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
               <X className="w-5 h-5 text-gray-400" />
             </button>
           </div>
@@ -1786,13 +1800,13 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center">
             <UserPlus className="w-6 h-6 text-blue-600 mr-2" />
             <h2 className="text-lg font-semibold text-gray-900">Μαζική Ανάθεση Υποχρεώσεων</h2>
           </div>
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
+          <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
             <X className="w-5 h-5 text-gray-400" />
           </button>
         </div>
@@ -1896,6 +1910,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                 <input
                   type="text"
                   placeholder="Αναζήτηση..."
+                  aria-label="Αναζήτηση πελάτη"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"

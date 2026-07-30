@@ -167,12 +167,12 @@ function DocumentCard({
       </div>
 
       {/* File icon */}
-      <div className="flex justify-center mb-3 pt-4" onClick={onPreview}>
+      <div className="flex justify-center mb-3 pt-4" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") onPreview(); }} onClick={onPreview}>
         <FileIcon fileType={document.file_type} size={48} />
       </div>
 
       {/* File info */}
-      <div className="text-center" onClick={onPreview}>
+      <div className="text-center" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") onPreview(); }} onClick={onPreview}>
         <p className="font-medium text-gray-900 truncate" title={document.filename}>
           {document.filename}
         </p>
@@ -248,7 +248,7 @@ function DocumentRow({
         </button>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-3 cursor-pointer" onClick={onPreview}>
+        <div className="flex items-center gap-3 cursor-pointer" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") onPreview(); }} onClick={onPreview}>
           <FileIcon fileType={document.file_type} size={24} />
           <div>
             <p className="font-medium text-gray-900">{document.filename}</p>

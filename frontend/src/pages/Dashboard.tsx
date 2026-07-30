@@ -262,6 +262,7 @@ export default function Dashboard() {
             {pieChartData.map((entry, index) => (
               <div key={index} className="flex items-center gap-2">
                 <div
+                  aria-hidden="true"
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
