@@ -148,8 +148,10 @@ redis.msi
 NewFile
 .py
 
-# Test files
-test_*.py
+# Πρόχειρα test scripts ΜΟΝΟ στο root του repo —
+# τα κανονικά tests στο tests/ ΔΕΝ πρέπει να αγνοούνται (bug που
+# άφηνε εκτός git όλα τα νέα tests/**/test_*.py)
+/test_*.py
 
 # Documentation exports
 admin_*.txt
