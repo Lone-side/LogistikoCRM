@@ -222,6 +222,11 @@ class DocumentViewSet(viewsets.ModelViewSet):
         obligation = None
         if obligation_id:
             obligation = MonthlyObligation.objects.get(id=obligation_id)
+            if obligation.client_id != client.id:
+                return Response(
+                    {'error': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             # Auto-set category based on obligation type if not specified
             if category == 'general' and obligation.obligation_type:
                 type_code = obligation.obligation_type.code.upper()

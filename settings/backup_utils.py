@@ -283,6 +283,7 @@ def _restore_database(json_data, mode='replace'):
     """
     import tempfile
     from django.contrib.auth.models import Group
+    from django.db import transaction
 
     # Γράψε σε temp file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
@@ -290,17 +291,20 @@ def _restore_database(json_data, mode='replace'):
         temp_path = f.name
 
     try:
-        if mode == 'replace':
-            # Διαγραφή υπαρχόντων δεδομένων (προσεκτικά!)
-            call_command('flush', '--no-input')
+        # Όλο το restore σε μία συναλλαγή: αν αποτύχει το loaddata στη μέση,
+        # το flush κάνει rollback και η βάση μένει όπως ήταν
+        with transaction.atomic():
+            if mode == 'replace':
+                # Διαγραφή υπαρχόντων δεδομένων (προσεκτικά!)
+                call_command('flush', '--no-input')
 
-        # Δημιουργία default groups αν δεν υπάρχουν
-        default_groups = ['Administrators', 'Managers', 'Users', 'Λογιστές', 'Υπάλληλοι']
-        for group_name in default_groups:
-            Group.objects.get_or_create(name=group_name)
+            # Δημιουργία default groups αν δεν υπάρχουν
+            default_groups = ['Administrators', 'Managers', 'Users', 'Λογιστές', 'Υπάλληλοι']
+            for group_name in default_groups:
+                Group.objects.get_or_create(name=group_name)
 
-        # Φόρτωση δεδομένων με ignorenonexistent για missing FKs
-        call_command('loaddata', temp_path, '--ignorenonexistent')
+            # Φόρτωση δεδομένων με ignorenonexistent για missing FKs
+            call_command('loaddata', temp_path, '--ignorenonexistent')
 
     finally:
         os.unlink(temp_path)

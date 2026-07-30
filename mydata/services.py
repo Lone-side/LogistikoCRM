@@ -182,8 +182,15 @@ class MyDataService:
         Returns:
             Tuple (created, updated) - 1 ή 0 για κάθε
         """
-        mark = inv_data['mark']
-        
+        mark = inv_data.get('mark')
+        if not mark:
+            # Χωρίς MARK δεν υπάρχει κλειδί αντιστοίχισης: θα δημιουργούσαμε
+            # διπλοεγγραφή σε κάθε sync ή θα ενημερώναμε άσχετο τιμολόγιο
+            raise ValueError(
+                'Το παραστατικό από το myDATA δεν έχει MARK — παραλείπεται '
+                f'(series/aa: {inv_data.get("series")}/{inv_data.get("aa")})'
+            )
+
         # Check if exists
         invoice = Invoice.objects.filter(mydata_mark=mark).first()
         

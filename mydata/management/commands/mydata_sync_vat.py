@@ -281,18 +281,6 @@ class Command(BaseCommand):
         deleted = 0
 
         try:
-            # Clear existing records for this period if requested
-            if self.clear_before_sync and not self.dry_run:
-                deleted = VATRecord.objects.filter(
-                    client=client,
-                    issue_date__gte=date_from,
-                    issue_date__lte=date_to
-                ).delete()[0]
-                if deleted > 0:
-                    self.stdout.write(
-                        self.style.WARNING(f"  Διαγράφηκαν {deleted} παλιά records")
-                    )
-
             # Get API client
             api_client = credentials.get_api_client()
 
@@ -300,30 +288,45 @@ class Command(BaseCommand):
             self.stdout.write(f"  Environment: {env}")
             self.stdout.write(f"  Fetching VAT info...")
 
-            # Fetch VAT records
-            records_fetched = 0
-
+            # Πρώτα ΟΛΟ το fetch από την ΑΑΔΕ — αν αποτύχει το API call ή το
+            # parsing, δεν έχουμε αγγίξει τα τοπικά δεδομένα της περιόδου
+            fetched_records = []
             for vat_record in api_client.request_vat_info(
                 date_from=date_from,
                 date_to=date_to
             ):
-                records_fetched += 1
-
+                fetched_records.append(vat_record)
                 if self.verbose:
                     self._print_vat_record(vat_record)
 
-                if not self.dry_run:
-                    try:
-                        is_created = self._save_vat_record(client, vat_record)
-                        if is_created:
-                            created += 1
-                        else:
-                            updated += 1
-                    except Exception as e:
-                        logger.error(f"Error saving VAT record: {e}")
-                        errors += 1
-
+            records_fetched = len(fetched_records)
             self.stdout.write(f"  Fetched: {records_fetched} records")
+
+            if not self.dry_run:
+                # Delete + save μαζί σε μία συναλλαγή: ή ολοκληρώνεται η
+                # αντικατάσταση της περιόδου ή δεν αλλάζει τίποτα
+                with transaction.atomic():
+                    if self.clear_before_sync:
+                        deleted = VATRecord.objects.filter(
+                            client=client,
+                            issue_date__gte=date_from,
+                            issue_date__lte=date_to
+                        ).delete()[0]
+                        if deleted > 0:
+                            self.stdout.write(
+                                self.style.WARNING(f"  Διαγράφηκαν {deleted} παλιά records")
+                            )
+
+                    for vat_record in fetched_records:
+                        try:
+                            is_created = self._save_vat_record(client, vat_record)
+                            if is_created:
+                                created += 1
+                            else:
+                                updated += 1
+                        except Exception as e:
+                            logger.error(f"Error saving VAT record: {e}")
+                            errors += 1
 
             if not self.dry_run:
                 self.stdout.write(

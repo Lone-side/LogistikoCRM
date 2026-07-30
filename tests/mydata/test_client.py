@@ -187,3 +187,16 @@ class CancelInvoiceTest(ClientTestBase):
         self.assertEqual(call.kwargs['params'], {'mark': 400001234567890})
         self.assertNotIn('json', call.kwargs)
         self.assertNotIn('data', call.kwargs)
+
+
+class VatInfoParseTest(ClientTestBase):
+    def test_unparseable_response_raises(self):
+        # Μη αναγνώσιμη απάντηση δεν πρέπει να μοιάζει με κενή περίοδο
+        from mydata.client import MyDataAPIError
+        with self.assertRaises(MyDataAPIError):
+            self.client_obj._parse_vat_info_response('<html>Gateway Timeout')
+
+    def test_empty_response_returns_no_records(self):
+        records, pagination = self.client_obj._parse_vat_info_response('')
+        self.assertEqual(records, [])
+        self.assertFalse(pagination.has_more)
