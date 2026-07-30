@@ -915,3 +915,239 @@ def cleanup_stale_sync_logs(stale_minutes=60):
             f'Stale sync logs: {invoice_logs} MyDataSyncLog, {vat_logs} VATSyncLog'
         )
     return f'Cleaned {invoice_logs + vat_logs} stale sync logs'
+
+
+# ============================================
+# ΑΙΤΗΜΑΤΑ ΕΓΓΡΑΦΩΝ: υπενθυμίσεις + ειδοποιήσεις uploads
+# ============================================
+
+# Μέγιστες αυτόματες υπενθυμίσεις ανά αίτημα — μετά, μόνο χειροκίνητα
+DOCUMENT_REQUEST_MAX_REMINDERS = 5
+DOCUMENT_REQUEST_REMINDER_COOLDOWN_DAYS = 3
+
+
+def _document_request_email(doc_request, portal_url):
+    """(subject, html_body) για email αιτήματος/υπενθύμισης εγγράφων."""
+    pending = doc_request.items.filter(is_received=False)
+    items_html = ''.join(f'<li>{item.label}</li>' for item in pending)
+    due = (
+        f"<p><strong>Προθεσμία:</strong> {doc_request.due_date.strftime('%d/%m/%Y')}</p>"
+        if doc_request.due_date else ''
+    )
+    notes = f'<p>{doc_request.notes}</p>' if doc_request.notes else ''
+    subject = f'Απαιτούμενα έγγραφα — {doc_request.title}'
+    body = f"""
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #ff9800; color: white; padding: 20px; border-radius: 10px 10px 0 0; text-align: center;">
+    <h2 style="margin: 0;">Απαιτούμενα Έγγραφα</h2>
+  </div>
+  <div style="background: #f8f9fa; padding: 25px; border-radius: 0 0 10px 10px;">
+    <p style="font-size: 16px; color: #333;">Αγαπητέ/ή <strong>{doc_request.client.eponimia}</strong>,</p>
+    <p style="color: #555;">Για το «{doc_request.title}» χρειαζόμαστε τα παρακάτω έγγραφα:</p>
+    <div style="background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0;">
+      <ul style="margin: 0; color: #e65100;">{items_html}</ul>
+    </div>
+    {notes}
+    {due}
+    <p style="text-align: center; margin: 25px 0;">
+      <a href="{portal_url}" style="background: #ff9800; color: white; padding: 12px 28px;
+         border-radius: 8px; text-decoration: none; font-weight: bold;">
+        Μεταφόρτωση εγγράφων
+      </a>
+    </p>
+    <p style="color: #888; font-size: 13px;">
+      Ο σύνδεσμος είναι προσωπικός — μην τον προωθήσετε.
+    </p>
+  </div>
+</div>"""
+    return subject, body
+
+
+def _send_document_request_email(doc_request):
+    """
+    Στέλνει email αιτήματος/υπενθύμισης στον πελάτη.
+    Επιστρέφει True σε επιτυχία. Guards: email πελάτη + έγκυρο link.
+    """
+    from django.conf import settings as dj_settings
+    from django.core.mail import send_mail
+    from django.utils.html import strip_tags
+
+    client_email = (doc_request.client.email or '').strip()
+    link = doc_request.shared_link
+    if not client_email:
+        logger.info(f'DocumentRequest {doc_request.pk}: χωρίς email πελάτη — skip')
+        return False
+    if link is None or not link.is_valid or not link.can_upload:
+        logger.warning(
+            f'DocumentRequest {doc_request.pk}: ο σύνδεσμος portal είναι '
+            f'ανενεργός/ληγμένος — δεν στάλθηκε email'
+        )
+        return False
+
+    portal_url = f"{dj_settings.SITE_URL.rstrip('/')}/share/{link.token}"
+    subject, body = _document_request_email(doc_request, portal_url)
+    send_mail(
+        subject=subject,
+        message=strip_tags(body),
+        from_email=dj_settings.DEFAULT_FROM_EMAIL or None,
+        recipient_list=[client_email],
+        html_message=body,
+        fail_silently=False,
+    )
+    return True
+
+
+@shared_task
+def send_document_request_email(request_id):
+    """Αρχικό email αιτήματος εγγράφων (καλείται από το create του API)."""
+    from .models import DocumentRequest
+
+    try:
+        doc_request = DocumentRequest.objects.select_related(
+            'client', 'shared_link'
+        ).get(pk=request_id)
+    except DocumentRequest.DoesNotExist:
+        logger.info(f'DocumentRequest {request_id} δεν βρέθηκε — skip email')
+        return None
+    sent = _send_document_request_email(doc_request)
+    return f'DocumentRequest {request_id}: email {"sent" if sent else "skipped"}'
+
+
+@shared_task
+def send_document_request_reminders():
+    """
+    Beat task (εργάσιμες 10:00): υπενθυμίσεις για ανοιχτά αιτήματα εγγράφων
+    με εκκρεμή items. Cooldown 3 ημέρες, μέγιστο 5 αυτόματες υπενθυμίσεις.
+    """
+    from datetime import timedelta
+    from django.db.models import F
+    from django.utils import timezone
+    from .models import DocumentRequest
+
+    cutoff = timezone.now() - timedelta(days=DOCUMENT_REQUEST_REMINDER_COOLDOWN_DAYS)
+    candidates = (
+        DocumentRequest.objects.filter(
+            status='open',
+            items__is_received=False,
+            reminder_count__lt=DOCUMENT_REQUEST_MAX_REMINDERS,
+        )
+        .filter(
+            models_q_null_or_older('last_reminder_sent_at', cutoff)
+        )
+        .select_related('client', 'shared_link')
+        .distinct()
+    )
+
+    sent = 0
+    skipped = 0
+    for doc_request in candidates:
+        try:
+            if _send_document_request_email(doc_request):
+                DocumentRequest.objects.filter(pk=doc_request.pk).update(
+                    last_reminder_sent_at=timezone.now(),
+                    reminder_count=F('reminder_count') + 1,
+                )
+                sent += 1
+            else:
+                skipped += 1
+        except Exception as e:
+            logger.error(f'Reminder για DocumentRequest {doc_request.pk}: {e}')
+            skipped += 1
+
+    logger.info(f'Document request reminders: {sent} sent, {skipped} skipped')
+    return f'Sent {sent} document request reminders ({skipped} skipped)'
+
+
+def models_q_null_or_older(field, cutoff):
+    """Q: field IS NULL ή παλαιότερο από το cutoff."""
+    from django.db.models import Q
+    return Q(**{f'{field}__isnull': True}) | Q(**{f'{field}__lt': cutoff})
+
+
+@shared_task
+def notify_portal_upload(shared_link_id, document_ids):
+    """
+    Ειδοποίηση γραφείου (email) όταν πελάτης ανεβάζει έγγραφα μέσω portal.
+
+    Παραλήπτες: πάντα ο δημιουργός του link + όσοι staff έχουν ενεργό το
+    «Νέα αρχεία» (UserNotificationSettings.new_files). Ποτέ δεν ρίχνει
+    το upload — τρέχει async/fail-silently.
+    """
+    from django.conf import settings as dj_settings
+    from django.contrib.auth.models import User
+    from django.core.mail import send_mail
+    from django.utils.html import strip_tags
+    from settings.models import UserNotificationSettings
+    from .models import ClientDocument, SharedLink
+
+    try:
+        shared_link = SharedLink.objects.select_related('client', 'created_by').get(
+            pk=shared_link_id
+        )
+    except SharedLink.DoesNotExist:
+        return None
+
+    documents = list(ClientDocument.objects.filter(pk__in=document_ids))
+    if not documents:
+        return None
+    client = shared_link.upload_target_client
+
+    # Παραλήπτες: δημιουργός link + opt-in staff (new_files=True), dedup
+    recipients = set()
+    creator = shared_link.created_by
+    if creator and creator.is_active and creator.email:
+        recipients.add(creator.email)
+    optin = User.objects.filter(
+        is_active=True,
+        notification_settings__new_files=True,
+    ).exclude(email='')
+    recipients.update(optin.values_list('email', flat=True))
+    if not recipients:
+        logger.info('notify_portal_upload: κανένας παραλήπτης')
+        return 'No recipients'
+
+    files_html = ''.join(f'<li>{d.filename}</li>' for d in documents)
+    progress = ''
+    doc_request = shared_link.document_requests.filter(
+        status__in=['open', 'completed']
+    ).order_by('-created_at').first()
+    if doc_request:
+        total = doc_request.items.count()
+        received = doc_request.received_items_count
+        if total:
+            progress = (
+                f'<p>Πρόοδος αιτήματος «{doc_request.title}»: '
+                f'<strong>{received}/{total}</strong> ελήφθησαν</p>'
+            )
+
+    client_name = client.eponimia if client else '—'
+    subject = f'Νέο έγγραφο από portal: {client_name}'
+    crm_link = f"{dj_settings.SITE_URL.rstrip('/')}/clients/{client.pk}" if client else ''
+    body = f"""
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px;">
+  <p>Ο πελάτης <strong>{client_name}</strong> ανέβασε
+     {len(documents)} αρχείο/α μέσω του portal
+     («{shared_link.name}»):</p>
+  <ul>{files_html}</ul>
+  {progress}
+  {f'<p><a href="{crm_link}">Άνοιγμα καρτέλας πελάτη στο CRM</a></p>' if crm_link else ''}
+</div>"""
+
+    try:
+        send_mail(
+            subject=subject,
+            message=strip_tags(body),
+            from_email=dj_settings.DEFAULT_FROM_EMAIL or None,
+            recipient_list=sorted(recipients),
+            html_message=body,
+            fail_silently=True,
+        )
+    except Exception:
+        logger.warning('notify_portal_upload: αποτυχία αποστολής email', exc_info=True)
+        return 'Email failed'
+
+    logger.info(
+        f'notify_portal_upload: {len(documents)} έγγραφα, '
+        f'{len(recipients)} παραλήπτες'
+    )
+    return f'Notified {len(recipients)} recipients'

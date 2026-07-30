@@ -33,6 +33,34 @@ def notifications_list(request):
     notifications = []
 
     try:
+        # Νέα έγγραφα από portal (τελευταίες 48 ώρες)
+        from datetime import timedelta
+        from .models import SharedLinkAccess
+        recent_uploads = (
+            SharedLinkAccess.objects.filter(
+                action='upload',
+                accessed_at__gte=now - timedelta(hours=48),
+            )
+            .select_related('shared_link__client', 'shared_link__document__client')
+            .order_by('-accessed_at')[:10]
+        )
+        for access in recent_uploads:
+            link = access.shared_link
+            client = link.upload_target_client if link else None
+            notifications.append({
+                'id': f'portal-upload-{access.id}',
+                'type': 'portal_upload',
+                'priority': 'medium',
+                'title': 'Νέο έγγραφο από portal',
+                'message': (
+                    f'{client.eponimia if client else "Πελάτης"} ανέβασε '
+                    f'έγγραφα μέσω «{link.name if link else "portal"}»'
+                ),
+                'deadline': None,
+                'client_id': client.id if client else None,
+                'icon': 'upload',
+            })
+
         # Overdue obligations
         overdue = MonthlyObligation.objects.filter(
             deadline__lt=now.date(),

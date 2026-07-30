@@ -1,3 +1,4 @@
+import DocumentRequestsSection from './DocumentRequestsSection';
 import { useMemo, useState } from 'react';
 import {
   FileText,
@@ -35,6 +36,8 @@ export interface ClientDocumentsTabProps {
   onUpload: () => void;
   onDelete: (docId: number) => void;
   onCreatePortalLink?: () => void;
+  clientId?: number;
+  clientName?: string;
 }
 
 // File type icon mapping
@@ -107,6 +110,8 @@ export default function ClientDocumentsTab({
   onUpload,
   onDelete,
   onCreatePortalLink,
+  clientId,
+  clientName,
 }: ClientDocumentsTabProps) {
   const [previewDoc, setPreviewDoc] = useState<ClientDocument | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -163,6 +168,11 @@ export default function ClientDocumentsTab({
           </Button>
         </div>
       </div>
+
+      {/* Αιτήματα εγγράφων μέσω portal */}
+      {clientId && (
+        <DocumentRequestsSection clientId={clientId} clientName={clientName || ''} />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">

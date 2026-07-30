@@ -156,6 +156,8 @@ router.register(r'documents', DocumentViewSet, basename='document')
 router.register(r'clients', ClientViewSet, basename='client')
 router.register(r'obligations', ObligationViewSet, basename='obligation')
 router.register(r'obligation-types', ObligationTypeViewSet, basename='obligation-type')
+from .api_document_requests import DocumentRequestViewSet  # noqa: E402
+router.register(r'document-requests', DocumentRequestViewSet, basename='document-request')
 
 # Settings management ViewSets
 router.register(r'settings/obligation-types', ObligationTypeSettingsViewSet, basename='settings-obligation-type')
