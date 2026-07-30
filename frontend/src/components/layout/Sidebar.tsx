@@ -49,7 +49,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
@@ -57,7 +57,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 z-40 h-full bg-white border-r border-gray-200
+          fixed top-0 left-0 z-40 h-full flex flex-col
+          bg-slate-900 text-slate-300
           transform transition-all duration-300 ease-in-out
           lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -65,17 +66,20 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         `}
       >
         {/* Logo/Brand */}
-        <div className={`flex items-center h-16 px-3 border-b border-gray-200 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
+        <div className={`flex items-center h-16 px-3 border-b border-slate-700/60 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-900/40">
                 <span className="text-white font-bold text-sm">LC</span>
               </div>
-              <span className="text-lg font-semibold text-gray-900 truncate">LogistikoCRM</span>
+              <div className="min-w-0">
+                <span className="block text-[15px] font-semibold text-white leading-tight truncate">LogistikoCRM</span>
+                <span className="block text-[11px] text-slate-400 leading-tight truncate">Λογιστικό Γραφείο</span>
+              </div>
             </div>
           )}
           {isCollapsed && (
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/40">
               <span className="text-white font-bold text-sm">LC</span>
             </div>
           )}
@@ -83,32 +87,32 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           {!isCollapsed && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="lg:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors"
               aria-label="Κλείσιμο μενού"
             >
-              <X size={20} className="text-gray-500" />
+              <X size={20} className="text-slate-400" />
             </button>
           )}
         </div>
 
         {/* Collapse toggle button - desktop only */}
-        <div className={`hidden lg:flex px-3 py-2 border-b border-gray-200 ${isCollapsed ? 'justify-center' : 'justify-end'}`}>
+        <div className={`hidden lg:flex px-3 py-2 border-b border-slate-700/60 ${isCollapsed ? 'justify-center' : 'justify-end'}`}>
           <button
             onClick={onToggleCollapse}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
             aria-label={isCollapsed ? 'Επέκταση μενού' : 'Σύμπτυξη μενού'}
             title={isCollapsed ? 'Επέκταση μενού' : 'Σύμπτυξη μενού'}
           >
             {isCollapsed ? (
-              <ChevronRight size={18} className="text-gray-500" />
+              <ChevronRight size={18} className="text-slate-400" />
             ) : (
-              <ChevronLeft size={18} className="text-gray-500" />
+              <ChevronLeft size={18} className="text-slate-400" />
             )}
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -116,23 +120,33 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
               onClick={onClose}
               title={isCollapsed ? item.label : undefined}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    ? 'bg-blue-600/15 text-white'
+                    : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
                 } ${isCollapsed ? 'justify-center' : ''}`
               }
               end={item.to === '/'}
             >
-              <span className="flex-shrink-0">{item.icon}</span>
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
+              {({ isActive }) => (
+                <>
+                  {/* Active indicator bar */}
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r-full" />
+                  )}
+                  <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                    {item.icon}
+                  </span>
+                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
 
         {/* Footer */}
-        <div className={`p-3 border-t border-gray-200 ${isCollapsed ? 'text-center' : ''}`}>
-          <div className="text-xs text-gray-400 text-center truncate">
+        <div className={`p-3 border-t border-slate-700/60 ${isCollapsed ? 'text-center' : ''}`}>
+          <div className="text-xs text-slate-500 text-center truncate">
             {isCollapsed ? 'v1.0' : 'LogistikoCRM v1.0'}
           </div>
         </div>

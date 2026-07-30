@@ -44,7 +44,7 @@ export default function Header({ onMenuClick, onSearchClick }: HeaderProps) {
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 h-16 bg-white border-b border-gray-200 px-4 lg:px-6">
+    <header className="sticky top-0 z-30 h-16 bg-white/90 backdrop-blur-md border-b border-gray-200 px-4 lg:px-6 shadow-sm">
       <div className="flex items-center justify-between h-full">
         {/* Left side */}
         <div className="flex items-center gap-4">
@@ -85,7 +85,7 @@ export default function Header({ onMenuClick, onSearchClick }: HeaderProps) {
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
                 <span className="text-white text-sm font-medium">{initials}</span>
               </div>
               <span className="hidden sm:inline text-sm font-medium text-gray-700">

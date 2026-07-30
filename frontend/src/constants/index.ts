@@ -36,11 +36,11 @@ export const OBLIGATION_STATUS_LABELS_PLURAL: Record<string, string> = {
 
 /** Status colors for obligation badges - Tailwind classes */
 export const OBLIGATION_STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  in_progress: 'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
-  overdue: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
+  pending: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20',
+  in_progress: 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20',
+  completed: 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20',
+  overdue: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/20',
+  cancelled: 'bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-500/20',
 };
 
 /** Status colors for obligations - Hex colors (for charts) */
@@ -67,11 +67,11 @@ export const TICKET_STATUS_LABELS: Record<string, string> = {
 
 /** Status colors for ticket badges - Tailwind classes */
 export const TICKET_STATUS_COLORS: Record<string, string> = {
-  open: 'bg-blue-100 text-blue-800',
-  assigned: 'bg-cyan-100 text-cyan-800',
-  in_progress: 'bg-yellow-100 text-yellow-800',
-  resolved: 'bg-green-100 text-green-800',
-  closed: 'bg-gray-100 text-gray-800',
+  open: 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20',
+  assigned: 'bg-cyan-50 text-cyan-700 ring-1 ring-inset ring-cyan-600/20',
+  in_progress: 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20',
+  resolved: 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20',
+  closed: 'bg-gray-100 text-gray-600 ring-1 ring-inset ring-gray-500/20',
 };
 
 /** Ticket status options for filter dropdowns */
