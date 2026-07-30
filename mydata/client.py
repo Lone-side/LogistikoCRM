@@ -304,15 +304,16 @@ class MyDataClient:
                 response_text=error_text
             )
 
-    @retry_with_backoff()
-    def _make_request(
+    def _make_request_once(
         self,
         method: str,
         endpoint: str,
         **kwargs
     ) -> Union[str, Dict]:
         """
-        Helper για API requests με retry και rate limiting.
+        Ένα API request ΧΩΡΙΣ retry — για μη-idempotent POSTs (SendInvoices,
+        CancelInvoice) όπου ένα retry μετά από timeout θα μπορούσε να
+        υποβάλει το παραστατικό ΔΥΟ φορές στην ΑΑΔΕ.
 
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -360,6 +361,16 @@ class MyDataClient:
         except requests.exceptions.RequestException as e:
             logger.error(f"myDATA API Network Error: {method} {endpoint} - {str(e)}")
             raise
+
+    @retry_with_backoff()
+    def _make_request(
+        self,
+        method: str,
+        endpoint: str,
+        **kwargs
+    ) -> Union[str, Dict]:
+        """Idempotent requests (GET) με retry/backoff πάνω στο _make_request_once."""
+        return self._make_request_once(method, endpoint, **kwargs)
 
     @staticmethod
     def _format_date(d: Union[date, datetime, None]) -> Optional[str]:
@@ -960,7 +971,9 @@ class MyDataClient:
         """
         # Per-request header — ΔΕΝ αλλάζουμε τα session headers (θα «μόλυνε»
         # τα επόμενα GET requests του ίδιου client instance)
-        return self._make_request(
+        # ΧΩΡΙΣ auto-retry: αν το request πετύχει στην ΑΑΔΕ αλλά χαθεί η
+        # απάντηση (timeout), ένα retry θα υπέβαλλε το παραστατικό δεύτερη φορά
+        return self._make_request_once(
             'POST', '/SendInvoices',
             data=invoices_xml.encode('utf-8'),
             headers={'Content-Type': 'application/xml'},
@@ -976,7 +989,7 @@ class MyDataClient:
         Returns:
             Το raw XML ResponseDoc (περιέχει cancellationMark σε επιτυχία)
         """
-        return self._make_request('POST', '/CancelInvoice', params={'mark': mark})
+        return self._make_request_once('POST', '/CancelInvoice', params={'mark': mark})
 
     # =========================================================================
     # LEGACY PARSER (για backwards compatibility)

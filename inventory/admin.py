@@ -74,12 +74,16 @@ class InvoiceAdmin(admin.ModelAdmin):
     
     actions = ['fetch_from_mydata', 'register_to_stock', 'send_to_mydata']
 
-    @admin.action(description='📤 Αποστολή στο myDATA')
+    @admin.action(description='📤 Αποστολή στο myDATA', permissions=['change'])
     def send_to_mydata(self, request, queryset):
         """Αποστολή επιλεγμένων εξερχόμενων τιμολογίων στο myDATA."""
         from mydata.services import MyDataService
 
-        service = MyDataService()
+        try:
+            service = MyDataService()
+        except Exception as e:
+            self.message_user(request, f'❌ Ρύθμιση myDATA: {e}', messages.ERROR)
+            return
         sent = 0
         for invoice in queryset:
             try:

@@ -150,6 +150,15 @@ class SendInvoicesTest(ClientTestBase):
         self.assertEqual(call.kwargs['data'], xml_doc.encode('utf-8'))
         self.assertEqual(call.kwargs['headers']['Content-Type'], 'application/xml')
 
+    def test_send_not_retried_on_server_error(self):
+        """Μη-idempotent POST: timeout/5xx ΔΕΝ κάνει retry (διπλή υποβολή)."""
+        self.client_obj.session.request.return_value = make_response(
+            status_code=500, text='boom'
+        )
+        with self.assertRaises(MyDataServerError):
+            self.client_obj.send_invoices('<InvoicesDoc/>')
+        self.assertEqual(self.client_obj.session.request.call_count, 1)
+
     def test_session_headers_not_mutated(self):
         """Το bug που διορθώθηκε: το send_invoices άλλαζε τα session headers."""
         real_client = MyDataClient('u', 'k', is_sandbox=True)

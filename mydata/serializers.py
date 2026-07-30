@@ -356,5 +356,8 @@ class InvoiceListSerializer(serializers.Serializer):
     mydata_uid = serializers.CharField(allow_blank=True)
     mydata_sent = serializers.BooleanField()
     mydata_sent_at = serializers.DateTimeField(allow_null=True)
+    mydata_cancelled = serializers.BooleanField()
+    mydata_cancellation_mark = serializers.IntegerField(allow_null=True)
+    correlated_mark = serializers.IntegerField(allow_null=True)
     notes = serializers.CharField(allow_blank=True)
     items = InvoiceItemSerializer(many=True, read_only=True)

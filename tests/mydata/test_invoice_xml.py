@@ -10,6 +10,7 @@ from decimal import Decimal
 from django.test import SimpleTestCase
 
 from mydata.invoice_xml import (
+    ICLS_NS,
     INVOICE_NS,
     build_invoices_doc,
     parse_response_doc,
@@ -96,9 +97,72 @@ class BuildInvoicesDocTest(SimpleTestCase):
         self.assertEqual(find(invoice, 'issuer/country').text, 'GR')
         self.assertEqual(find(invoice, 'counterpart/vatNumber').text, '999863881')
 
-    def test_counterpart_omitted_when_empty(self):
-        root = self._parse(build_invoices_doc([sample_invoice(counterpart_vat='')]))
-        self.assertIsNone(find(root, 'invoice/counterpart'))
+    def test_missing_counterpart_raises(self):
+        # Όλοι οι υποστηριζόμενοι τύποι είναι B2B — χωρίς ΑΦΜ αντισυμβαλλόμενου
+        # το παραστατικό θα απορριπτόταν από την ΑΑΔΕ, οπότε κόβεται τοπικά
+        with self.assertRaises(ValueError):
+            build_invoices_doc([sample_invoice(counterpart_vat='')])
+
+    def test_income_classification_per_line_and_summary(self):
+        # Τύπος 2.1 (υπηρεσίες) → default category1_3 / E3_561_001
+        root = self._parse(build_invoices_doc([sample_invoice()]))
+        invoice = find(root, 'invoice')
+        details = findall(invoice, 'invoiceDetails')
+        icls = {'i': ICLS_NS}
+        for d, expected_amount in zip(details, ('100.00', '50.00')):
+            cls_el = find(d, 'incomeClassification')
+            self.assertIsNotNone(cls_el)
+            self.assertEqual(
+                cls_el.find('i:classificationCategory', icls).text, 'category1_3'
+            )
+            self.assertEqual(
+                cls_el.find('i:classificationType', icls).text, 'E3_561_001'
+            )
+            self.assertEqual(cls_el.find('i:amount', icls).text, expected_amount)
+        # Συγκεντρωτικά στο summary: ένα ζεύγος, άθροισμα 150.00
+        summary = find(invoice, 'invoiceSummary')
+        summary_cls = findall(summary, 'incomeClassification')
+        self.assertEqual(len(summary_cls), 1)
+        self.assertEqual(summary_cls[0].find('i:amount', icls).text, '150.00')
+
+    def test_vat_category_7_requires_exemption(self):
+        lines = [{'line_number': 1, 'net_value': Decimal('100.00'),
+                  'vat_category': 7, 'vat_amount': Decimal('0.00')}]
+        with self.assertRaises(ValueError) as ctx:
+            build_invoices_doc([sample_invoice(
+                lines=lines, total_net=Decimal('100.00'),
+                total_vat=Decimal('0.00'), total_gross=Decimal('100.00'),
+            )])
+        self.assertIn('εξαίρεσης', str(ctx.exception))
+
+        lines[0]['vat_exemption_category'] = 3
+        root = self._parse(build_invoices_doc([sample_invoice(
+            lines=lines, total_net=Decimal('100.00'),
+            total_vat=Decimal('0.00'), total_gross=Decimal('100.00'),
+        )]))
+        detail = find(root, 'invoice/invoiceDetails')
+        self.assertEqual(find(detail, 'vatExemptionCategory').text, '3')
+
+    def test_credit_5_1_requires_correlated_mark(self):
+        with self.assertRaises(ValueError) as ctx:
+            build_invoices_doc([sample_invoice(invoice_type='5.1')])
+        self.assertIn('συσχετιζόμεν', str(ctx.exception).lower())
+
+        root = self._parse(build_invoices_doc([sample_invoice(
+            invoice_type='5.1', correlated_marks=[400000000000001],
+        )]))
+        header = find(root, 'invoice/invoiceHeader')
+        self.assertEqual(find(header, 'correlatedInvoices').text, '400000000000001')
+
+    def test_intra_community_type_requires_foreign_country(self):
+        with self.assertRaises(ValueError):
+            build_invoices_doc([sample_invoice(invoice_type='1.2')])
+        root = self._parse(build_invoices_doc([sample_invoice(
+            invoice_type='1.2', counterpart_country='DE',
+        )]))
+        self.assertEqual(
+            find(root, 'invoice/counterpart/country').text, 'DE'
+        )
 
     def test_no_lines_raises(self):
         with self.assertRaises(ValueError):
@@ -189,6 +253,18 @@ class ParseResponseDocTest(SimpleTestCase):
             '<ResponseDoc xmlns="http://www.aade.gr/myDATA/response/v1.0">',
         )
         r = parse_response_doc(xml)[0]
+        self.assertEqual(r['status_code'], 'Success')
+        self.assertEqual(r['invoice_mark'], 400001234567890)
+
+    def test_wcf_string_wrapped_response(self):
+        # Κάποια WCF endpoints τυλίγουν το XML σε <string> με escaped περιεχόμενο
+        import html as html_mod
+        wrapped = (
+            '<string xmlns="http://schemas.microsoft.com/2003/10/Serialization/">'
+            + html_mod.escape(RESPONSE_SUCCESS.split('?>', 1)[1])
+            + '</string>'
+        )
+        r = parse_response_doc(wrapped)[0]
         self.assertEqual(r['status_code'], 'Success')
         self.assertEqual(r['invoice_mark'], 400001234567890)
 

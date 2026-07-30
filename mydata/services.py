@@ -272,19 +272,16 @@ class MyDataService:
             Dict: {'success': True, 'mark': ..., 'uid': ...}
 
         Raises:
-            ValueError: για guard αποτυχίες (ήδη απεσταλμένο, χωρίς γραμμές,
-                        μη ρυθμισμένο MYDATA_ISSUER_VAT)
+            ValueError: για guard αποτυχίες (λάθος κατεύθυνση, ήδη απεσταλμένο,
+                        χωρίς γραμμές, μη ρυθμισμένο MYDATA_ISSUER_VAT)
             MyDataValidationError: όταν η ΑΑΔΕ απορρίψει το παραστατικό
+            MyDataServerError: για μη αναγνώσιμη/κενή απάντηση ΑΑΔΕ
         """
-        from .client import MyDataValidationError
+        from .client import MyDataServerError, MyDataValidationError
         from .invoice_xml import build_invoices_doc, parse_response_doc
 
-        # --- Guards πριν από οποιοδήποτε API call ---
-        if invoice.mydata_sent and invoice.mydata_mark:
-            raise ValueError(
-                f'Το παραστατικό {invoice} έχει ήδη σταλεί στο myDATA '
-                f'(MARK: {invoice.mydata_mark})'
-            )
+        # --- Guards πριν από οποιοδήποτε API call (η κατεύθυνση πρώτη,
+        # ώστε τα pulled εισερχόμενα να μην παίρνουν μήνυμα «ήδη απεσταλμένο») ---
         if not invoice.is_outgoing:
             raise ValueError('Μόνο εξερχόμενα παραστατικά αποστέλλονται στο myDATA')
         issuer_vat = getattr(settings, 'MYDATA_ISSUER_VAT', '')
@@ -292,21 +289,70 @@ class MyDataService:
             raise ValueError(
                 'Δεν έχει ρυθμιστεί το ΑΦΜ εκδότη (MYDATA_ISSUER_VAT στο .env)'
             )
+        aa = str(invoice.number).strip()
+        if not aa.isdigit() or int(aa) <= 0:
+            raise ValueError(
+                f'Ο αριθμός παραστατικού «{invoice.number}» πρέπει να είναι '
+                f'θετικός ακέραιος για αποστολή στο myDATA'
+            )
         items = list(invoice.items.all())
         if not items:
             raise ValueError('Το παραστατικό δεν έχει γραμμές')
 
+        # --- Atomic claim: μόνο ένας νικητής σε ταυτόχρονα κλικ.
+        # Το UPDATE ... WHERE mydata_sent=False είναι test-and-set στη βάση —
+        # δεν κρατάμε row lock κατά τη διάρκεια του HTTP call στην ΑΑΔΕ. ---
+        claimed = Invoice.objects.filter(
+            pk=invoice.pk, mydata_sent=False
+        ).update(mydata_sent=True)
+        if not claimed:
+            invoice.refresh_from_db()
+            raise ValueError(
+                f'Το παραστατικό {invoice} έχει ήδη σταλεί ή αποστέλλεται '
+                f'στο myDATA (MARK: {invoice.mydata_mark})'
+            )
+
         log = MyDataSyncLog.objects.create(
             sync_type='PUSH_INVOICE',
-            status='PENDING'
+            status='PENDING',
+            details={'invoice_id': invoice.pk,
+                     'invoice': f'{invoice.series}/{invoice.number}'},
         )
 
         try:
-            xml_doc = build_invoices_doc([self._invoice_to_mydata_format(invoice, issuer_vat)])
+            # Το build γίνεται πριν το API call — validation errors (π.χ.
+            # κατηγορία ΦΠΑ 7 χωρίς εξαίρεση) σκάνε τοπικά, όχι στην ΑΑΔΕ
+            xml_doc = build_invoices_doc(
+                [self._invoice_to_mydata_format(invoice, issuer_vat)]
+            )
             raw_response = self.client.send_invoices(xml_doc)
-            result = parse_response_doc(raw_response)[0]
+
+            try:
+                result = parse_response_doc(raw_response)[0]
+            except (ValueError, IndexError) as exc:
+                # Η υποβολή ΜΠΟΡΕΙ να έχει γίνει — κράτα το raw response στο
+                # log για χειροκίνητο έλεγχο (RequestTransmittedDocs)
+                log.details = {**(log.details or {}), 'raw_response': str(raw_response)[:2000]}
+                raise MyDataServerError(
+                    f'Μη έγκυρη απάντηση από το myDATA: {exc} — ΕΛΕΓΞΕ στα '
+                    f'εκδοθέντα (RequestTransmittedDocs) πριν ξαναστείλεις'
+                ) from exc
 
             if result['status_code'] == 'Success':
+                if not result['invoice_mark']:
+                    raise MyDataValidationError(
+                        'Το myDATA επέστρεψε Success χωρίς MARK — το παραστατικό '
+                        'δεν σημειώθηκε ως απεσταλμένο'
+                    )
+                # Πρώτα το MARK στο log (αν αποτύχει το invoice.save, το MARK
+                # δεν χάνεται), μετά το invoice
+                log.status = 'SUCCESS'
+                log.records_processed = 1
+                log.records_created = 1
+                log.details = {**(log.details or {}), **result}
+                log.completed_at = timezone.now()
+                log.save()
+
                 invoice.mydata_mark = result['invoice_mark']
                 invoice.mydata_uid = result['invoice_uid'] or ''
                 invoice.mydata_sent = True
@@ -315,13 +361,6 @@ class MyDataService:
                     'mydata_mark', 'mydata_uid', 'mydata_sent', 'mydata_sent_at',
                     'updated_at',
                 ])
-
-                log.status = 'SUCCESS'
-                log.records_processed = 1
-                log.records_created = 1
-                log.details = result
-                log.completed_at = timezone.now()
-                log.save()
 
                 logger.info(
                     f'myDATA: Εστάλη {invoice.series}/{invoice.number} '
@@ -337,16 +376,17 @@ class MyDataService:
             error_messages = '; '.join(
                 f"[{e['code']}] {e['message']}" for e in result['errors']
             ) or f"statusCode: {result['status_code']}"
-            log.status = 'ERROR'
-            log.error_message = error_messages
-            log.details = result
-            log.completed_at = timezone.now()
-            log.save()
+            log.details = {**(log.details or {}), **result}
             raise MyDataValidationError(
                 f'Το myDATA απέρριψε το παραστατικό: {error_messages}'
             )
 
         except Exception as e:
+            # Αποδέσμευση του claim ώστε να επιτρέπεται retry — μόνο αν δεν
+            # έχει γραφτεί MARK (αν γράφτηκε, η υποβολή πέτυχε)
+            Invoice.objects.filter(
+                pk=invoice.pk, mydata_mark__isnull=True
+            ).update(mydata_sent=False)
             if log.status == 'PENDING':
                 log.status = 'ERROR'
                 log.error_message = str(e)
@@ -361,34 +401,47 @@ class MyDataService:
         Returns:
             Dict: {'success': True, 'cancellation_mark': ...}
         """
-        from .client import MyDataValidationError
+        from .client import MyDataServerError, MyDataValidationError
         from .invoice_xml import parse_response_doc
 
+        if not invoice.is_outgoing:
+            raise ValueError('Μόνο εξερχόμενα παραστατικά μπορούν να ακυρωθούν στο myDATA')
         if not invoice.mydata_sent or not invoice.mydata_mark:
             raise ValueError('Το παραστατικό δεν έχει σταλεί στο myDATA')
+        if invoice.mydata_cancelled:
+            raise ValueError(
+                f'Το παραστατικό είναι ήδη ακυρωμένο στο myDATA '
+                f'(cancellationMark: {invoice.mydata_cancellation_mark})'
+            )
 
         log = MyDataSyncLog.objects.create(
             sync_type='CANCEL_INVOICE',
-            status='PENDING'
+            status='PENDING',
+            details={'invoice_id': invoice.pk,
+                     'invoice': f'{invoice.series}/{invoice.number}',
+                     'mark': invoice.mydata_mark},
         )
 
         try:
             raw_response = self.client.cancel_invoice(invoice.mydata_mark)
-            result = parse_response_doc(raw_response)[0]
+            try:
+                result = parse_response_doc(raw_response)[0]
+            except (ValueError, IndexError) as exc:
+                log.details = {**(log.details or {}), 'raw_response': str(raw_response)[:2000]}
+                raise MyDataServerError(
+                    f'Μη έγκυρη απάντηση από το myDATA: {exc}'
+                ) from exc
 
-            if result['status_code'] == 'Success':
+            already_cancelled = any(
+                (e.get('code') or '') == '251' for e in result['errors']
+            )
+            if result['status_code'] == 'Success' or already_cancelled:
                 cancellation_mark = result['cancellation_mark']
-                stamp = timezone.now().strftime('%d/%m/%Y %H:%M')
-                note = (
-                    f'Ακυρώθηκε στο myDATA {stamp} '
-                    f'(cancellationMark: {cancellation_mark})'
-                )
-                invoice.notes = f'{invoice.notes}\n{note}'.strip()
-                invoice.save(update_fields=['notes', 'updated_at'])
+                self._mark_cancelled(invoice, cancellation_mark)
 
                 log.status = 'SUCCESS'
                 log.records_processed = 1
-                log.details = result
+                log.details = {**(log.details or {}), **result}
                 log.completed_at = timezone.now()
                 log.save()
 
@@ -401,11 +454,7 @@ class MyDataService:
             error_messages = '; '.join(
                 f"[{e['code']}] {e['message']}" for e in result['errors']
             ) or f"statusCode: {result['status_code']}"
-            log.status = 'ERROR'
-            log.error_message = error_messages
-            log.details = result
-            log.completed_at = timezone.now()
-            log.save()
+            log.details = {**(log.details or {}), **result}
             raise MyDataValidationError(
                 f'Το myDATA απέρριψε την ακύρωση: {error_messages}'
             )
@@ -418,24 +467,46 @@ class MyDataService:
                 log.save()
             raise
 
+    def _mark_cancelled(self, invoice: Invoice, cancellation_mark):
+        """Δομημένη καταγραφή ακύρωσης + σημείωση για τον χρήστη."""
+        stamp = timezone.now().strftime('%d/%m/%Y %H:%M')
+        note = (
+            f'Ακυρώθηκε στο myDATA {stamp} '
+            f'(cancellationMark: {cancellation_mark or "—"})'
+        )
+        invoice.mydata_cancelled = True
+        invoice.mydata_cancellation_mark = cancellation_mark
+        invoice.mydata_cancelled_at = timezone.now()
+        invoice.notes = f'{invoice.notes}\n{note}'.strip()
+        invoice.save(update_fields=[
+            'mydata_cancelled', 'mydata_cancellation_mark', 'mydata_cancelled_at',
+            'notes', 'updated_at',
+        ])
+
     def _invoice_to_mydata_format(self, invoice: Invoice, issuer_vat: str) -> Dict:
         """
         Μετατροπή Invoice στο dict format του invoice_xml.build_invoices_doc.
+        Οι χαρακτηρισμοί εσόδων (incomeClassification) συμπληρώνονται με
+        defaults ανά τύπο παραστατικού μέσα στο invoice_xml.
         """
         return {
             'issuer_vat': issuer_vat,
             'counterpart_vat': invoice.counterpart_vat,
             'series': invoice.series,
-            'aa': invoice.number,
+            'aa': str(invoice.number).strip(),
             'issue_date': invoice.issue_date,
             'invoice_type': invoice.invoice_type,
             'currency': 'EUR',
+            'correlated_marks': (
+                [invoice.correlated_mark] if invoice.correlated_mark else []
+            ),
             'lines': [
                 {
                     'line_number': item.line_number,
                     'net_value': item.net_value,
                     'vat_category': item.vat_category,
                     'vat_amount': item.vat_amount,
+                    'vat_exemption_category': item.vat_exemption_category,
                 }
                 for item in invoice.items.all()
             ],

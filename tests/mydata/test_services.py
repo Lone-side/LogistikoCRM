@@ -97,7 +97,7 @@ class SubmitInvoiceTest(TestCase):
         self.assertFalse(self.invoice.mydata_sent)
         self.assertIsNone(self.invoice.mydata_mark)
 
-        log = MyDataSyncLog.objects.get(sync_type='PUSH_INVOICE')
+        log = MyDataSyncLog.objects.filter(sync_type='PUSH_INVOICE').latest('started_at')
         self.assertEqual(log.status, 'ERROR')
         self.assertIn('101', log.error_message)
 
@@ -127,6 +127,65 @@ class SubmitInvoiceTest(TestCase):
             self.service.submit_invoice(self.invoice)
         self.assertIn('MYDATA_ISSUER_VAT', str(ctx.exception))
         self.service.client.send_invoices.assert_not_called()
+
+    def test_number_must_be_positive_integer(self):
+        self.invoice.number = 'A15'
+        self.invoice.save()
+        with self.assertRaises(ValueError) as ctx:
+            self.service.submit_invoice(self.invoice)
+        self.assertIn('θετικός', str(ctx.exception))
+        self.service.client.send_invoices.assert_not_called()
+
+    def test_claim_released_after_rejection_allows_retry(self):
+        """Μετά από απόρριψη ΑΑΔΕ το claim αποδεσμεύεται — επιτρέπεται retry."""
+        self.service.client.send_invoices.return_value = ERROR_XML
+        with self.assertRaises(MyDataValidationError):
+            self.service.submit_invoice(self.invoice)
+
+        self.invoice.refresh_from_db()
+        self.assertFalse(self.invoice.mydata_sent)
+
+        # Δεύτερη προσπάθεια με σωστή απάντηση περνάει
+        self.service.client.send_invoices.return_value = SUCCESS_XML
+        result = self.service.submit_invoice(self.invoice)
+        self.assertTrue(result['success'])
+
+    def test_success_without_mark_treated_as_error(self):
+        no_mark = ('<ResponseDoc><response><index>1</index>'
+                   '<statusCode>Success</statusCode></response></ResponseDoc>')
+        self.service.client.send_invoices.return_value = no_mark
+        with self.assertRaises(MyDataValidationError):
+            self.service.submit_invoice(self.invoice)
+        self.invoice.refresh_from_db()
+        self.assertFalse(self.invoice.mydata_sent)
+
+    def test_garbage_response_raises_server_error(self):
+        from mydata.client import MyDataServerError
+        self.service.client.send_invoices.return_value = 'not xml'
+        with self.assertRaises(MyDataServerError):
+            self.service.submit_invoice(self.invoice)
+        # Το raw response σώζεται στο log για χειροκίνητο έλεγχο
+        log = MyDataSyncLog.objects.get(sync_type='PUSH_INVOICE')
+        self.assertEqual(log.status, 'ERROR')
+        self.assertIn('not xml', str(log.details))
+
+    def test_sent_xml_amounts_match_invoice(self):
+        """Τα ποσά στο XML που στέλνεται ταυτίζονται με το τιμολόγιο."""
+        import xml.etree.ElementTree as ET
+        self.service.client.send_invoices.return_value = SUCCESS_XML
+        self.service.submit_invoice(self.invoice)
+
+        sent_xml = self.service.client.send_invoices.call_args.args[0]
+        NS = {'m': 'http://www.aade.gr/myDATA/invoice/v1.0'}
+        root = ET.fromstring(sent_xml)
+        summary = root.find('m:invoice/m:invoiceSummary', NS)
+        self.assertEqual(summary.find('m:totalNetValue', NS).text, '100.00')
+        self.assertEqual(summary.find('m:totalVatAmount', NS).text, '24.00')
+        self.assertEqual(summary.find('m:totalGrossValue', NS).text, '124.00')
+        details = root.findall('m:invoice/m:invoiceDetails', NS)
+        self.assertEqual(len(details), 1)
+        self.assertEqual(details[0].find('m:netValue', NS).text, '100.00')
+        self.assertEqual(details[0].find('m:vatCategory', NS).text, '1')
 
     def test_client_exception_logged_as_error(self):
         from mydata.client import MyDataServerError
@@ -187,6 +246,27 @@ class CancelInvoiceTest(TestCase):
         with self.assertRaises(ValueError):
             self.service.cancel_invoice(self.invoice)
         self.service.client.cancel_invoice.assert_not_called()
+
+    def test_cancel_incoming_guard(self):
+        self.invoice.is_outgoing = False
+        self.invoice.save()
+        with self.assertRaises(ValueError):
+            self.service.cancel_invoice(self.invoice)
+        self.service.client.cancel_invoice.assert_not_called()
+
+    def test_double_cancel_guard(self):
+        self.service.client.cancel_invoice.return_value = CANCEL_XML
+        self.service.cancel_invoice(self.invoice)
+
+        self.invoice.refresh_from_db()
+        self.assertTrue(self.invoice.mydata_cancelled)
+        self.assertEqual(self.invoice.mydata_cancellation_mark, 400009999999999)
+        self.assertIsNotNone(self.invoice.mydata_cancelled_at)
+
+        with self.assertRaises(ValueError) as ctx:
+            self.service.cancel_invoice(self.invoice)
+        self.assertIn('ήδη ακυρωμένο', str(ctx.exception))
+        self.assertEqual(self.service.client.cancel_invoice.call_count, 1)
 
     def test_cancel_rejection_logs_error(self):
         self.service.client.cancel_invoice.return_value = ERROR_XML

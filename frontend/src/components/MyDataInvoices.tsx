@@ -185,7 +185,14 @@ export default function MyDataInvoices() {
                   <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(inv.total_vat)}</td>
                   <td className="px-4 py-3 text-right font-medium whitespace-nowrap">{formatCurrency(inv.total_gross)}</td>
                   <td className="px-4 py-3">
-                    {inv.mydata_sent ? (
+                    {inv.mydata_cancelled ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs"
+                        title={inv.mydata_cancellation_mark ? `cancellationMark ${inv.mydata_cancellation_mark}` : undefined}
+                      >
+                        <XCircle size={12} /> Ακυρωμένο
+                      </span>
+                    ) : inv.mydata_sent ? (
                       <span
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs"
                         title={inv.mydata_mark ? `MARK ${inv.mydata_mark}` : undefined}
@@ -199,7 +206,9 @@ export default function MyDataInvoices() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {inv.mydata_sent ? (
+                    {inv.mydata_cancelled ? (
+                      <span className="text-xs text-gray-400">—</span>
+                    ) : inv.mydata_sent ? (
                       <button
                         onClick={() => handleCancel(inv)}
                         disabled={busyId === inv.id}

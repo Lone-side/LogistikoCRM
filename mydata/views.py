@@ -960,16 +960,21 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
             for month in period.months_in_period:
                 # Sync μήνα μέσω του ίδιου command με το credentials.sync action
                 # (το παλιό `from .services import sync_vat_records_for_client`
-                # έκανε ImportError και το sync_first ήταν σιωπηλό no-op)
-                call_command(
-                    'mydata_sync_vat',
-                    '--client', period.client.afm,
-                    '--year', str(period.year),
-                    '--month', str(month),
-                    stdout=StringIO(),
-                )
-
-                # Track synced month
+                # έκανε ImportError και το sync_first ήταν σιωπηλό no-op).
+                # Per-month try: ο μήνας σημειώνεται synced ΜΟΝΟ σε επιτυχία.
+                try:
+                    call_command(
+                        'mydata_sync_vat',
+                        '--client', period.client.afm,
+                        '--year', str(period.year),
+                        '--month', str(month),
+                        stdout=StringIO(),
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Sync failed for {period.client.afm} {month}/{period.year}: {e}"
+                    )
+                    continue
                 if month not in period.months_synced:
                     period.months_synced.append(month)
 
@@ -1164,6 +1169,12 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_permissions(self):
+        # Υποβολή/ακύρωση φορολογικών παραστατικών στην ΑΑΔΕ: μόνο staff
+        if self.action in ('send', 'cancel'):
+            return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
+        return super().get_permissions()
+
     def get_queryset(self):
         from inventory.models import Invoice
         from .serializers import InvoiceListSerializer  # noqa: F401 (import check)
@@ -1193,7 +1204,7 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):
         """Αποστολή του τιμολογίου στο myDATA."""
-        from .client import MyDataAPIError
+        from .client import MyDataAPIError, MyDataValidationError
         from .services import MyDataService
 
         invoice = self.get_object()
@@ -1201,6 +1212,9 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
             result = MyDataService().submit_invoice(invoice)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except MyDataValidationError as e:
+            # Η ΑΑΔΕ απέρριψε το παραστατικό (business validation) — 422, όχι 502
+            return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         except MyDataAPIError as e:
             return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -1215,7 +1229,7 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """Ακύρωση του απεσταλμένου τιμολογίου στο myDATA."""
-        from .client import MyDataAPIError
+        from .client import MyDataAPIError, MyDataValidationError
         from .services import MyDataService
 
         invoice = self.get_object()
@@ -1223,6 +1237,8 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
             result = MyDataService().cancel_invoice(invoice)
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except MyDataValidationError as e:
+            return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
         except MyDataAPIError as e:
             return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 

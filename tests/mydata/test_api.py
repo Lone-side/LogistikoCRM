@@ -31,7 +31,10 @@ SUCCESS_XML = (
 )
 class InvoiceAPITest(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user('staff1', 's@test.com', 'pass12345')
+        # Send/cancel απαιτούν staff (υποβολή φορολογικών παραστατικών)
+        self.user = User.objects.create_user(
+            'staff1', 's@test.com', 'pass12345', is_staff=True
+        )
         self.client.force_login(self.user)
 
         self.client_profile = ClientProfile.objects.create(
@@ -82,10 +85,49 @@ class InvoiceAPITest(TestCase):
         Invoice.objects.filter(pk=self.invoice.pk).update(
             mydata_sent=True, mydata_mark=400000000000001
         )
+        unsent = Invoice.objects.create(
+            series='Α', number='102', invoice_type='2.1',
+            issue_date=date(2026, 7, 31),
+            counterpart=self.client_profile,
+            counterpart_vat='123456783',
+            counterpart_name='ΠΕΛΑΤΗΣ ΑΕ',
+            is_outgoing=True,
+        )
         resp = self.client.get(BASE, {'mydata_sent': 'false'})
         data = resp.json()
         results = data['results'] if isinstance(data, dict) else data
-        self.assertEqual(len(results), 0)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['id'], unsent.pk)
+        self.assertFalse(results[0]['mydata_sent'])
+
+        resp = self.client.get(BASE, {'mydata_sent': 'true'})
+        data = resp.json()
+        results = data['results'] if isinstance(data, dict) else data
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]['id'], self.invoice.pk)
+
+    def test_send_requires_staff(self):
+        plain = User.objects.create_user('plain', 'p@test.com', 'pass12345')
+        self.client.force_login(plain)
+        with patch('mydata.services.MyDataClient'):
+            resp = self.client.post(f'{BASE}{self.invoice.pk}/send/')
+        self.assertEqual(resp.status_code, 403)
+        # Το list παραμένει διαθέσιμο σε authenticated χρήστες
+        resp = self.client.get(BASE)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_aade_rejection_returns_422(self):
+        error_xml = (
+            '<ResponseDoc><response><index>1</index>'
+            '<statusCode>ValidationError</statusCode>'
+            '<errors><error><message>Λάθος ΑΦΜ</message><code>101</code></error></errors>'
+            '</response></ResponseDoc>'
+        )
+        with patch('mydata.services.MyDataClient') as MockClient:
+            MockClient.return_value.send_invoices.return_value = error_xml
+            resp = self.client.post(f'{BASE}{self.invoice.pk}/send/')
+        self.assertEqual(resp.status_code, 422)
+        self.assertIn('Λάθος ΑΦΜ', resp.json()['error'])
 
     def test_send_endpoint_success(self):
         with patch('mydata.services.MyDataClient') as MockClient:

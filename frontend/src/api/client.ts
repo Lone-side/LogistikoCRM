@@ -561,6 +561,9 @@ export interface MyDataInvoice {
   mydata_uid: string;
   mydata_sent: boolean;
   mydata_sent_at: string | null;
+  mydata_cancelled: boolean;
+  mydata_cancellation_mark: number | null;
+  correlated_mark: number | null;
   notes: string;
   items: MyDataInvoiceItem[];
 }
