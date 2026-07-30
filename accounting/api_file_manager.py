@@ -54,6 +54,7 @@ from django_filters.rest_framework import DjangoFilterBackend, FilterSet, Number
 from django.db.models import Q, Count, Sum
 from django.db.models.functions import TruncMonth
 from django.http import FileResponse, Http404
+from common.utils.media_tokens import signed_media_url
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import timedelta
@@ -199,10 +200,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
-            return obj.file.url
+            return signed_media_url(obj.file, self.context.get('request'))
         return None
 
     def get_obligation_period(self, obj):
@@ -248,10 +246,7 @@ class DocumentListSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
-            return obj.file.url
+            return signed_media_url(obj.file, self.context.get('request'))
         return None
 
     def get_tags(self, obj):
@@ -481,7 +476,7 @@ class DocumentViewSet(viewsets.ModelViewSet):
             'file_type': doc.file_type,
             'preview_type': preview_type,
             'can_preview': preview_type != 'unknown',
-            'url': request.build_absolute_uri(doc.file.url) if doc.file else None,
+            'url': signed_media_url(doc.file, request) if doc.file else None,
             'file_size': doc.file_size,
             'file_size_display': doc.file_size_display,
             'uploaded_at': doc.uploaded_at,
@@ -801,7 +796,7 @@ class PublicSharedLinkView(APIView):
                     'filename': doc.filename,
                     'file_type': doc.file_type,
                     'file_size_display': doc.file_size_display,
-                    'preview_url': request.build_absolute_uri(doc.file.url) if doc.file else None,
+                    'preview_url': signed_media_url(doc.file, request) if doc.file else None,
                     'can_download': shared_link.access_level == 'download'
                 },
                 **common,

@@ -41,13 +41,14 @@
 - [x] Αναζήτηση στο περιεχόμενο εγγράφων (extracted_text)
 - [ ] Full-text search με PostgreSQL SearchVector (προαιρετικό, σε παραγωγή)
 
-### Φάση 5: Έτοιμο για Παραγωγή (σε εξέλιξη)
-- [x] Docker configuration (Dockerfile + docker-compose με db/redis/web/celery/beat)
+### Φάση 5: Έτοιμο για Παραγωγή ✅
+- [x] Docker configuration (multi-stage Dockerfile + docker-compose.prod.yml)
 - [x] Redis/Celery configuration (beat: reminders, summary, backup, yearly folders)
 - [x] Health checks (/api/health/, /detailed, /ready, /live)
-- [x] Αυτόματο backup βάσης (Celery beat 02:00 + manage.py backup_database)
-- [ ] PostgreSQL setup σε παραγωγή
-- [ ] Nginx configuration + build του React frontend στο Dockerfile
+- [x] Αυτόματο backup βάσης (Celery beat 02:00, SQLite copy ή pg_dump)
+- [x] PostgreSQL setup σε παραγωγή (docker-compose.prod.yml + pg_dump backup)
+- [x] Nginx configuration + React build στο Dockerfile (nginx/nginx.conf, stage `nginx`)
+- [x] Protected media: signed URLs + X-Accel-Redirect (common/views/protected_media.py)
 
 ### Επόμενα (backlog με σειρά αξίας)
 1. **Portal πελάτη με upload** — ο πελάτης ανεβάζει έγγραφα μόνος του μέσω SharedLink (+ document requests με tracking)

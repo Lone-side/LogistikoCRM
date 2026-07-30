@@ -15,6 +15,7 @@ from django_filters.rest_framework import DjangoFilterBackend, FilterSet, Number
 from django.db.models import Q
 import os
 
+from common.utils.media_tokens import signed_media_url
 from .models import ClientDocument, ClientProfile, MonthlyObligation
 
 
@@ -94,10 +95,7 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj):
         if obj.file:
-            request = self.context.get('request')
-            if request:
-                return request.build_absolute_uri(obj.file.url)
-            return obj.file.url
+            return signed_media_url(obj.file, self.context.get('request'))
         return None
 
     def get_file_size(self, obj):

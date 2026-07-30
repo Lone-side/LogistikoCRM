@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 
+from common.utils.media_tokens import signed_media_url
 from .models import (
     ClientDocument, ClientProfile, MonthlyObligation, get_client_folder
 )
@@ -87,7 +88,7 @@ def check_existing_document(request):
                     'category': existing.document_category,
                     'uploaded_at': existing.uploaded_at.strftime('%d/%m/%Y %H:%M'),
                     'uploaded_by': existing.uploaded_by.get_full_name() if existing.uploaded_by else None,
-                    'url': existing.file.url if existing.file else None,
+                    'url': signed_media_url(existing.file) if existing.file else None,
                 }
             })
         else:
@@ -269,7 +270,7 @@ def document_preview(request, document_id):
         'file_type': document.file_type,
         'preview_type': preview_type,
         'can_preview': can_preview,
-        'url': document.file.url if document.file else None,
+        'url': signed_media_url(document.file) if document.file else None,
         'file_size': document.file_size,
         'file_size_display': document.file_size_display,
         'uploaded_at': document.uploaded_at.strftime('%d/%m/%Y %H:%M'),
@@ -296,7 +297,7 @@ def _document_to_dict(doc):
         'month': doc.month,
         'version': doc.version,
         'is_current': doc.is_current,
-        'url': doc.file.url if doc.file else None,
+        'url': signed_media_url(doc.file) if doc.file else None,
         'folder_path': doc.folder_path,
         'uploaded_at': doc.uploaded_at.strftime('%d/%m/%Y %H:%M'),
         'uploaded_by': doc.uploaded_by.get_full_name() if doc.uploaded_by else None,
