@@ -1099,22 +1099,20 @@ class PublicSharedLinkUploadView(APIView):
 
         doc_ids = [d.pk for d in documents]
 
-        # Sync fallback χωρίς broker (runserver/tests) — ίδιο pattern με το OCR
+        # Σε sync mode (tests/runserver χωρίς worker) το task τρέχει inline —
+        # ΟΧΙ μέσω delay: με broker παρόντα αλλά χωρίς worker το delay
+        # «πετυχαίνει» σιωπηλά και το email δεν φεύγει ποτέ
         sync_mode = getattr(dj_settings, 'PORTAL_EMAIL_SYNC', dj_settings.DEBUG)
 
         def _send():
             from .tasks import notify_portal_upload
             try:
-                notify_portal_upload.delay(shared_link.pk, doc_ids)
-            except Exception:
                 if sync_mode:
-                    try:
-                        notify_portal_upload(shared_link.pk, doc_ids)
-                    except Exception:
-                        logger.warning('notify_portal_upload sync fallback failed',
-                                       exc_info=True)
+                    notify_portal_upload(shared_link.pk, doc_ids)
                 else:
-                    logger.warning('notify_portal_upload dispatch failed', exc_info=True)
+                    notify_portal_upload.delay(shared_link.pk, doc_ids)
+            except Exception:
+                logger.warning('notify_portal_upload dispatch failed', exc_info=True)
 
         transaction.on_commit(_send)
 

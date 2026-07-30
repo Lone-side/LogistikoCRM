@@ -214,19 +214,17 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
         from django.conf import settings as dj_settings
         from .tasks import send_document_request_email
 
+        # Sync mode πρώτο — με broker χωρίς worker το delay δεν σκάει ποτέ
         sync_mode = getattr(dj_settings, 'PORTAL_EMAIL_SYNC', dj_settings.DEBUG)
 
         def _send():
             try:
-                send_document_request_email.delay(request_id)
-            except Exception:
                 if sync_mode:
-                    try:
-                        send_document_request_email(request_id)
-                    except Exception:
-                        logger.warning('Initial request email failed', exc_info=True)
+                    send_document_request_email(request_id)
                 else:
-                    logger.warning('Initial request email dispatch failed', exc_info=True)
+                    send_document_request_email.delay(request_id)
+            except Exception:
+                logger.warning('Initial request email dispatch failed', exc_info=True)
 
         transaction.on_commit(_send)
 
