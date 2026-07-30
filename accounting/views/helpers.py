@@ -78,21 +78,29 @@ def _build_filtered_query(filter_params, client_id, type_id, now):
 
 
 def _calculate_monthly_stats(obligations, now):
-    """Calculate monthly statistics for obligations"""
+    """
+    Στατιστικά ανά μήνα για τους τελευταίους 6 μήνες.
+
+    Σωστή αριθμητική μηνών: το παλιό timedelta(days=30*i) «γλιστρούσε»
+    (π.χ. από 1η Μαρτίου παρέλειπε εντελώς τον Φεβρουάριο).
+    """
+    greek_months = ['Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος',
+                    'Μάιος', 'Ιούνιος', 'Ιούλιος', 'Αύγουστος',
+                    'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος']
     stats = []
-    for i in range(6):
-        month_date = now.date().replace(day=1) - timedelta(days=30*i)
-        month_obligations = obligations.filter(
-            year=month_date.year,
-            month=month_date.month
-        )
+    year, month = now.year, now.month
+    for _ in range(6):
+        month_obligations = obligations.filter(year=year, month=month)
         stats.append({
-            'month': month_date.strftime('%B %Y'),
+            'month': f"{greek_months[month - 1]} {year}",
             'total': month_obligations.count(),
             'completed': month_obligations.filter(status='completed').count(),
             'pending': month_obligations.filter(status='pending').count(),
             'overdue': month_obligations.filter(status='overdue').count(),
         })
+        month -= 1
+        if month == 0:
+            month, year = 12, year - 1
     return stats
 
 
