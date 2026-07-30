@@ -4,11 +4,15 @@ accounting/permissions.py
 Author: ddiplas
 Description: Custom permissions for VoIP and internal services
 """
+import hmac
 import logging
 from rest_framework.permissions import BasePermission
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# Το default του settings.py — δεν γίνεται ποτέ δεκτό ως έγκυρο credential
+INSECURE_DEFAULT_TOKEN = 'change-this-token-in-production'
 
 
 class IsVoIPMonitor(BasePermission):
@@ -23,8 +27,8 @@ class IsVoIPMonitor(BasePermission):
     """
 
     def has_permission(self, request, view):
-        # Get API key from header or query parameter
-        api_key = request.headers.get('X-API-Key') or request.GET.get('api_key')
+        # Μόνο header — token σε query string καταλήγει σε access logs/Referer
+        api_key = request.headers.get('X-API-Key')
 
         if not api_key:
             logger.info(f"IsVoIPMonitor: No X-API-Key header (IP: {self._get_client_ip(request)})")
@@ -33,12 +37,13 @@ class IsVoIPMonitor(BasePermission):
         # Get expected token from settings
         expected_token = getattr(settings, 'FRITZ_API_TOKEN', None)
 
-        if not expected_token:
-            logger.warning("IsVoIPMonitor: FRITZ_API_TOKEN not configured in settings!")
+        if not expected_token or expected_token == INSECURE_DEFAULT_TOKEN:
+            logger.warning("IsVoIPMonitor: FRITZ_API_TOKEN not configured (or left at "
+                           "the insecure default) — denying all requests")
             return False
 
         # Secure comparison to prevent timing attacks
-        if api_key == expected_token:
+        if hmac.compare_digest(api_key, expected_token):
             logger.info(f"IsVoIPMonitor: ✅ GRANTED - Valid API key (IP: {self._get_client_ip(request)})")
             return True
         else:

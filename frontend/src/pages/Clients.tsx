@@ -117,6 +117,19 @@ export default function Clients() {
         setSelectedClient(null);
         // invalidateQueries in hook triggers automatic refetch
       },
+      onError: (error: unknown) => {
+        setIsDeleteDialogOpen(false);
+        setSelectedClient(null);
+        const status =
+          error && typeof error === 'object' && 'response' in error
+            ? (error as { response?: { status?: number } }).response?.status
+            : undefined;
+        alert(
+          status === 403
+            ? 'Η διαγραφή πελάτη επιτρέπεται μόνο σε διαχειριστές.'
+            : 'Η διαγραφή απέτυχε. Δοκιμάστε ξανά.'
+        );
+      },
     });
   };
 

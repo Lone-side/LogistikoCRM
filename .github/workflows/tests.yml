@@ -38,6 +38,7 @@ jobs:
     env:
       DEBUG: 'False'
       SECRET_KEY: 'test-secret-key-for-ci-only'
+      FRITZ_API_TOKEN: 'test-fritz-token-for-ci-only'
       DB_ENGINE: 'django.db.backends.postgresql'
       DB_NAME: 'test_db'
       DB_USER: 'test_user'

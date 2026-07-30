@@ -460,6 +460,7 @@ REST_FRAMEWORK = {
         'anon': '100/hour',       # Anonymous users: 100 requests/hour
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
+        'shared_link_auth': '10/hour',    # Δοκιμές κωδικού σε προστατευμένα links (ανά IP)
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
@@ -721,14 +722,25 @@ CACHE_TTL_LONG = 60 * 60 * 24  # 24 hours - for rarely changing data
 # ==============================================================================
 # These settings are automatically applied when DEBUG=False
 if not DEBUG:
-    # Require proper SECRET_KEY in production
-    if SECRET_KEY == 'default-key-for-development':
-        import warnings
-        warnings.warn(
-            'WARNING: Using default SECRET_KEY in production! '
-            'Set SECRET_KEY environment variable.',
-            RuntimeWarning
-        )
+    # Σε πραγματική παραγωγή (όχι test runs) τα default secrets είναι fatal:
+    # το SECRET_KEY προστατεύει sessions/CSRF ΚΑΙ την κρυπτογράφηση των
+    # myDATA credentials (Fernet key από SHA-256(SECRET_KEY)), και το
+    # FRITZ_API_TOKEN είναι το μοναδικό credential του Fritz webhook.
+    import sys
+    _RUNNING_TESTS = 'test' in sys.argv or 'pytest' in sys.modules
+    if not _RUNNING_TESTS:
+        from django.core.exceptions import ImproperlyConfigured
+        if SECRET_KEY == 'default-key-for-development':
+            raise ImproperlyConfigured(
+                'Refusing to start with the default SECRET_KEY and DEBUG=False. '
+                'Set the SECRET_KEY environment variable.'
+            )
+        if FRITZ_API_TOKEN == 'change-this-token-in-production':
+            raise ImproperlyConfigured(
+                'Refusing to start with the default FRITZ_API_TOKEN and DEBUG=False. '
+                'Set the FRITZ_API_TOKEN environment variable to a long random value '
+                '(e.g. `openssl rand -hex 32`), even if the Fritz monitor is unused.'
+            )
 
     # HSTS (HTTP Strict Transport Security)
     SECURE_HSTS_SECONDS = 31536000  # 1 year

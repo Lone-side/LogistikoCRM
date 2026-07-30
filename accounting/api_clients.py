@@ -8,7 +8,7 @@ Description: REST API ViewSet for ClientProfile management
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter, BooleanFilter
 from django.db.models import Count, Q
@@ -228,6 +228,12 @@ class ClientViewSet(viewsets.ModelViewSet):
     queryset = ClientProfile.objects.all()
     permission_classes = [IsAuthenticated]
     pagination_class = ClientPagination
+
+    def get_permissions(self):
+        # Διαγραφή πελάτη (και όλου του ιστορικού του) μόνο από admins
+        if self.action == 'destroy':
+            return [IsAuthenticated(), IsAdminUser()]
+        return super().get_permissions()
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ClientFilter
     ordering_fields = ['eponimia', 'afm', 'created_at']

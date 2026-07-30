@@ -11,6 +11,8 @@ This module contains all VoIP-related views including:
 Author: ddiplas
 """
 
+import hmac
+
 from django.shortcuts import render
 from django.contrib.admin.views.decorators import staff_member_required
 from django.utils import timezone
@@ -33,7 +35,7 @@ import logging
 import json
 import csv
 
-from ..permissions import IsVoIPMonitor, IsLocalRequest
+from ..permissions import INSECURE_DEFAULT_TOKEN, IsVoIPMonitor, IsLocalRequest
 from ..models import (
     ClientProfile, VoIPCall, VoIPCallLog, Ticket
 )
@@ -106,11 +108,11 @@ def fritz_webhook(request):
     auth_header = request.headers.get('Authorization', '')
     expected_token = getattr(settings, 'FRITZ_API_TOKEN', '')
 
-    if not expected_token:
-        logger.error("FRITZ_API_TOKEN not configured in settings")
+    if not expected_token or expected_token == INSECURE_DEFAULT_TOKEN:
+        logger.error("FRITZ_API_TOKEN not configured (or left at insecure default)")
         return JsonResponse({'error': 'Server misconfigured'}, status=500)
 
-    if auth_header != f'Bearer {expected_token}':
+    if not hmac.compare_digest(auth_header, f'Bearer {expected_token}'):
         logger.warning(f"Fritz webhook: Invalid token attempt")
         return JsonResponse({'error': 'Unauthorized'}, status=401)
 
