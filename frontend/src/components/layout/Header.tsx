@@ -2,13 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Menu,
+  Moon,
   Search,
+  Sun,
   User,
   LogOut,
   Settings,
   ChevronDown,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useTheme } from '../../hooks/useTheme';
 import DoorButton from '../DoorButton';
 import NotificationDropdown from '../NotificationDropdown';
 
@@ -22,6 +25,7 @@ export default function Header({ onMenuClick, onSearchClick }: HeaderProps) {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { isDark, toggle: toggleTheme } = useTheme();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -73,6 +77,20 @@ export default function Header({ onMenuClick, onSearchClick }: HeaderProps) {
 
         {/* Right side */}
         <div className="flex items-center gap-3">
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors duration-150 cursor-pointer"
+            aria-label="Εναλλαγή θέματος"
+            title="Εναλλαγή θέματος"
+          >
+            {isDark ? (
+              <Sun size={20} className="text-slate-600" />
+            ) : (
+              <Moon size={20} className="text-slate-600" />
+            )}
+          </button>
+
           {/* Door Control Button */}
           <DoorButton />
 

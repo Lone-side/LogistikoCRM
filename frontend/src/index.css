@@ -80,6 +80,91 @@
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-border: #e2e8f0;
+  --chart-tooltip-text: #0f172a;
+  --chart-axis: #64748b;
+}
+
+/*
+ * Dark mode: στο Tailwind v4 κάθε utility διαβάζει CSS variable,
+ * οπότε η αντιστροφή της παλέτας εδώ «γυρίζει» όλη την εφαρμογή
+ * χωρίς dark: variants στα components. Τα slate-950/brand-950
+ * μένουν επίτηδες ίδια (Sidebar/Login panel — σκούρα και στα δύο θέματα).
+ */
+.dark {
+  color-scheme: dark;
+
+  --color-white: #1e293b; /* κάρτες/επιφάνειες */
+  --color-black: #f8fafc;
+
+  --color-slate-50: #263349; /* table headers, hovers */
+  --color-slate-100: #0b1220; /* φόντο σελίδας, chips */
+  --color-slate-200: #334155; /* borders */
+  --color-slate-300: #475569; /* input borders */
+  --color-slate-400: #7c8ba3;
+  --color-slate-500: #9daebf;
+  --color-slate-600: #c3cede;
+  --color-slate-700: #dbe3ee;
+  --color-slate-800: #ecf1f7;
+  --color-slate-900: #f6f8fb;
+
+  /* Ό,τι δεν πέρασε ακόμα από το sweep (modals, skeletons) ακολουθεί κι αυτό */
+  --color-gray-50: #263349;
+  --color-gray-100: #0b1220;
+  --color-gray-200: #334155;
+  --color-gray-300: #475569;
+  --color-gray-400: #7c8ba3;
+  --color-gray-500: #9daebf;
+  --color-gray-600: #c3cede;
+  --color-gray-700: #dbe3ee;
+  --color-gray-800: #ecf1f7;
+  --color-gray-900: #f6f8fb;
+
+  --color-brand-50: #16233f; /* tints φόντου */
+  --color-brand-100: #1c2f55;
+  --color-brand-200: #24406e;
+  --color-brand-700: #57a2f4; /* κείμενο/accents πάνω σε σκούρο */
+  --color-brand-800: #93c5fd;
+
+  --color-success-50: #0f2a1c;
+  --color-success-100: #14532d;
+  --color-success-600: #34d399;
+  --color-success-700: #6ee7b7;
+  --color-warning-50: #2e2410;
+  --color-warning-100: #453314;
+  --color-warning-600: #fbbf24;
+  --color-warning-700: #fcd34d;
+  --color-danger-50: #331518;
+  --color-danger-100: #4c1d24;
+  --color-danger-600: #f87171;
+  --color-danger-700: #fca5a5;
+
+  --color-surface: #1e293b;
+  --color-surface-muted: #0f172a;
+  --color-surface-sunken: #0b1220;
+
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-card-hover: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+
+  --chart-tooltip-bg: #1e293b;
+  --chart-tooltip-border: #334155;
+  --chart-tooltip-text: #f6f8fb;
+  --chart-axis: #9daebf;
+}
+.dark ::selection {
+  background-color: #1c2f55;
+  color: #dbeafe;
+}
+.dark * {
+  scrollbar-color: #475569 transparent;
+}
+.dark *::-webkit-scrollbar-thumb {
+  background-color: #475569;
+}
+.dark *::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
 }
 
 /* Ποσά, ΑΦΜ, ημερομηνίες: ευθυγραμμισμένα ψηφία παντού */
@@ -129,7 +214,7 @@ table tbody tr {
   transition: background-color 120ms ease;
 }
 table tbody tr:hover {
-  background-color: #f8fafc;
+  background-color: var(--color-slate-50, #f8fafc);
 }
 
 /* Bento entrance: διακριτικό fade+rise, stagger με --rise-delay ανά tile */

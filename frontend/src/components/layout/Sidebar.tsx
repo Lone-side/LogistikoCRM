@@ -78,7 +78,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside
         className={`
           fixed top-0 left-0 z-40 h-full flex flex-col
-          bg-gradient-to-b from-slate-950 to-brand-950 text-slate-300
+          bg-gradient-to-b from-[#020617] to-[#0c4a6e] text-[#cbd5e1]
           transform transition-all duration-300 ease-in-out
           lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -152,7 +152,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                     `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                       isActive
                         ? 'bg-white/10 text-white shadow-lg shadow-brand-500/20'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
+                        : 'text-[#94a3b8] hover:bg-white/5 hover:text-[#f1f5f9]'
                     } ${isCollapsed ? 'justify-center' : ''}`
                   }
                   end={item.to === '/'}
@@ -163,7 +163,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                       {isActive && (
                         <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-brand-500 rounded-r-full" />
                       )}
-                      <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                      <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-[#cbd5e1]'}`}>
                         {item.icon}
                       </span>
                       {!isCollapsed && <span className="truncate">{item.label}</span>}

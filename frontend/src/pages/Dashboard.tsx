@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useDashboardStats, useDashboardRecentActivity, useDashboardCalendar } from '../hooks/useDashboard';
 import {
@@ -31,12 +31,14 @@ const CHART_STATUS_COLORS: Record<string, string> = {
 // Κοινό στυλ tooltip για όλα τα charts
 const TOOLTIP_STYLE = {
   borderRadius: '0.75rem',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--chart-tooltip-border)',
+  backgroundColor: 'var(--chart-tooltip-bg)',
+  color: 'var(--chart-tooltip-text)',
   boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
   fontSize: '13px',
   padding: '8px 12px',
 };
-const AXIS_TICK = { fontSize: 12, fill: '#64748b' };
+const AXIS_TICK = { fontSize: 12, fill: 'var(--chart-axis)' };
 // Σταθερή σειρά ώστε τα χρώματα να μην «κυκλώνουν» ανάλογα με τα δεδομένα
 const CHART_STATUS_ORDER = ['completed', 'in_progress', 'pending', 'overdue', 'cancelled'];
 
@@ -44,6 +46,32 @@ const CHART_STATUS_ORDER = ['completed', 'in_progress', 'pending', 'overdue', 'c
 const BENTO_CARD = 'bg-white rounded-xl border border-slate-200 shadow-sm';
 // Καθυστέρηση εισόδου ανά tile (staggered entrance)
 const rise = (i: number): CSSProperties => ({ '--rise-delay': `${i * 50}ms` } as CSSProperties);
+
+// Count-up στο hero νούμερο — σέβεται το prefers-reduced-motion
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(value);
+  const frameRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value);
+      return;
+    }
+    const duration = 600;
+    const start = performance.now();
+    const from = 0;
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (value - from) * eased));
+      if (t < 1) frameRef.current = requestAnimationFrame(step);
+    };
+    frameRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [value]);
+
+  return <>{display}</>;
+}
 
 export default function Dashboard() {
   const { data: stats, isLoading, isError, error, refetch } = useDashboardStats();
@@ -169,8 +197,12 @@ export default function Dashboard() {
           <div className="relative flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-semibold text-brand-700 uppercase tracking-wide">Εκκρεμείς</p>
-              <p className="text-6xl lg:text-7xl font-bold text-brand-950 mt-2 tabular-nums leading-none">
-                {renderStatValue(stats?.total_obligations_pending)}
+              <p className="text-6xl lg:text-7xl font-bold text-slate-900 mt-2 tabular-nums leading-none">
+                {typeof stats?.total_obligations_pending === 'number' ? (
+                  <AnimatedNumber value={stats.total_obligations_pending} />
+                ) : (
+                  renderStatValue(stats?.total_obligations_pending)
+                )}
               </p>
               <p className="text-sm text-slate-500 mt-3">Υποχρεώσεις σε εκκρεμότητα αυτόν τον μήνα</p>
             </div>
@@ -627,7 +659,7 @@ export default function Dashboard() {
             >
               <div className="flex items-center">
                 <Users className="w-5 h-5 text-brand-600 mr-3" />
-                <span className="text-brand-950 font-medium">Διαχείριση Πελατών</span>
+                <span className="text-slate-900 font-medium">Διαχείριση Πελατών</span>
               </div>
               <ArrowRight className="w-5 h-5 text-brand-600 group-hover:translate-x-1 transition-transform" />
             </Link>
