@@ -139,6 +139,12 @@ class ScheduledEmailAdmin(admin.ModelAdmin):
 
     actions = ['send_now', 'cancel_emails']
 
+    def get_queryset(self, request):
+        from django.db.models import Count
+        return super().get_queryset(request).annotate(
+            _obligations_count=Count('obligations')
+        )
+
     def get_form(self, request, obj=None, **kwargs):
         """Override to use textarea widget for recipient_email field"""
         form = super().get_form(request, obj, **kwargs)
@@ -195,13 +201,12 @@ class ScheduledEmailAdmin(admin.ModelAdmin):
     subject_preview.short_description = 'Θέμα'
 
     def obligations_count(self, obj):
-        count = obj.obligations.count()
-        attachments = obj.get_attachments()
-        return format_html(
-            '{} υποχρεώσεις<br><small>📎 {} αρχεία</small>',
-            count,
-            len(attachments)
-        )
+        # Χωρίς get_attachments() εδώ: έκανε 1+ queries + filesystem I/O
+        # ανά γραμμή του changelist
+        count = getattr(obj, '_obligations_count', None)
+        if count is None:
+            count = obj.obligations.count()
+        return format_html('{} υποχρεώσεις', count)
     obligations_count.short_description = 'Περιεχόμενο'
 
     def actions_column(self, obj):
@@ -254,6 +259,8 @@ class ScheduledEmailAdmin(admin.ModelAdmin):
 
 @admin.register(EmailLog)
 class EmailLogAdmin(admin.ModelAdmin):
+    list_select_related = ('client', 'template_used', 'sent_by')
+
     """Admin for viewing sent email history"""
     list_display = [
         'sent_at_formatted',

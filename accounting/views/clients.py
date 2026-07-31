@@ -100,7 +100,10 @@ class ClientDocumentViewSet(viewsets.ModelViewSet):
     serializer_class = ClientDocumentSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        # Ο serializer διαβάζει client/obligation/uploaded_by ανά έγγραφο
+        queryset = super().get_queryset().select_related(
+            'client', 'obligation', 'obligation__obligation_type', 'uploaded_by'
+        )
         client_id = self.request.query_params.get('client')
         if client_id:
             queryset = queryset.filter(client_id=client_id)

@@ -37,7 +37,11 @@ class ClientSerializer(serializers.ModelSerializer):
         ]
 
     def get_total_obligations(self, obj):
-        return obj.monthlyobligation_set.count()
+        # Προτίμησε annotation από το view (αποφυγή N+1 σε λίστες)
+        annotated = getattr(obj, '_obligations_count', None)
+        if annotated is not None:
+            return annotated
+        return obj.monthly_obligations.count()
 
 
 # ============================================

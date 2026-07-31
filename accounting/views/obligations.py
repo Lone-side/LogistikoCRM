@@ -756,12 +756,16 @@ def api_obligations_wizard(request):
             9: 'Septemvrios', 10: 'Oktovrios', 11: 'Noemvrios', 12: 'Dekemvrios'
         }
 
+        # Ένα batch query για τα έγγραφα όλων των υποχρεώσεων (όχι 1/υποχρέωση)
+        docs_by_obligation = {}
+        for doc in ClientDocument.objects.filter(
+            obligation_id__in=[ob.id for ob in obligations]
+        ).values('id', 'filename', 'uploaded_at', 'obligation_id'):
+            docs_by_obligation.setdefault(doc.pop('obligation_id'), []).append(doc)
+
         obligations_data = []
         for ob in obligations:
-            # Get existing documents for this obligation
-            existing_docs = ClientDocument.objects.filter(
-                obligation=ob
-            ).values('id', 'filename', 'uploaded_at')
+            existing_docs = docs_by_obligation.get(ob.id, [])
 
             obligations_data.append({
                 'id': ob.id,
