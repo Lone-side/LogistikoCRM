@@ -215,6 +215,10 @@ def dashboard_calendar(request):
     if month < 1 or month > 12:
         month = today.month
 
+    # Validate year (clamp όπως ο μήνας)
+    if year < 1900 or year > 2100:
+        year = today.year
+
     # Get first and last day of month
     first_day = datetime(year, month, 1).date()
     last_day_num = monthrange(year, month)[1]

@@ -5,6 +5,7 @@ Author: Claude
 Description: REST API views for Reports statistics
 """
 
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -573,11 +574,23 @@ def vat_summary(request):
 
     # Parse parameters
     current_date = timezone.now()
-    year = int(request.query_params.get('year', current_date.year))
     period_type = request.query_params.get('period_type', 'month')
     period = request.query_params.get('period')
     client_id = request.query_params.get('client_id')
     export_format = request.query_params.get('format', 'json')
+
+    try:
+        year = int(request.query_params.get('year', current_date.year))
+    except (ValueError, TypeError):
+        return Response(
+            {'error': 'Μη έγκυρο έτος.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    if year < 2000 or year > 2100:
+        return Response(
+            {'error': 'Το έτος πρέπει να είναι από 2000 έως 2100.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     # Default period to current month/quarter
     if period is None:
@@ -585,7 +598,19 @@ def vat_summary(request):
             period = (current_date.month - 1) // 3 + 1
         else:
             period = current_date.month
-    period = int(period)
+    try:
+        period = int(period)
+    except (ValueError, TypeError):
+        return Response(
+            {'error': 'Μη έγκυρη περίοδος.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    max_period = 4 if period_type == 'quarter' else 12
+    if period < 1 or period > max_period:
+        return Response(
+            {'error': f'Η περίοδος πρέπει να είναι από 1 έως {max_period}.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     # Determine months to include
     if period_type == 'quarter':

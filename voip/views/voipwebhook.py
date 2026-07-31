@@ -1,3 +1,4 @@
+import binascii
 import hmac
 import requests
 from hashlib import sha1
@@ -42,22 +43,25 @@ class VoIPWebHook(View):
         if event == 'NOTIFY_OUT_END':
             # the phone number that was called
             init_str = _('An outgoing call to')
-            phone = request.POST.get('destination')
-            internal = request.POST.get('internal')
-            call_start = request.POST.get('call_start')
+            phone = request.POST.get('destination', '')
+            internal = request.POST.get('internal', '')
+            call_start = request.POST.get('call_start', '')
             data = internal + phone + call_start
             
         # the end of an incoming call to the PBX extension number    
         elif event == 'NOTIFY_END':
             # the caller's phone number
             init_str = _('An incoming call from')
-            phone = request.POST.get('caller_id')
-            called_did = request.POST.get('called_did')
-            call_start = request.POST.get('call_start')
-            data = phone + called_did + call_start            
+            phone = request.POST.get('caller_id', '')
+            called_did = request.POST.get('called_did', '')
+            call_start = request.POST.get('call_start', '')
+            data = phone + called_did + call_start
             
         if is_authenticated(request, data):
-            duration = round(int(request.POST.get('duration'))/60, 1)
+            try:
+                duration = round(int(request.POST.get('duration', 0)) / 60, 1)
+            except (TypeError, ValueError):
+                duration = 0
             # if phone:
             contact, lead, deal, e = find_objects_by_phone(phone)
             if not e:
@@ -100,7 +104,12 @@ def is_authenticated(request: HttpRequest, data: str) -> bool:
         sha1
     )     
     bts = bytes(hmac_h.hexdigest(), 'utf8')
-    return True if b64decode(signature) == bts else False
+    if not signature:
+        return False
+    try:
+        return b64decode(signature) == bts
+    except (ValueError, binascii.Error):
+        return False
 
 
 def find_objects_by_phone(phone: str) -> \

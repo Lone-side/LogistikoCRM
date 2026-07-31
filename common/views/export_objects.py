@@ -2,7 +2,9 @@ import pandas as pd
 from pathlib import Path
 from typing import Union
 from django.http import HttpResponse
+from django.http import HttpResponseBadRequest
 from django.http import HttpResponseNotFound
+from django.shortcuts import get_object_or_404
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.handlers.wsgi import WSGIRequest
@@ -44,7 +46,11 @@ def get_columns_data() -> dict:
 
 def export_objects_view(request: WSGIRequest) -> Union[HttpResponse, HttpResponseNotFound]:
     content_type_id = request.GET.get("content_type")
-    content_type = ContentType.objects.get(id=content_type_id)
+    if not content_type_id or not content_type_id.isdigit():
+        return HttpResponseBadRequest('Invalid "content_type" parameter.')
+    content_type = get_object_or_404(ContentType, id=content_type_id)
+    if content_type.id not in get_columns_data():
+        return HttpResponseBadRequest('Unsupported content type.')
     queryset = content_type.model_class().objects.filter(
         owner=request.user
     )

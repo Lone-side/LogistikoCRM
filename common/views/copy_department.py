@@ -1,5 +1,7 @@
 from django.contrib import messages
+from django.http import HttpResponseBadRequest
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.shortcuts import render
 from django.utils.translation import gettext as _
 from django.urls import reverse
@@ -23,8 +25,11 @@ MODELS = [
 def copy_department(request):
     """Creates a copy of the selected department."""
     if request.method == "POST":
-        department_id = int(request.POST.get('department'))
-        department = Department.objects.get(id=department_id)
+        department_id = request.POST.get('department')
+        if not department_id or not department_id.isdigit():
+            return HttpResponseBadRequest('Invalid department id.')
+        department_id = int(department_id)
+        department = get_object_or_404(Department, id=department_id)
         new_department_name = f"{department.name} (copy)"
         new_department = Department.objects.create(
             name=new_department_name,

@@ -436,6 +436,27 @@ class ObligationViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            month = int(month)
+            year = int(year)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Μη έγκυρος μήνας ή έτος.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if month < 1 or month > 12:
+            return Response(
+                {'error': 'Ο μήνας πρέπει να είναι 1-12.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if year < 1900 or year > 2100:
+            return Response(
+                {'error': 'Το έτος πρέπει να είναι από 1900 έως 2100.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
             obligation_type = ObligationType.objects.get(id=obligation_type_id)
         except ObligationType.DoesNotExist:
             return Response(
@@ -710,6 +731,12 @@ class ObligationViewSet(viewsets.ModelViewSet):
         if month < 1 or month > 12:
             return Response(
                 {'error': 'Ο μήνας πρέπει να είναι από 1 έως 12.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if year < 1900 or year > 2100:
+            return Response(
+                {'error': 'Το έτος πρέπει να είναι από 1900 έως 2100.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

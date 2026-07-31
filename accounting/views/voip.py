@@ -295,6 +295,11 @@ def voip_call_update(request, call_id):
 
     # Update fields safely
     if 'notes' in data:
+        if not isinstance(data['notes'], str):
+            return JsonResponse({
+                'success': False,
+                'message': 'Μη έγκυρη τιμή για notes'
+            }, status=400)
         call.notes = data['notes'][:1000]
 
     if 'resolution' in data and data['resolution'] in ['pending', 'closed', 'follow_up', '']:

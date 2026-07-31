@@ -7,6 +7,7 @@ All functions are prefixed with underscore to indicate they are internal.
 """
 
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.db.models import Count, Q, Sum, Avg
 from django.db.models.functions import TruncMonth
 from django.core.files.base import ContentFile
@@ -50,11 +51,19 @@ def _calculate_dashboard_stats():
 
 def _build_filtered_query(filter_params, client_id, type_id, now):
     """Build filtered query for obligations"""
-    # Date range
-    if filter_params['date_from'] and filter_params['date_to']:
+    # Date range (άκυρες ημερομηνίες αγνοούνται — parse_date επιστρέφει None)
+    def _parse(value):
+        try:
+            return parse_date(value) if value else None
+        except ValueError:  # π.χ. 2025-02-30 (σωστή μορφή, άκυρη ημερομηνία)
+            return None
+
+    date_from = _parse(filter_params['date_from'])
+    date_to = _parse(filter_params['date_to'])
+    if date_from and date_to:
         query = MonthlyObligation.objects.filter(
-            deadline__gte=filter_params['date_from'],
-            deadline__lte=filter_params['date_to']
+            deadline__gte=date_from,
+            deadline__lte=date_to
         )
     else:
         # Default: past 3 to next 3 months

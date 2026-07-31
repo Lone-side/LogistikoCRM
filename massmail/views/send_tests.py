@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.sites.models import Site
+from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 from smtplib import SMTPRecipientsRefused
 from massmail.utils.email_creators import create_test_email
@@ -12,7 +13,7 @@ NEED_TWO_EML_ACCOUNTS = 'To send a test message you need to register at least tw
 
 
 def send_test(request, message_id):
-    mg = EmlMessage.objects.get(id=message_id)
+    mg = get_object_or_404(EmlMessage, id=message_id)
     eas = EmailAccount.objects.filter(owner=mg.owner, massmail=True)
     if eas.count() < 2:
         messages.error(

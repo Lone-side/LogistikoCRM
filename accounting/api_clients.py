@@ -314,9 +314,19 @@ class ClientViewSet(viewsets.ModelViewSet):
             documents = documents.filter(document_category=category)
         year = request.query_params.get('year')
         if year:
+            if not year.isdigit():
+                return Response(
+                    {'error': 'Μη έγκυρο έτος.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             documents = documents.filter(year=int(year))
         month = request.query_params.get('month')
         if month:
+            if not month.isdigit():
+                return Response(
+                    {'error': 'Μη έγκυρος μήνας.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             documents = documents.filter(month=int(month))
         search = request.query_params.get('search')
         if search:
@@ -449,9 +459,17 @@ class ClientViewSet(viewsets.ModelViewSet):
         client = self.get_object()
         emails = EmailLog.objects.filter(client=client).order_by('-sent_at')
 
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 20))
-        page = int(request.query_params.get('page', 1))
+        # Pagination (άκυρες τιμές → defaults, με clamp)
+        try:
+            page_size = int(request.query_params.get('page_size', 20))
+        except (ValueError, TypeError):
+            page_size = 20
+        try:
+            page = int(request.query_params.get('page', 1))
+        except (ValueError, TypeError):
+            page = 1
+        page = max(page, 1)
+        page_size = min(max(page_size, 1), 100)
         start = (page - 1) * page_size
         end = start + page_size
 
@@ -489,9 +507,17 @@ class ClientViewSet(viewsets.ModelViewSet):
         client = self.get_object()
         calls = VoIPCall.objects.filter(client=client).order_by('-started_at')
 
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 20))
-        page = int(request.query_params.get('page', 1))
+        # Pagination (άκυρες τιμές → defaults, με clamp)
+        try:
+            page_size = int(request.query_params.get('page_size', 20))
+        except (ValueError, TypeError):
+            page_size = 20
+        try:
+            page = int(request.query_params.get('page', 1))
+        except (ValueError, TypeError):
+            page = 1
+        page = max(page, 1)
+        page_size = min(max(page_size, 1), 100)
         start = (page - 1) * page_size
         end = start + page_size
 

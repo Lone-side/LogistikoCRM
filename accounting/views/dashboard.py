@@ -147,7 +147,9 @@ def reports_view(request):
     Comprehensive analytics dashboard with charts and statistics
     """
     now = timezone.now()
-    months_back = int(request.GET.get('months', 6))
+    # Ασφαλής μετατροπή + clamp 1..36 (άκυρο input → default 6)
+    months_back = _safe_int(request.GET.get('months')) or 6
+    months_back = max(1, min(months_back, 36))
     start_date = (now - timedelta(days=30*months_back)).date()
 
     # Monthly completion statistics

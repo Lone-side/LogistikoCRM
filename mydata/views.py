@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -42,6 +43,24 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
+
+def _parse_int(value, param='παράμετρος', default=None, min_val=None, max_val=None):
+    """
+    Μετατρέπει query param σε int με επικύρωση.
+
+    Επιστρέφει το default αν η τιμή λείπει. Σηκώνει rest_framework
+    ValidationError (HTTP 400) για μη έγκυρη ή εκτός ορίων τιμή.
+    """
+    if value is None or value == '':
+        return default
+    try:
+        result = int(value)
+    except (TypeError, ValueError):
+        raise ValidationError({'error': f'Μη έγκυρη τιμή για την παράμετρο {param}'})
+    if (min_val is not None and result < min_val) or (max_val is not None and result > max_val):
+        raise ValidationError({'error': f'Η παράμετρος {param} είναι εκτός επιτρεπτών ορίων'})
+    return result
+
 
 def get_vat_rate_for_category(category: int) -> int:
     """Get VAT rate percentage for category."""
@@ -404,23 +423,23 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(issue_date__lte=date_to)
 
         # Filter by year/month
-        year = self.request.query_params.get('year')
+        year = _parse_int(self.request.query_params.get('year'), 'year')
         if year:
-            queryset = queryset.filter(issue_date__year=int(year))
+            queryset = queryset.filter(issue_date__year=year)
 
-        month = self.request.query_params.get('month')
+        month = _parse_int(self.request.query_params.get('month'), 'month', min_val=1, max_val=12)
         if month:
-            queryset = queryset.filter(issue_date__month=int(month))
+            queryset = queryset.filter(issue_date__month=month)
 
         # Filter by rec_type (1=income, 2=expense)
-        rec_type = self.request.query_params.get('rec_type')
+        rec_type = _parse_int(self.request.query_params.get('rec_type'), 'rec_type')
         if rec_type:
-            queryset = queryset.filter(rec_type=int(rec_type))
+            queryset = queryset.filter(rec_type=rec_type)
 
         # Filter by VAT category
-        vat_category = self.request.query_params.get('vat_category')
+        vat_category = _parse_int(self.request.query_params.get('vat_category'), 'vat_category')
         if vat_category:
-            queryset = queryset.filter(vat_category=int(vat_category))
+            queryset = queryset.filter(vat_category=vat_category)
 
         # Exclude cancelled by default
         include_cancelled = self.request.query_params.get('include_cancelled', 'false')
@@ -455,8 +474,8 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         today = date.today()
-        year = int(request.query_params.get('year', today.year))
-        month = int(request.query_params.get('month', today.month))
+        year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
+        month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
 
         summary = build_period_summary(client, year, month)
         serializer = VATPeriodSummarySerializer(summary)
@@ -490,12 +509,12 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         today = date.today()
-        year = int(request.query_params.get('year', today.year))
-        month = int(request.query_params.get('month', today.month))
-        rec_type = request.query_params.get('rec_type')
+        year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
+        month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
+        rec_type = _parse_int(request.query_params.get('rec_type'), 'rec_type')
 
         if rec_type:
-            breakdown = build_category_breakdown(client, year, month, int(rec_type))
+            breakdown = build_category_breakdown(client, year, month, rec_type)
             serializer = VATCategoryBreakdownSerializer(breakdown, many=True)
             return Response(serializer.data)
 
@@ -549,9 +568,9 @@ class VATSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
         if log_status:
             queryset = queryset.filter(status=log_status.upper())
 
-        # Limit results
-        limit = self.request.query_params.get('limit', 50)
-        queryset = queryset[:int(limit)]
+        # Limit results (μη-αρνητικός int, default 50)
+        limit = _parse_int(self.request.query_params.get('limit'), 'limit', default=50, min_val=0)
+        queryset = queryset[:limit]
 
         return queryset
 
@@ -576,8 +595,8 @@ class MyDataDashboardView(APIView):
 
     def get(self, request):
         today = date.today()
-        year = int(request.query_params.get('year', today.year))
-        month = int(request.query_params.get('month', today.month))
+        year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
+        month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
 
         # Get all clients with mydata credentials
         credentials_qs = MyDataCredentials.objects.select_related('client').all()
@@ -670,24 +689,36 @@ class ClientVATDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        try:
-            today = date.today()
-            year = int(request.query_params.get('year', today.year))
-            period_type = request.query_params.get('period_type', 'month')
-            include_records = request.query_params.get('include_records', 'false').lower() == 'true'
+        today = date.today()
+        year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
+        period_type = request.query_params.get('period_type', 'month')
+        if period_type not in ('month', 'quarter', 'year'):
+            return Response(
+                {'error': "Μη έγκυρο period_type (επιτρεπτά: 'month', 'quarter', 'year')"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-            # Get month or quarter based on period type
-            if period_type == 'quarter':
-                # Default to current quarter
-                current_quarter = (today.month - 1) // 3 + 1
-                quarter = int(request.query_params.get('quarter', current_quarter))
-                month = None
-            elif period_type == 'year':
-                quarter = None
-                month = None
-            else:
-                quarter = None
-                month = int(request.query_params.get('month', today.month))
+        # Get month or quarter based on period type
+        if period_type == 'quarter':
+            # Default to current quarter
+            current_quarter = (today.month - 1) // 3 + 1
+            quarter = _parse_int(
+                request.query_params.get('quarter'), 'quarter',
+                default=current_quarter, min_val=1, max_val=4
+            )
+            month = None
+        elif period_type == 'year':
+            quarter = None
+            month = None
+        else:
+            quarter = None
+            month = _parse_int(
+                request.query_params.get('month'), 'month',
+                default=today.month, min_val=1, max_val=12
+            )
+
+        try:
+            include_records = request.query_params.get('include_records', 'false').lower() == 'true'
 
             # Calculate date range
             date_from, date_to, period_label = get_period_date_range(
@@ -754,10 +785,10 @@ class ClientVATDetailView(APIView):
 
             return Response(response_data)
 
-        except Exception as e:
-            import traceback
+        except Exception:
+            logger.exception('Σφάλμα στο ClientVATDetailView για ΑΦΜ %s', afm)
             return Response(
-                {'error': str(e), 'traceback': traceback.format_exc()},
+                {'error': 'Εσωτερικό σφάλμα διακομιστή'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -782,7 +813,9 @@ class MonthlyTrendView(APIView):
 
     def get(self, request):
         afm = request.query_params.get('afm')
-        months_count = int(request.query_params.get('months', 6))
+        months_count = _parse_int(request.query_params.get('months'), 'months', default=6)
+        # Clamp σε λογικά όρια 1..36
+        months_count = max(1, min(36, months_count))
 
         # Build list of months
         today = date.today()
@@ -896,9 +929,9 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
             qs = qs.filter(period_type=period_type)
 
         # Filter by year
-        year = self.request.query_params.get('year')
+        year = _parse_int(self.request.query_params.get('year'), 'year')
         if year:
-            qs = qs.filter(year=int(year))
+            qs = qs.filter(year=year)
 
         return qs.order_by('-year', '-period')
 
@@ -1098,6 +1131,16 @@ class VATPeriodCalculatorView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        if period_type not in ('monthly', 'quarterly'):
+            return Response(
+                {'error': "Μη έγκυρο period_type (επιτρεπτά: 'monthly', 'quarterly')"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        year = _parse_int(year, 'year')
+        max_period = 12 if period_type == 'monthly' else 4
+        period = _parse_int(period, 'period', min_val=1, max_val=max_period)
+
         # Get client
         try:
             if client_id:
@@ -1114,8 +1157,8 @@ class VATPeriodCalculatorView(APIView):
         period_result, created = VATPeriodResult.get_or_create_for_period(
             client=client,
             period_type=period_type,
-            year=int(year),
-            period=int(period)
+            year=year,
+            period=period
         )
 
         # If new or request wants recalculation

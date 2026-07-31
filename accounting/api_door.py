@@ -307,7 +307,11 @@ def door_access_logs(request):
     """
     from .models import DoorAccessLog
 
-    limit = min(int(request.query_params.get('limit', 50)), 200)
+    try:
+        limit = int(request.query_params.get('limit', 50))
+    except (ValueError, TypeError):
+        limit = 50
+    limit = min(max(limit, 1), 200)
 
     logs = DoorAccessLog.objects.select_related('user').all()
 

@@ -1,5 +1,6 @@
 from django import forms
 from django.core.handlers.wsgi import WSGIRequest
+from django.http import HttpResponseBadRequest
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
@@ -16,11 +17,13 @@ def select_email_account(request: WSGIRequest):
         ea_id = request.POST.get('choice')
         url = reverse('select_emails_import_request') + f"?ea={ea_id}"
         params = request.GET.copy()
-        del params['eas']
+        params.pop('eas', None)
         return HttpResponseRedirect(url + f'&{params.urlencode()}')
 
     else:
         ids_str = request.GET.get('eas')
+        if not ids_str:
+            return HttpResponseBadRequest('The "eas" parameter is required.')
         ids = ids_str.split(',')
         eas = EmailAccount.objects.filter(
             id__in=ids

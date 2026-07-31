@@ -358,6 +358,12 @@ def generate_month_obligations(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    if year < 1900 or year > 2100:
+        return Response(
+            {'error': 'Το έτος πρέπει να είναι από 1900 έως 2100.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     # Get clients
     if client_ids:
         clients = ClientProfile.objects.filter(id__in=client_ids, is_active=True)

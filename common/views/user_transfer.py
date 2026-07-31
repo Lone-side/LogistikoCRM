@@ -1,6 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.models import Group
+from django.http import HttpResponseBadRequest
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.shortcuts import render
 from django.utils.translation import gettext as _
 from django.urls import reverse
@@ -70,14 +72,16 @@ def user_transfer(request):
     """Change user's and its documents department. 
     But no change Output, Payment and Product."""
     if request.method == "POST":
-        owner_id = int(request.POST.get('owner'))
-        owner = USER_MODEL.objects.get(id=owner_id)
+        owner_id = request.POST.get('owner')
+        department_id = request.POST.get('department')
+        if not owner_id or not owner_id.isdigit() \
+                or not department_id or not department_id.isdigit():
+            return HttpResponseBadRequest('Invalid owner or department id.')
+        owner = get_object_or_404(USER_MODEL, id=int(owner_id))
         old_department = owner.groups.filter(
             department__isnull=False
         ).first()
-        new_department = Group.objects.get(
-            id=int(request.POST.get('department'))
-        )
+        new_department = get_object_or_404(Group, id=int(department_id))
         owner.groups.remove(old_department)
         owner.groups.add(new_department)
         for item in objects:

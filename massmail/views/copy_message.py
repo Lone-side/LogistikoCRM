@@ -1,10 +1,11 @@
 from django.urls import reverse
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from massmail.models import EmlMessage, Signature
 
 
 def copy_message(request, object_id):
-    msg = EmlMessage.objects.get(id=object_id)
+    msg = get_object_or_404(EmlMessage, id=object_id)
     try:
         signature = Signature.objects.get(
             owner=request.user,
