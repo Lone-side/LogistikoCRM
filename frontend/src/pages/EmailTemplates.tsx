@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Modal, ConfirmDialog, Button } from '../components';
+import { Badge } from '../components/ui';
 import {
   useEmailTemplates,
   useCreateEmailTemplate,
@@ -66,25 +67,25 @@ export default function EmailTemplates() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Mail className="w-6 h-6 text-blue-600" />
+          <div className="p-2 bg-brand-100 rounded-lg">
+            <Mail className="w-6 h-6 text-brand-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Emails</h1>
-            <p className="text-sm text-gray-500">Ιστορικό αποστολών και πρότυπα</p>
+            <h1 className="text-2xl font-bold text-slate-900">Emails</h1>
+            <p className="text-sm text-slate-500">Ιστορικό αποστολών και πρότυπα</p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-200">
         <nav className="-mb-px flex gap-6">
           <button
             onClick={() => setActiveTab('history')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'history'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
             }`}
           >
             <Clock className="w-4 h-4 inline-block mr-2" />
@@ -94,8 +95,8 @@ export default function EmailTemplates() {
             onClick={() => setActiveTab('templates')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'templates'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
             }`}
           >
             <FileText className="w-4 h-4 inline-block mr-2" />
@@ -173,31 +174,27 @@ function EmailHistoryTab() {
     switch (status) {
       case 'sent':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-            <CheckCircle className="w-3 h-3" />
+          <Badge variant="success" icon={<CheckCircle className="w-3 h-3" />}>
             Απεστάλη
-          </span>
+          </Badge>
         );
       case 'failed':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-            <XCircle className="w-3 h-3" />
+          <Badge variant="danger" icon={<XCircle className="w-3 h-3" />}>
             Αποτυχία
-          </span>
+          </Badge>
         );
       case 'pending':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
-            <Clock className="w-3 h-3" />
+          <Badge variant="warning" icon={<Clock className="w-3 h-3" />}>
             Σε αναμονή
-          </span>
+          </Badge>
         );
       case 'queued':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-            <Clock className="w-3 h-3" />
+          <Badge variant="info" icon={<Clock className="w-3 h-3" />}>
             Στην ουρά
-          </span>
+          </Badge>
         );
       default:
         return status;
@@ -207,18 +204,18 @@ function EmailHistoryTab() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="flex flex-wrap gap-4 items-center">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Αναζήτηση σε email, παραλήπτη, θέμα..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               />
             </div>
           </div>
@@ -228,7 +225,7 @@ function EmailHistoryTab() {
             <select
               value={filters.client_id || ''}
               onChange={(e) => handleFilterChange('client_id', e.target.value ? Number(e.target.value) : undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             >
               <option value="">Όλοι οι πελάτες</option>
               {clients?.results.map((client) => (
@@ -244,7 +241,7 @@ function EmailHistoryTab() {
             <select
               value={filters.status || ''}
               onChange={(e) => handleFilterChange('status', e.target.value || undefined)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             >
               <option value="">Όλες οι καταστάσεις</option>
               <option value="sent">Απεστάλη</option>
@@ -262,53 +259,53 @@ function EmailHistoryTab() {
 
       {/* Stats Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Send className="w-5 h-5 text-blue-600" />
+            <div className="p-2 bg-brand-100 rounded-lg">
+              <Send className="w-5 h-5 text-brand-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{data?.count || 0}</p>
-              <p className="text-sm text-gray-500">Συνολικά Email</p>
+              <p className="text-2xl font-bold text-slate-900">{data?.count || 0}</p>
+              <p className="text-sm text-slate-500">Συνολικά Email</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-green-600" />
+            <div className="p-2 bg-success-100 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-success-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900">
                 {data?.results.filter(e => e.status === 'sent').length || 0}
               </p>
-              <p className="text-sm text-gray-500">Επιτυχή</p>
+              <p className="text-sm text-slate-500">Επιτυχή</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-red-100 rounded-lg">
-              <XCircle className="w-5 h-5 text-red-600" />
+            <div className="p-2 bg-danger-100 rounded-lg">
+              <XCircle className="w-5 h-5 text-danger-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900">
                 {data?.results.filter(e => e.status === 'failed').length || 0}
               </p>
-              <p className="text-sm text-gray-500">Αποτυχημένα</p>
+              <p className="text-sm text-slate-500">Αποτυχημένα</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 rounded-lg">
-              <Clock className="w-5 h-5 text-amber-600" />
+            <div className="p-2 bg-warning-100 rounded-lg">
+              <Clock className="w-5 h-5 text-warning-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900">
                 {data?.results.filter(e => e.status === 'pending' || e.status === 'queued').length || 0}
               </p>
-              <p className="text-sm text-gray-500">Σε αναμονή</p>
+              <p className="text-sm text-slate-500">Σε αναμονή</p>
             </div>
           </div>
         </div>
@@ -316,11 +313,11 @@ function EmailHistoryTab() {
 
       {/* Error */}
       {isError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-danger-50 border border-danger-100 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-              <span className="text-red-700">
+              <AlertCircle className="w-5 h-5 text-danger-600 mr-2" />
+              <span className="text-danger-700">
                 Σφάλμα φόρτωσης: {error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}
               </span>
             </div>
@@ -334,24 +331,24 @@ function EmailHistoryTab() {
 
       {/* Loading */}
       {isLoading && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Φόρτωση ιστορικού...</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-4"></div>
+          <p className="text-slate-500">Φόρτωση ιστορικού...</p>
         </div>
       )}
 
       {/* Email List */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           {filteredEmails?.length === 0 ? (
             <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Mail className="w-8 h-8 text-gray-400" />
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Mail className="w-8 h-8 text-slate-400" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
                 Δεν βρέθηκαν emails
               </h3>
-              <p className="text-gray-500">
+              <p className="text-slate-500">
                 {searchTerm || filters.client_id || filters.status
                   ? 'Δοκιμάστε να αλλάξετε τα φίλτρα αναζήτησης'
                   : 'Δεν υπάρχει ακόμα ιστορικό αποστολών email'}
@@ -360,7 +357,7 @@ function EmailHistoryTab() {
           ) : (
             <>
               {/* Table Header */}
-              <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-600">
+              <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-slate-50 border-b border-slate-200 text-sm font-medium text-slate-600">
                 <div className="col-span-3">Παραλήπτης</div>
                 <div className="col-span-4">Θέμα</div>
                 <div className="col-span-2">Ημερομηνία</div>
@@ -369,37 +366,37 @@ function EmailHistoryTab() {
               </div>
 
               {/* Table Body */}
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-slate-100">
                 {filteredEmails?.map((email) => (
                   <div
                     key={email.id}
-                    className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-gray-50 transition-colors items-center"
+                    className="grid grid-cols-12 gap-4 px-4 py-3 hover:bg-slate-50 transition-colors items-center cursor-pointer"
                   >
                     <div className="col-span-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <User className="w-4 h-4 text-blue-600" />
+                        <div className="w-8 h-8 bg-brand-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <User className="w-4 h-4 text-brand-600" />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium text-gray-900 truncate">
+                          <p className="font-medium text-slate-900 truncate">
                             {email.client_name || email.recipient_name || '-'}
                           </p>
-                          <p className="text-xs text-gray-500 truncate">
+                          <p className="text-xs text-slate-500 truncate">
                             {email.recipient_email}
                           </p>
                         </div>
                       </div>
                     </div>
                     <div className="col-span-4">
-                      <p className="text-gray-900 truncate">{email.subject}</p>
+                      <p className="text-slate-900 truncate">{email.subject}</p>
                       {email.template_name && (
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-slate-500">
                           Πρότυπο: {email.template_name}
                         </p>
                       )}
                     </div>
                     <div className="col-span-2">
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
+                      <div className="flex items-center gap-1 text-sm text-slate-600">
                         <Calendar className="w-3 h-3" />
                         {formatDate(email.sent_at)}
                       </div>
@@ -410,7 +407,7 @@ function EmailHistoryTab() {
                     <div className="col-span-1 flex justify-end gap-1">
                       <button
                         onClick={() => handleViewDetails(email)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg cursor-pointer transition-colors duration-150"
                         title="Λεπτομέρειες"
                       >
                         <Eye className="w-4 h-4" />
@@ -418,7 +415,7 @@ function EmailHistoryTab() {
                       {email.client && (
                         <Link
                           to={`/clients/${email.client}`}
-                          className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                          className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg cursor-pointer transition-colors duration-150"
                           title="Προβολή πελάτη"
                         >
                           <ExternalLink className="w-4 h-4" />
@@ -431,8 +428,8 @@ function EmailHistoryTab() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-                  <p className="text-sm text-gray-600">
+                <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                  <p className="text-sm text-slate-600">
                     Σελίδα {filters.page} από {totalPages} ({data?.count} εγγραφές)
                   </p>
                   <div className="flex gap-2">
@@ -476,25 +473,25 @@ function EmailHistoryTab() {
           <div className="space-y-4">
             {/* Status Banner */}
             <div className={`p-3 rounded-lg ${
-              selectedEmail.status === 'sent' ? 'bg-green-50 border border-green-200' :
-              selectedEmail.status === 'failed' ? 'bg-red-50 border border-red-200' :
-              'bg-amber-50 border border-amber-200'
+              selectedEmail.status === 'sent' ? 'bg-success-50 border border-success-100' :
+              selectedEmail.status === 'failed' ? 'bg-danger-50 border border-danger-100' :
+              'bg-warning-50 border border-warning-100'
             }`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {getStatusBadge(selectedEmail.status)}
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-slate-600">
                     {formatDate(selectedEmail.sent_at)}
                   </span>
                 </div>
                 {selectedEmail.sent_by_name && (
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm text-slate-600">
                     Από: {selectedEmail.sent_by_name}
                   </span>
                 )}
               </div>
               {selectedEmail.error_message && (
-                <p className="mt-2 text-sm text-red-700">
+                <p className="mt-2 text-sm text-danger-700">
                   <strong>Σφάλμα:</strong> {selectedEmail.error_message}
                 </p>
               )}
@@ -503,20 +500,20 @@ function EmailHistoryTab() {
             {/* Recipient Info */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Παραλήπτης
                 </label>
-                <p className="text-gray-900">{selectedEmail.recipient_name || '-'}</p>
-                <p className="text-sm text-gray-500">{selectedEmail.recipient_email}</p>
+                <p className="text-slate-900">{selectedEmail.recipient_name || '-'}</p>
+                <p className="text-sm text-slate-500">{selectedEmail.recipient_email}</p>
               </div>
               {selectedEmail.client_name && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Πελάτης
                   </label>
-                  <p className="text-gray-900">{selectedEmail.client_name}</p>
+                  <p className="text-slate-900">{selectedEmail.client_name}</p>
                   {selectedEmail.client_afm && (
-                    <p className="text-sm text-gray-500">ΑΦΜ: {selectedEmail.client_afm}</p>
+                    <p className="text-sm text-slate-500">ΑΦΜ: {selectedEmail.client_afm}</p>
                   )}
                 </div>
               )}
@@ -526,28 +523,28 @@ function EmailHistoryTab() {
             <div className="grid grid-cols-2 gap-4">
               {selectedEmail.template_name && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Πρότυπο
                   </label>
-                  <p className="text-gray-900">{selectedEmail.template_name}</p>
+                  <p className="text-slate-900">{selectedEmail.template_name}</p>
                 </div>
               )}
               {selectedEmail.obligation_type && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Υποχρέωση
                   </label>
-                  <p className="text-gray-900">{selectedEmail.obligation_type}</p>
+                  <p className="text-slate-900">{selectedEmail.obligation_type}</p>
                 </div>
               )}
             </div>
 
             {/* Subject */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Θέμα
               </label>
-              <p className="p-3 bg-gray-50 rounded-lg text-gray-900">
+              <p className="p-3 bg-slate-50 rounded-lg text-slate-900">
                 {selectedEmail.subject}
               </p>
             </div>
@@ -555,17 +552,17 @@ function EmailHistoryTab() {
             {/* Body */}
             {selectedEmail.body && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Κείμενο
                 </label>
                 <div
-                  className="p-4 bg-gray-50 rounded-lg prose prose-sm max-w-none max-h-64 overflow-y-auto"
+                  className="p-4 bg-slate-50 rounded-lg prose prose-sm max-w-none max-h-64 overflow-y-auto"
                   dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
                 />
               </div>
             )}
 
-            <div className="flex justify-end pt-4 border-t border-gray-200">
+            <div className="flex justify-end pt-4 border-t border-slate-200">
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -671,11 +668,11 @@ function EmailTemplatesTab() {
 
       {/* Error Banner */}
       {isError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-danger-50 border border-danger-100 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-              <span className="text-red-700">
+              <AlertCircle className="w-5 h-5 text-danger-600 mr-2" />
+              <span className="text-danger-700">
                 Σφάλμα φόρτωσης: {error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}
               </span>
             </div>
@@ -689,24 +686,24 @@ function EmailTemplatesTab() {
 
       {/* Loading State */}
       {isLoading && (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-500">Φόρτωση προτύπων...</p>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-4"></div>
+          <p className="text-slate-500">Φόρτωση προτύπων...</p>
         </div>
       )}
 
       {/* Templates List */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
           {templates?.length === 0 ? (
             <div className="p-12 text-center">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FileText className="w-8 h-8 text-blue-600" />
+              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8 text-brand-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
                 Δεν υπάρχουν πρότυπα
               </h3>
-              <p className="text-gray-500 mb-6">
+              <p className="text-slate-500 mb-6">
                 Δημιουργήστε το πρώτο σας πρότυπο email για να στέλνετε ειδοποιήσεις στους πελάτες.
               </p>
               <Button onClick={() => setIsCreateModalOpen(true)}>
@@ -715,65 +712,65 @@ function EmailTemplatesTab() {
               </Button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-slate-100">
               {templates?.map((template) => (
                 <div
                   key={template.id}
-                  className="p-4 hover:bg-gray-50 transition-colors"
+                  className="p-4 hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium text-gray-900 truncate">
+                        <h3 className="font-medium text-slate-900 truncate">
                           {template.name}
                         </h3>
                         {template.is_active ? (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                          <span className="px-2 py-0.5 text-xs font-medium bg-success-100 text-success-700 rounded-full">
                             Ενεργό
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
+                          <span className="px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 rounded-full">
                             Ανενεργό
                           </span>
                         )}
                         {template.obligation_type_name && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                          <span className="px-2 py-0.5 text-xs font-medium bg-brand-100 text-brand-800 rounded-full">
                             {template.obligation_type_name}
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-600 mb-1">
+                      <p className="text-sm text-slate-600 mb-1">
                         <strong>Θέμα:</strong> {template.subject}
                       </p>
                       {template.description && (
-                        <p className="text-sm text-gray-500">{template.description}</p>
+                        <p className="text-sm text-slate-500">{template.description}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handlePreview(template)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg cursor-pointer transition-colors duration-150"
                         title="Προεπισκόπηση"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDuplicate(template)}
-                        className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg"
+                        className="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg cursor-pointer transition-colors duration-150"
                         title="Αντιγραφή"
                       >
                         <Copy className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleEdit(template)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        className="p-2 text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg cursor-pointer transition-colors duration-150"
                         title="Επεξεργασία"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteClick(template)}
-                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                        className="p-2 text-slate-500 hover:text-danger-600 hover:bg-danger-50 rounded-lg cursor-pointer transition-colors duration-150"
                         title="Διαγραφή"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -788,11 +785,11 @@ function EmailTemplatesTab() {
       )}
 
       {/* Variables Reference */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">
           Διαθέσιμες Μεταβλητές
         </h3>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="text-sm text-slate-600 mb-4">
           Χρησιμοποιήστε αυτές τις μεταβλητές στο θέμα και το κείμενο του email.
           Θα αντικατασταθούν αυτόματα με τα πραγματικά δεδομένα.
         </p>
@@ -800,10 +797,10 @@ function EmailTemplatesTab() {
           {TEMPLATE_VARIABLES.map((variable) => (
             <div
               key={variable.key}
-              className="bg-gray-50 rounded-lg p-3 text-sm"
+              className="bg-slate-50 rounded-lg p-3 text-sm"
             >
-              <code className="text-blue-600 font-mono">{`{${variable.key}}`}</code>
-              <p className="text-gray-600 mt-1">{variable.label}</p>
+              <code className="text-brand-600 font-mono">{`{${variable.key}}`}</code>
+              <p className="text-slate-600 mt-1">{variable.label}</p>
             </div>
           ))}
         </div>
@@ -882,23 +879,23 @@ function EmailTemplatesTab() {
         {previewContent && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Θέμα
               </label>
-              <div className="p-3 bg-gray-50 rounded-lg text-gray-900">
+              <div className="p-3 bg-slate-50 rounded-lg text-slate-900">
                 {previewContent.subject}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Κείμενο
               </label>
               <div
-                className="p-4 bg-gray-50 rounded-lg prose prose-sm max-w-none"
+                className="p-4 bg-slate-50 rounded-lg prose prose-sm max-w-none"
                 dangerouslySetInnerHTML={{ __html: previewContent.body }}
               />
             </div>
-            <div className="flex justify-end pt-4 border-t border-gray-200">
+            <div className="flex justify-end pt-4 border-t border-slate-200">
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -993,15 +990,15 @@ function EmailTemplateForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-          <span className="text-sm text-red-700">{error}</span>
+        <div className="bg-danger-50 border border-danger-100 rounded-lg p-3 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-danger-600 flex-shrink-0" />
+          <span className="text-sm text-danger-700">{error}</span>
         </div>
       )}
 
       {/* Name */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
           Όνομα Προτύπου *
         </label>
         <input
@@ -1010,13 +1007,13 @@ function EmailTemplateForm({
           value={formData.name}
           onChange={handleChange}
           placeholder="π.χ. Ειδοποίηση ολοκλήρωσης ΦΠΑ"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
         />
       </div>
 
       {/* Description */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
           Περιγραφή
         </label>
         <input
@@ -1025,13 +1022,13 @@ function EmailTemplateForm({
           value={formData.description}
           onChange={handleChange}
           placeholder="Σύντομη περιγραφή του προτύπου"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
         />
       </div>
 
       {/* Obligation Type */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
           Τύπος Υποχρέωσης (αυτόματη επιλογή)
         </label>
         <select
@@ -1043,7 +1040,7 @@ function EmailTemplateForm({
               obligation_type: e.target.value ? Number(e.target.value) : null,
             }))
           }
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
         >
           <option value="">-- Κανένας (χειροκίνητη επιλογή) --</option>
           {obligationTypes.map((type) => (
@@ -1052,14 +1049,14 @@ function EmailTemplateForm({
             </option>
           ))}
         </select>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           Αν οριστεί, το πρότυπο επιλέγεται αυτόματα για αυτόν τον τύπο υποχρέωσης
         </p>
       </div>
 
       {/* Subject */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
           Θέμα Email *
         </label>
         <input
@@ -1068,7 +1065,7 @@ function EmailTemplateForm({
           value={formData.subject}
           onChange={handleChange}
           placeholder="π.χ. Ολοκλήρωση {obligation_type} - {period_display}"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
         />
         <div className="flex flex-wrap gap-1 mt-2">
           {['client_name', 'obligation_type', 'period_display'].map((v) => (
@@ -1076,7 +1073,7 @@ function EmailTemplateForm({
               key={v}
               type="button"
               onClick={() => insertVariable(v, 'subject')}
-              className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200 cursor-pointer transition-colors duration-150"
             >
               {`{${v}}`}
             </button>
@@ -1086,7 +1083,7 @@ function EmailTemplateForm({
 
       {/* Body */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-slate-700 mb-1">
           Κείμενο Email *
         </label>
         <textarea
@@ -1095,7 +1092,7 @@ function EmailTemplateForm({
           onChange={handleChange}
           rows={10}
           placeholder="Αγαπητέ/ή {client_name},&#10;&#10;Σας ενημερώνουμε ότι η υποχρέωση {obligation_type} για την περίοδο {period_display} ολοκληρώθηκε."
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+          className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 font-mono text-sm"
         />
         <div className="flex flex-wrap gap-1 mt-2">
           {TEMPLATE_VARIABLES.map((v) => (
@@ -1103,7 +1100,7 @@ function EmailTemplateForm({
               key={v.key}
               type="button"
               onClick={() => insertVariable(v.key, 'body_html')}
-              className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200 cursor-pointer transition-colors duration-150"
               title={v.label}
             >
               {`{${v.key}}`}
@@ -1119,13 +1116,13 @@ function EmailTemplateForm({
           name="is_active"
           checked={formData.is_active}
           onChange={handleChange}
-          className="w-4 h-4 text-blue-600 rounded"
+          className="w-4 h-4 text-brand-600 rounded"
         />
-        <span className="text-sm text-gray-700">Ενεργό πρότυπο</span>
+        <span className="text-sm text-slate-700">Ενεργό πρότυπο</span>
       </label>
 
       {/* Actions */}
-      <div className="flex gap-3 pt-4 border-t border-gray-200">
+      <div className="flex gap-3 pt-4 border-t border-slate-200">
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
           Ακύρωση
         </Button>

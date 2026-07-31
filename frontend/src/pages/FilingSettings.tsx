@@ -84,7 +84,7 @@ const FilingSettingsPage: React.FC = () => {
   if (loading && !settings) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+        <RefreshCw className="w-8 h-8 animate-spin text-brand-500" />
       </div>
     );
   }
@@ -96,16 +96,16 @@ const FilingSettingsPage: React.FC = () => {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/settings')}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg"
+              className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors duration-150"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-2">
-                <FolderTree className="w-6 h-6 text-blue-600" />
+                <FolderTree className="w-6 h-6 text-brand-600" />
                 Ρυθμίσεις Αρχειοθέτησης
               </h1>
-              <p className="text-gray-500 text-sm mt-1">
+              <p className="text-slate-500 text-sm mt-1">
                 Διαχείριση δομής φακέλων και κανόνων αρχειοθέτησης
               </p>
             </div>
@@ -114,7 +114,7 @@ const FilingSettingsPage: React.FC = () => {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 cursor-pointer transition-colors duration-150"
           >
             {saving ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -127,14 +127,14 @@ const FilingSettingsPage: React.FC = () => {
 
         {/* Success/Error Messages */}
         {saveSuccess && (
-          <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center gap-2 text-green-700 dark:text-green-400">
+          <div className="mb-4 p-3 bg-success-50 dark:bg-success-700/20 border border-success-100 dark:border-success-700 rounded-lg flex items-center gap-2 text-success-700 dark:text-success-600">
             <CheckCircle className="w-5 h-5" />
             Οι ρυθμίσεις αποθηκεύτηκαν επιτυχώς
           </div>
         )}
 
         {(error || saveError) && (
-          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-2 text-red-700 dark:text-red-400">
+          <div className="mb-4 p-3 bg-danger-50 dark:bg-danger-700/20 border border-danger-100 dark:border-danger-700 rounded-lg flex items-center gap-2 text-danger-700 dark:text-danger-600">
             <AlertTriangle className="w-5 h-5" />
             {error || saveError}
           </div>
@@ -144,9 +144,9 @@ const FilingSettingsPage: React.FC = () => {
           {/* Settings Forms */}
           <div className="lg:col-span-2 space-y-6">
             {/* Storage Location */}
-            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <HardDrive className="w-5 h-5 text-gray-600" />
+                <HardDrive className="w-5 h-5 text-slate-600" />
                 Τοποθεσία Αποθήκευσης
               </h2>
 
@@ -156,14 +156,14 @@ const FilingSettingsPage: React.FC = () => {
                     type="checkbox"
                     checked={formData.use_network_storage || false}
                     onChange={(e) => handleChange('use_network_storage', e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    className="w-5 h-5 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                   />
                   <div>
                     <span className="font-medium flex items-center gap-2">
                       <Network className="w-4 h-4" />
                       Χρήση Δικτυακού Φακέλου
                     </span>
-                    <span className="text-sm text-gray-500 block">
+                    <span className="text-sm text-slate-500 block">
                       Αποθήκευση αρχείων σε κοινόχρηστο φάκελο δικτύου (NAS/Server)
                     </span>
                   </div>
@@ -179,9 +179,9 @@ const FilingSettingsPage: React.FC = () => {
                       value={formData.archive_root || ''}
                       onChange={(e) => handleChange('archive_root', e.target.value)}
                       placeholder="/mnt/nas/logistiko/ ή Z:\Logistiko\"
-                      className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+                      className="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       Παραδείγματα: /mnt/nas/logistiko/ (Linux), Z:\Logistiko\ (Windows)
                     </p>
                   </div>
@@ -190,9 +190,9 @@ const FilingSettingsPage: React.FC = () => {
             </section>
 
             {/* Folder Structure */}
-            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <FolderTree className="w-5 h-5 text-gray-600" />
+                <FolderTree className="w-5 h-5 text-slate-600" />
                 Δομή Φακέλων
               </h2>
 
@@ -207,8 +207,8 @@ const FilingSettingsPage: React.FC = () => {
                         key={choice.value}
                         className={`flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                           formData.folder_structure === choice.value
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                         }`}
                       >
                         <input
@@ -221,7 +221,7 @@ const FilingSettingsPage: React.FC = () => {
                         />
                         <div>
                           <span className="font-medium block">{choice.label}</span>
-                          <span className="text-xs text-gray-500">{choice.description}</span>
+                          <span className="text-xs text-slate-500">{choice.description}</span>
                         </div>
                       </label>
                     ))}
@@ -237,9 +237,9 @@ const FilingSettingsPage: React.FC = () => {
                       type="text"
                       value={formData.custom_folder_template || ''}
                       onChange={(e) => handleChange('custom_folder_template', e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg font-mono text-sm dark:bg-gray-800 dark:border-gray-600"
+                      className="w-full px-3 py-2 border rounded-lg font-mono text-sm dark:bg-slate-800 dark:border-slate-600"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       Μεταβλητές: {'{afm}'}, {'{name}'}, {'{year}'}, {'{month}'}, {'{category}'}, {'{month_name}'}
                     </p>
                   </div>
@@ -250,11 +250,11 @@ const FilingSettingsPage: React.FC = () => {
                     type="checkbox"
                     checked={formData.use_greek_month_names || false}
                     onChange={(e) => handleChange('use_greek_month_names', e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600"
+                    className="w-5 h-5 rounded border-slate-300 text-brand-600"
                   />
                   <div>
                     <span className="font-medium">Ελληνικά Ονόματα Μηνών</span>
-                    <span className="text-sm text-gray-500 block">
+                    <span className="text-sm text-slate-500 block">
                       π.χ. 01_Ιανουάριος αντί για 01
                     </span>
                   </div>
@@ -263,9 +263,9 @@ const FilingSettingsPage: React.FC = () => {
             </section>
 
             {/* Special Folders */}
-            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <FileText className="w-5 h-5 text-gray-600" />
+                <FileText className="w-5 h-5 text-slate-600" />
                 Ειδικοί Φάκελοι
               </h2>
 
@@ -277,7 +277,7 @@ const FilingSettingsPage: React.FC = () => {
                       type="checkbox"
                       checked={formData.enable_permanent_folder || false}
                       onChange={(e) => handleChange('enable_permanent_folder', e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-300 text-purple-600"
+                      className="w-5 h-5 rounded border-slate-300 text-purple-600"
                     />
                     <span className="font-medium">Μόνιμος Φάκελος</span>
                   </label>
@@ -287,10 +287,10 @@ const FilingSettingsPage: React.FC = () => {
                       value={formData.permanent_folder_name || ''}
                       onChange={(e) => handleChange('permanent_folder_name', e.target.value)}
                       placeholder="00_ΜΟΝΙΜΑ"
-                      className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-600"
+                      className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-800 dark:border-slate-600"
                     />
                   )}
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-slate-500">
                     Για συμβάσεις, ιδρυτικά, άδειες (00_ = εμφανίζεται πρώτος)
                   </p>
                 </div>
@@ -302,7 +302,7 @@ const FilingSettingsPage: React.FC = () => {
                       type="checkbox"
                       checked={formData.enable_yearend_folder || false}
                       onChange={(e) => handleChange('enable_yearend_folder', e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-300 text-amber-600"
+                      className="w-5 h-5 rounded border-slate-300 text-warning-600"
                     />
                     <span className="font-medium">Φάκελος Ετήσιων</span>
                   </label>
@@ -312,10 +312,10 @@ const FilingSettingsPage: React.FC = () => {
                       value={formData.yearend_folder_name || ''}
                       onChange={(e) => handleChange('yearend_folder_name', e.target.value)}
                       placeholder="13_ΕΤΗΣΙΑ"
-                      className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-600"
+                      className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-slate-800 dark:border-slate-600"
                     />
                   )}
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-slate-500">
                     Για Ε1, Ε2, Ε3, ΕΝΦΙΑ, Ισολογισμό (13_ = μετά τους μήνες)
                   </p>
                 </div>
@@ -323,9 +323,9 @@ const FilingSettingsPage: React.FC = () => {
             </section>
 
             {/* File Naming */}
-            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <FileText className="w-5 h-5 text-gray-600" />
+                <FileText className="w-5 h-5 text-slate-600" />
                 Ονοματολογία Αρχείων
               </h2>
 
@@ -335,8 +335,8 @@ const FilingSettingsPage: React.FC = () => {
                     key={choice.value}
                     className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
                       formData.file_naming_convention === choice.value
-                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+                        ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -349,7 +349,7 @@ const FilingSettingsPage: React.FC = () => {
                       />
                       <span className="font-medium">{choice.label}</span>
                     </div>
-                    <code className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
+                    <code className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">
                       {choice.example}
                     </code>
                   </label>
@@ -358,14 +358,14 @@ const FilingSettingsPage: React.FC = () => {
             </section>
 
             {/* Retention Policy */}
-            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Clock className="w-5 h-5 text-gray-600" />
+                <Clock className="w-5 h-5 text-slate-600" />
                 Πολιτική Διατήρησης
               </h2>
 
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 mb-4">
-                <p className="text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <div className="bg-warning-50 dark:bg-warning-700/20 border border-warning-100 dark:border-warning-700 rounded-lg p-3 mb-4">
+                <p className="text-sm text-warning-700 dark:text-warning-100 flex items-start gap-2">
                   <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
                   Νόμος 4308/2014: Ελάχιστη διατήρηση 5 έτη, έως 20 έτη σε περίπτωση φοροδιαφυγής
                 </p>
@@ -382,7 +382,7 @@ const FilingSettingsPage: React.FC = () => {
                     max="20"
                     value={formData.retention_years || 5}
                     onChange={(e) => handleChange('retention_years', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600"
                   />
                 </div>
 
@@ -395,9 +395,9 @@ const FilingSettingsPage: React.FC = () => {
                     min="0"
                     value={formData.auto_archive_years || 0}
                     onChange={(e) => handleChange('auto_archive_years', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600"
                   />
-                  <p className="text-xs text-gray-500 mt-1">0 = απενεργοποιημένο</p>
+                  <p className="text-xs text-slate-500 mt-1">0 = απενεργοποιημένο</p>
                 </div>
 
                 <div className="flex items-end">
@@ -406,7 +406,7 @@ const FilingSettingsPage: React.FC = () => {
                       type="checkbox"
                       checked={formData.enable_retention_warnings || false}
                       onChange={(e) => handleChange('enable_retention_warnings', e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600"
+                      className="w-5 h-5 rounded border-slate-300 text-brand-600"
                     />
                     <span className="text-sm">Προειδοποιήσεις λήξης</span>
                   </label>
@@ -415,9 +415,9 @@ const FilingSettingsPage: React.FC = () => {
             </section>
 
             {/* Security */}
-            <section className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <section className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-                <Shield className="w-5 h-5 text-gray-600" />
+                <Shield className="w-5 h-5 text-slate-600" />
                 Ασφάλεια Αρχείων
               </h2>
 
@@ -430,7 +430,7 @@ const FilingSettingsPage: React.FC = () => {
                     value={formData.allowed_extensions || ''}
                     onChange={(e) => handleChange('allowed_extensions', e.target.value)}
                     rows={3}
-                    className="w-full px-3 py-2 border rounded-lg text-sm font-mono dark:bg-gray-800 dark:border-gray-600"
+                    className="w-full px-3 py-2 border rounded-lg text-sm font-mono dark:bg-slate-800 dark:border-slate-600"
                     placeholder=".pdf,.xlsx,.docx,..."
                   />
                 </div>
@@ -445,9 +445,9 @@ const FilingSettingsPage: React.FC = () => {
                     max="100"
                     value={formData.max_file_size_mb || 10}
                     onChange={(e) => handleChange('max_file_size_mb', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-600"
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-slate-800 dark:border-slate-600"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Μέγιστο μέγεθος ανά αρχείο
                   </p>
                 </div>
@@ -461,38 +461,38 @@ const FilingSettingsPage: React.FC = () => {
               <MiniTreePreview structure={structure} maxHeight="500px" />
 
               {/* Quick Info */}
-              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
                 <h3 className="font-semibold mb-3">Σύνοψη Ρυθμίσεων</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Τοποθεσία:</span>
+                    <span className="text-slate-500">Τοποθεσία:</span>
                     <span className="font-medium">
                       {formData.use_network_storage ? 'Δίκτυο' : 'Τοπικά'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Δομή:</span>
+                    <span className="text-slate-500">Δομή:</span>
                     <span className="font-medium">
                       {FOLDER_STRUCTURE_CHOICES.find(c => c.value === formData.folder_structure)?.label || '-'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Διατήρηση:</span>
+                    <span className="text-slate-500">Διατήρηση:</span>
                     <span className="font-medium">{formData.retention_years} έτη</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Μέγ. αρχείο:</span>
+                    <span className="text-slate-500">Μέγ. αρχείο:</span>
                     <span className="font-medium">{formData.max_file_size_mb} MB</span>
                   </div>
                 </div>
               </div>
 
               {/* Help */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
-                <h3 className="font-semibold text-blue-800 dark:text-blue-300 mb-2">
+              <div className="bg-brand-50 dark:bg-brand-900/20 rounded-xl p-4">
+                <h3 className="font-semibold text-brand-800 dark:text-brand-300 mb-2">
                   Βοήθεια
                 </h3>
-                <ul className="text-sm text-blue-700 dark:text-blue-400 space-y-1">
+                <ul className="text-sm text-brand-700 dark:text-brand-400 space-y-1">
                   <li>• Η δομή φακέλων εφαρμόζεται σε νέους πελάτες</li>
                   <li>• Τρέξτε init_filing_system για υπάρχοντες</li>
                   <li>• Τα αρχεία δεν μετακινούνται αυτόματα</li>

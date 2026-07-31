@@ -182,24 +182,24 @@ export default function MyData() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-          <FileText size={20} className="text-blue-600" />
+        <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+          <FileText size={20} className="text-brand-600" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">myDATA - Αποτέλεσμα ΦΠΑ</h1>
-          <p className="text-gray-500">Παρακολούθηση ΦΠΑ από τα ηλεκτρονικά βιβλία ΑΑΔΕ</p>
+          <h1 className="text-2xl font-bold text-slate-900">myDATA - Αποτέλεσμα ΦΠΑ</h1>
+          <p className="text-slate-500">Παρακολούθηση ΦΠΑ από τα ηλεκτρονικά βιβλία ΑΑΔΕ</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-200">
         <nav className="flex gap-4">
           <button
             onClick={() => setActiveTab('overview')}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'overview'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
             }`}
           >
             <BarChart3 size={18} />
@@ -209,8 +209,8 @@ export default function MyData() {
             onClick={() => setActiveTab('calculator')}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'calculator'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
             }`}
           >
             <Calculator size={18} />
@@ -220,8 +220,8 @@ export default function MyData() {
             onClick={() => setActiveTab('invoices')}
             className={`flex items-center gap-2 px-4 py-3 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'invoices'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-brand-500 text-brand-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
             }`}
           >
             <FileText size={18} />
@@ -234,16 +234,16 @@ export default function MyData() {
       {activeTab === 'overview' ? (
         <div className="space-y-6">
           {/* Filters Row */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
             <div className="flex flex-col md:flex-row md:items-center gap-4">
               {/* Client Selector */}
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Πελάτης</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
                 <div className="relative">
                   <select
                     value={selectedClientId || ''}
                     onChange={(e) => setSelectedClientId(e.target.value ? Number(e.target.value) : null)}
-                    className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none bg-white"
+                    className="w-full pl-3 pr-10 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 appearance-none bg-white"
                   >
                     <option value="">-- Επιλέξτε Πελάτη --</option>
                     {clients.map((client) => (
@@ -252,27 +252,27 @@ export default function MyData() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 </div>
               </div>
 
               {/* Period Selector */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Περίοδος</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Περίοδος</label>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={goToPreviousMonth}
-                    className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                    className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
                   >
                     <ChevronLeft size={18} />
                   </button>
-                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg min-w-[180px] justify-center">
-                    <Calendar size={16} className="text-gray-400" />
+                  <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg min-w-[180px] justify-center">
+                    <Calendar size={16} className="text-slate-400" />
                     <span className="font-medium">{MONTHS[month - 1]} {year}</span>
                   </div>
                   <button
                     onClick={goToNextMonth}
-                    className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors"
+                    className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
                   >
                     <ChevronRight size={18} />
                   </button>
@@ -283,33 +283,33 @@ export default function MyData() {
 
           {/* Loading State */}
           {loading && (
-            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-              <RefreshCw size={32} className="mx-auto mb-4 text-blue-500 animate-spin" />
-              <p className="text-gray-500">Φόρτωση δεδομένων...</p>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+              <RefreshCw size={32} className="mx-auto mb-4 text-brand-500 animate-spin" />
+              <p className="text-slate-500">Φόρτωση δεδομένων...</p>
             </div>
           )}
 
           {/* Error Message */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-              <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
-              <p className="text-red-700">{error}</p>
+            <div className="bg-danger-50 border border-danger-100 rounded-lg p-4 flex items-center gap-3">
+              <AlertCircle size={20} className="text-danger-600 flex-shrink-0" />
+              <p className="text-danger-700">{error}</p>
             </div>
           )}
 
           {/* Success Message */}
           {successMessage && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-              <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
-              <p className="text-green-700">{successMessage}</p>
+            <div className="bg-success-50 border border-success-100 rounded-lg p-4 flex items-center gap-3">
+              <CheckCircle size={20} className="text-success-600 flex-shrink-0" />
+              <p className="text-success-700">{successMessage}</p>
             </div>
           )}
 
           {/* No Client Selected */}
           {!selectedClientId && !loading && (
-            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-              <Users size={48} className="mx-auto mb-4 text-gray-300" />
-              <p className="text-gray-500">Επιλέξτε πελάτη για να δείτε τα στοιχεία ΦΠΑ</p>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+              <Users size={48} className="mx-auto mb-4 text-slate-300" />
+              <p className="text-slate-500">Επιλέξτε πελάτη για να δείτε τα στοιχεία ΦΠΑ</p>
             </div>
           )}
 
@@ -319,20 +319,20 @@ export default function MyData() {
               {/* Main Result Card */}
               <div className={`rounded-xl border-2 p-8 text-center ${
                 isPayable
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-red-50 border-red-200'
+                  ? 'bg-success-50 border-success-100'
+                  : 'bg-danger-50 border-danger-100'
               }`}>
-                <p className="text-sm text-gray-600 mb-1">ΑΠΟΤΕΛΕΣΜΑ ΦΠΑ</p>
-                <p className="text-sm text-gray-500 mb-4">{MONTHS[month - 1].toUpperCase()} {year}</p>
+                <p className="text-sm text-slate-600 mb-1">ΑΠΟΤΕΛΕΣΜΑ ΦΠΑ</p>
+                <p className="text-sm text-slate-500 mb-4">{MONTHS[month - 1].toUpperCase()} {year}</p>
 
-                <p className={`text-5xl font-bold mb-4 ${isPayable ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-5xl font-bold mb-4 ${isPayable ? 'text-success-600' : 'text-danger-600'}`}>
                   {isPayable ? '+' : ''}{formatCurrency(vatResult)}
                 </p>
 
                 <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
                   isPayable
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-100 text-red-700'
+                    ? 'bg-success-100 text-success-700'
+                    : 'bg-danger-100 text-danger-700'
                 }`}>
                   {isPayable ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
                   <span className="font-medium">
@@ -344,35 +344,35 @@ export default function MyData() {
               {/* VAT Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Income VAT */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                  <p className="text-sm text-gray-500 mb-2">ΦΠΑ Εκροών</p>
-                  <p className="text-3xl font-bold text-green-600 mb-1">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center">
+                  <p className="text-sm text-slate-500 mb-2">ΦΠΑ Εκροών</p>
+                  <p className="text-3xl font-bold text-success-600 mb-1">
                     {formatCurrency(clientData.summary.income_vat)}
                   </p>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-slate-400">
                     {clientData.summary.income_count} εγγραφές
                   </p>
                 </div>
 
                 {/* Expense VAT */}
-                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                  <p className="text-sm text-gray-500 mb-2">ΦΠΑ Εισροών</p>
-                  <p className="text-3xl font-bold text-red-600 mb-1">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center">
+                  <p className="text-sm text-slate-500 mb-2">ΦΠΑ Εισροών</p>
+                  <p className="text-3xl font-bold text-danger-600 mb-1">
                     {formatCurrency(clientData.summary.expense_vat)}
                   </p>
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-slate-400">
                     {clientData.summary.expense_count} εγγραφές
                   </p>
                 </div>
               </div>
 
               {/* Sync Section */}
-              <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <Button
                     onClick={handleSync}
                     disabled={syncing || !credentialsId}
-                    className="bg-blue-600 hover:bg-blue-700"
+                    className="bg-brand-600 hover:bg-brand-700"
                   >
                     {syncing ? (
                       <>
@@ -387,7 +387,7 @@ export default function MyData() {
                     )}
                   </Button>
 
-                  <div className="text-right text-sm text-gray-500">
+                  <div className="text-right text-sm text-slate-500">
                     <p>Τελ. ενημέρωση:</p>
                     <p className="font-medium">{formatDateTime(clientData.credentials.last_sync)}</p>
                   </div>
@@ -397,10 +397,10 @@ export default function MyData() {
               {/* Category Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Income by Category */}
-                <div className="bg-white rounded-lg border border-gray-200">
-                  <div className="p-4 border-b border-gray-200">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <TrendingUp size={18} className="text-green-500" />
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <div className="p-4 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <TrendingUp size={18} className="text-success-600" />
                       ΦΠΑ Εκροών ανά Κατηγορία
                     </h3>
                   </div>
@@ -410,30 +410,30 @@ export default function MyData() {
                         {clientData.income_by_category.map((cat) => (
                           <div key={cat.vat_category} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                              <span className="px-2 py-1 bg-success-100 text-success-700 text-xs font-medium rounded">
                                 {cat.vat_rate_display}
                               </span>
-                              <span className="text-sm text-gray-600">
+                              <span className="text-sm text-slate-600">
                                 ({cat.count} εγγρ.)
                               </span>
                             </div>
-                            <span className="font-semibold text-green-600">
+                            <span className="font-semibold text-success-600">
                               {formatCurrency(cat.vat_amount)}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-400 text-center py-4">Δεν υπάρχουν εγγραφές</p>
+                      <p className="text-slate-400 text-center py-4">Δεν υπάρχουν εγγραφές</p>
                     )}
                   </div>
                 </div>
 
                 {/* Expense by Category */}
-                <div className="bg-white rounded-lg border border-gray-200">
-                  <div className="p-4 border-b border-gray-200">
-                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                      <TrendingDown size={18} className="text-red-500" />
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <div className="p-4 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                      <TrendingDown size={18} className="text-danger-600" />
                       ΦΠΑ Εισροών ανά Κατηγορία
                     </h3>
                   </div>
@@ -443,21 +443,21 @@ export default function MyData() {
                         {clientData.expense_by_category.map((cat) => (
                           <div key={cat.vat_category} className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+                              <span className="px-2 py-1 bg-danger-100 text-danger-700 text-xs font-medium rounded">
                                 {cat.vat_rate_display}
                               </span>
-                              <span className="text-sm text-gray-600">
+                              <span className="text-sm text-slate-600">
                                 ({cat.count} εγγρ.)
                               </span>
                             </div>
-                            <span className="font-semibold text-red-600">
+                            <span className="font-semibold text-danger-600">
                               {formatCurrency(cat.vat_amount)}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-gray-400 text-center py-4">Δεν υπάρχουν εγγραφές</p>
+                      <p className="text-slate-400 text-center py-4">Δεν υπάρχουν εγγραφές</p>
                     )}
                   </div>
                 </div>

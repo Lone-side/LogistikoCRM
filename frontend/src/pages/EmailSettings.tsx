@@ -156,20 +156,20 @@ export default function EmailSettings() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Φόρτωση ρυθμίσεων...</span>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+        <span className="ml-3 text-slate-600">Φόρτωση ρυθμίσεων...</span>
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+      <div className="bg-danger-50 border border-danger-100 rounded-lg p-6">
         <div className="flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-red-500" />
+          <AlertCircle className="w-6 h-6 text-danger-600" />
           <div>
-            <h3 className="font-semibold text-red-800">Σφάλμα φόρτωσης</h3>
-            <p className="text-red-600">{error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}</p>
+            <h3 className="font-semibold text-danger-700">Σφάλμα φόρτωσης</h3>
+            <p className="text-danger-600">{error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}</p>
           </div>
           <Button variant="secondary" onClick={() => refetch()} className="ml-auto">
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -185,20 +185,20 @@ export default function EmailSettings() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Mail className="w-6 h-6 text-blue-600" />
+          <div className="p-2 bg-brand-100 rounded-lg">
+            <Mail className="w-6 h-6 text-brand-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Ρυθμίσεις Email</h1>
-            <p className="text-sm text-gray-500">Διαμόρφωση SMTP server και στοιχείων αποστολέα</p>
+            <h1 className="text-2xl font-bold text-slate-900">Ρυθμίσεις Email</h1>
+            <p className="text-sm text-slate-500">Διαμόρφωση SMTP server και στοιχείων αποστολέα</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {settings?.last_test_success !== null && (
             <div className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm ${
               settings?.last_test_success
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
+                ? 'bg-success-100 text-success-700'
+                : 'bg-danger-100 text-danger-700'
             }`}>
               {settings?.last_test_success ? (
                 <Check className="w-4 h-4" />
@@ -221,36 +221,36 @@ export default function EmailSettings() {
 
       {/* Success/Error Messages */}
       {successMessage && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-2">
-          <Check className="w-5 h-5 text-green-500" />
-          <span className="text-green-700">{successMessage}</span>
+        <div className="bg-success-50 border border-success-100 rounded-lg p-4 flex items-center gap-2">
+          <Check className="w-5 h-5 text-success-600" />
+          <span className="text-success-700">{successMessage}</span>
           <button onClick={() => setSuccessMessage(null)} className="ml-auto">
-            <X className="w-4 h-4 text-green-500" />
+            <X className="w-4 h-4 text-success-600" />
           </button>
         </div>
       )}
 
       {errorMessage && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-red-500" />
-          <span className="text-red-700">{errorMessage}</span>
+        <div className="bg-danger-50 border border-danger-100 rounded-lg p-4 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-danger-600" />
+          <span className="text-danger-700">{errorMessage}</span>
           <button onClick={() => setErrorMessage(null)} className="ml-auto">
-            <X className="w-4 h-4 text-red-500" />
+            <X className="w-4 h-4 text-danger-600" />
           </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* SMTP Settings Section */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-6">
-            <Server className="w-5 h-5 text-gray-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Ρυθμίσεις SMTP</h2>
+            <Server className="w-5 h-5 text-slate-600" />
+            <h2 className="text-lg font-semibold text-slate-900">Ρυθμίσεις SMTP</h2>
           </div>
 
           {/* Quick Presets */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               Γρήγορη Ρύθμιση
             </label>
             <div className="flex flex-wrap gap-2">
@@ -258,7 +258,7 @@ export default function EmailSettings() {
                 <button
                   key={preset.name}
                   onClick={() => applyPreset(preset)}
-                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                 >
                   {preset.name}
                 </button>
@@ -269,7 +269,7 @@ export default function EmailSettings() {
           <div className="space-y-4">
             {/* SMTP Host */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 SMTP Server
               </label>
               <input
@@ -278,14 +278,14 @@ export default function EmailSettings() {
                 value={formData.smtp_host || ''}
                 onChange={handleChange}
                 placeholder="smtp.gmail.com"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               />
             </div>
 
             {/* SMTP Port & Security */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Port
                 </label>
                 <input
@@ -293,18 +293,18 @@ export default function EmailSettings() {
                   name="smtp_port"
                   value={formData.smtp_port || 587}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Ασφάλεια
                 </label>
                 <select
                   name="smtp_security"
                   value={formData.smtp_security || 'tls'}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 >
                   {SECURITY_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -317,7 +317,7 @@ export default function EmailSettings() {
 
             {/* SMTP Username */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Όνομα Χρήστη (Email)
               </label>
               <input
@@ -326,16 +326,16 @@ export default function EmailSettings() {
                 value={formData.smtp_username || ''}
                 onChange={handleChange}
                 placeholder="your-email@gmail.com"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               />
             </div>
 
             {/* SMTP Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
                 Κωδικός (App Password)
                 {settings?.has_password && (
-                  <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-1 text-xs bg-success-100 text-success-700 px-2 py-0.5 rounded-full">
                     <Check className="w-3 h-3" />
                     Αποθηκευμένος
                   </span>
@@ -348,27 +348,27 @@ export default function EmailSettings() {
                   value={formData.smtp_password || ''}
                   onChange={handleChange}
                   placeholder={settings?.has_password ? 'Νέος κωδικός (προαιρετικά)' : 'Εισάγετε κωδικό'}
-                  className={`w-full px-3 py-2 pr-10 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  className={`w-full px-3 py-2 pr-10 border rounded-md focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 ${
                     settings?.has_password && !formData.smtp_password
-                      ? 'border-green-300 bg-green-50'
-                      : 'border-gray-300'
+                      ? 'border-success-100 bg-success-50'
+                      : 'border-slate-300'
                   }`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 cursor-pointer transition-colors duration-150"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
               {settings?.has_password && !formData.smtp_password ? (
-                <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                <p className="text-xs text-success-600 mt-1 flex items-center gap-1">
                   <Shield className="w-3 h-3" />
                   Ο κωδικός είναι αποθηκευμένος με κρυπτογράφηση. Αφήστε κενό για να τον διατηρήσετε.
                 </p>
               ) : !settings?.has_password && !formData.smtp_password ? (
-                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                <p className="text-xs text-warning-600 mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
                   Δεν έχει οριστεί κωδικός. Απαιτείται για αποστολή email.
                 </p>
@@ -376,12 +376,12 @@ export default function EmailSettings() {
             </div>
 
             {/* Gmail Help */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-800 mb-2 flex items-center gap-2">
+            <div className="bg-brand-50 border border-brand-200 rounded-lg p-4">
+              <h4 className="font-medium text-brand-800 mb-2 flex items-center gap-2">
                 <Shield className="w-4 h-4" />
                 Για Gmail / Google Workspace
               </h4>
-              <ul className="text-sm text-blue-700 space-y-1 list-disc list-inside">
+              <ul className="text-sm text-brand-700 space-y-1 list-disc list-inside">
                 <li>Ενεργοποιήστε 2-Factor Authentication</li>
                 <li>Δημιουργήστε App Password από τις ρυθμίσεις Google</li>
                 <li>Χρησιμοποιήστε το App Password αντί για τον κανονικό κωδικό</li>
@@ -389,7 +389,7 @@ export default function EmailSettings() {
             </div>
 
             {/* Test Connection Button */}
-            <div className="pt-4 border-t border-gray-200">
+            <div className="pt-4 border-t border-slate-200">
               <Button
                 variant="secondary"
                 onClick={handleTestConnection}
@@ -405,16 +405,16 @@ export default function EmailSettings() {
 
         {/* Sender Info Section */}
         <div className="space-y-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <div className="flex items-center gap-2 mb-6">
-              <User className="w-5 h-5 text-gray-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Στοιχεία Αποστολέα</h2>
+              <User className="w-5 h-5 text-slate-600" />
+              <h2 className="text-lg font-semibold text-slate-900">Στοιχεία Αποστολέα</h2>
             </div>
 
             <div className="space-y-4">
               {/* From Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Email Αποστολέα *
                 </label>
                 <input
@@ -423,13 +423,13 @@ export default function EmailSettings() {
                   value={formData.from_email || ''}
                   onChange={handleChange}
                   placeholder="info@example.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
 
               {/* From Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Όνομα Αποστολέα
                 </label>
                 <input
@@ -438,13 +438,13 @@ export default function EmailSettings() {
                   value={formData.from_name || ''}
                   onChange={handleChange}
                   placeholder="Λογιστικό Γραφείο Παπαδόπουλος"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
 
               {/* Reply-To */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Reply-To Email
                 </label>
                 <input
@@ -453,23 +453,23 @@ export default function EmailSettings() {
                   value={formData.reply_to || ''}
                   onChange={handleChange}
                   placeholder="Αν διαφέρει από το email αποστολέα"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
             </div>
           </div>
 
           {/* Company Info Section */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
             <div className="flex items-center gap-2 mb-6">
-              <Building2 className="w-5 h-5 text-gray-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Στοιχεία Εταιρείας</h2>
+              <Building2 className="w-5 h-5 text-slate-600" />
+              <h2 className="text-lg font-semibold text-slate-900">Στοιχεία Εταιρείας</h2>
             </div>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Όνομα Εταιρείας
                   </label>
                   <input
@@ -477,11 +477,11 @@ export default function EmailSettings() {
                     name="company_name"
                     value={formData.company_name || ''}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Τηλέφωνο
                   </label>
                   <input
@@ -489,13 +489,13 @@ export default function EmailSettings() {
                     name="company_phone"
                     value={formData.company_phone || ''}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Website
                 </label>
                 <input
@@ -504,13 +504,13 @@ export default function EmailSettings() {
                   value={formData.company_website || ''}
                   onChange={handleChange}
                   placeholder="https://www.example.com"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Όνομα Λογιστή
                   </label>
                   <input
@@ -518,11 +518,11 @@ export default function EmailSettings() {
                     name="accountant_name"
                     value={formData.accountant_name || ''}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Τίτλος
                   </label>
                   <input
@@ -531,7 +531,7 @@ export default function EmailSettings() {
                     value={formData.accountant_title || ''}
                     onChange={handleChange}
                     placeholder="Λογιστής Α' Τάξης"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
               </div>
@@ -541,12 +541,12 @@ export default function EmailSettings() {
       </div>
 
       {/* Email Signature Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Υπογραφή Email</h3>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">Υπογραφή Email</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Signature Editor */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               HTML Κώδικας
             </label>
             <textarea
@@ -555,26 +555,26 @@ export default function EmailSettings() {
               onChange={handleChange}
               rows={10}
               placeholder="HTML υπογραφή που προστίθεται στα emails..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 font-mono text-sm"
             />
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-slate-500 mt-2">
               Μπορείτε να χρησιμοποιήσετε HTML για μορφοποίηση. Η υπογραφή προστίθεται αυτόματα στο τέλος κάθε email.
             </p>
           </div>
 
           {/* Signature Preview */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               Προεπισκόπηση
             </label>
-            <div className="border border-gray-300 rounded-md p-4 bg-gray-50 min-h-[200px]">
+            <div className="border border-slate-300 rounded-md p-4 bg-slate-50 min-h-[200px]">
               {formData.email_signature ? (
                 <div
                   className="prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: formData.email_signature }}
                 />
               ) : (
-                <p className="text-gray-400 text-sm italic">
+                <p className="text-slate-400 text-sm italic">
                   Η προεπισκόπηση θα εμφανιστεί εδώ όταν εισάγετε HTML κώδικα...
                 </p>
               )}
@@ -583,9 +583,9 @@ export default function EmailSettings() {
         </div>
 
         {/* Signature Template Suggestions */}
-        <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <h4 className="font-medium text-amber-800 mb-2">Παράδειγμα υπογραφής:</h4>
-          <pre className="text-xs text-amber-700 overflow-x-auto whitespace-pre-wrap">{`<div style="font-family: Arial, sans-serif; color: #333;">
+        <div className="mt-4 p-4 bg-warning-50 border border-warning-100 rounded-lg">
+          <h4 className="font-medium text-warning-700 mb-2">Παράδειγμα υπογραφής:</h4>
+          <pre className="text-xs text-warning-700 overflow-x-auto whitespace-pre-wrap">{`<div style="font-family: Arial, sans-serif; color: #333;">
   <p style="margin: 0;">Με εκτίμηση,</p>
   <p style="margin: 5px 0 0 0; font-weight: bold;">${formData.accountant_name || 'Όνομα Λογιστή'}</p>
   <p style="margin: 0; font-size: 14px; color: #666;">${formData.accountant_title || 'Λογιστής Α\' Τάξης'}</p>
@@ -599,9 +599,9 @@ export default function EmailSettings() {
       </div>
 
       {/* Test Email Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Δοκιμαστικό Email</h3>
-        <p className="text-sm text-gray-600 mb-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">Δοκιμαστικό Email</h3>
+        <p className="text-sm text-slate-600 mb-4">
           Στείλτε ένα δοκιμαστικό email για να επιβεβαιώσετε ότι οι ρυθμίσεις λειτουργούν σωστά.
         </p>
         <div className="flex gap-2">
@@ -610,7 +610,7 @@ export default function EmailSettings() {
             value={testEmail}
             onChange={(e) => setTestEmail(e.target.value)}
             placeholder="test@example.com"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
           />
           <Button
             onClick={handleSendTestEmail}
@@ -622,20 +622,20 @@ export default function EmailSettings() {
           </Button>
         </div>
         {!formData.is_active && (
-          <p className="text-sm text-amber-600 mt-2">
+          <p className="text-sm text-warning-600 mt-2">
             Ενεργοποιήστε τις ρυθμίσεις email για να στείλετε δοκιμαστικό
           </p>
         )}
       </div>
 
       {/* Advanced Settings */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Προχωρημένες Ρυθμίσεις</h3>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-4">Προχωρημένες Ρυθμίσεις</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Rate Limit */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Rate Limit (emails/sec)
             </label>
             <input
@@ -646,16 +646,16 @@ export default function EmailSettings() {
               step="0.5"
               min="0.5"
               max="10"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Μέγιστα emails ανά δευτερόλεπτο
             </p>
           </div>
 
           {/* Burst Limit */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Burst Limit
             </label>
             <input
@@ -665,9 +665,9 @@ export default function EmailSettings() {
               onChange={handleChange}
               min="1"
               max="50"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Μέγιστα emails σε burst
             </p>
           </div>
@@ -682,8 +682,8 @@ export default function EmailSettings() {
                 onChange={handleChange}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              <span className="ml-3 text-sm font-medium text-gray-700">
+              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+              <span className="ml-3 text-sm font-medium text-slate-700">
                 {formData.is_active ? 'Ενεργό' : 'Απενεργοποιημένο'}
               </span>
             </label>
@@ -695,16 +695,16 @@ export default function EmailSettings() {
       {settings?.last_test_at && (
         <div className={`rounded-lg border p-4 ${
           settings.last_test_success
-            ? 'bg-green-50 border-green-200'
-            : 'bg-red-50 border-red-200'
+            ? 'bg-success-50 border-success-100'
+            : 'bg-danger-50 border-danger-100'
         }`}>
           <h4 className={`font-medium mb-2 ${
-            settings.last_test_success ? 'text-green-800' : 'text-red-800'
+            settings.last_test_success ? 'text-success-700' : 'text-danger-700'
           }`}>
             Τελευταίο Test: {new Date(settings.last_test_at).toLocaleString('el-GR')}
           </h4>
           {settings.last_test_error && (
-            <p className="text-sm text-red-700">{settings.last_test_error}</p>
+            <p className="text-sm text-danger-700">{settings.last_test_error}</p>
           )}
         </div>
       )}

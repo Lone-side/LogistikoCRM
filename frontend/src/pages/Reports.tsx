@@ -14,6 +14,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Button } from '../components';
+import { PageHeader } from '../components/ui';
 import {
   useReportsStats,
   useReportsExport,
@@ -33,9 +34,9 @@ const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  'ΦΠΑ': 'bg-blue-500',
-  'ΑΠΔ': 'bg-green-500',
-  'ΕΝΦΙΑ': 'bg-yellow-500',
+  'ΦΠΑ': 'bg-brand-500',
+  'ΑΠΔ': 'bg-success-600',
+  'ΕΝΦΙΑ': 'bg-warning-600',
   'Ε1': 'bg-purple-500',
   'Ε3': 'bg-pink-500',
   'ΜΥΦ': 'bg-orange-500',
@@ -85,7 +86,7 @@ export default function Reports() {
 
     const isPositive = inverted ? change < 0 : change > 0;
     const Icon = isPositive ? TrendingUp : TrendingDown;
-    const colorClass = isPositive ? 'text-green-600' : 'text-red-600';
+    const colorClass = isPositive ? 'text-success-600' : 'text-danger-600';
     const sign = change > 0 ? '+' : '';
 
     return (
@@ -103,18 +104,16 @@ export default function Reports() {
 
   // Get color for obligation type
   const getTypeColor = (code: string): string => {
-    return TYPE_COLORS[code] || 'bg-gray-500';
+    return TYPE_COLORS[code] || 'bg-slate-500';
   };
 
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Αναφορές</h1>
-          <p className="text-gray-500 mt-1">Στατιστικά και αναλύσεις</p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="Αναφορές"
+        subtitle="Στατιστικά και αναλύσεις"
+        actions={<>
           <Button variant="secondary" onClick={() => refetch()}>
             <RefreshCw size={18} className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Ανανέωση
@@ -133,35 +132,35 @@ export default function Reports() {
               {isExporting ? 'Εξαγωγή...' : 'Εξαγωγή'}
             </Button>
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
+              <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-slate-200 py-2 z-50">
                 <button
                   onClick={() => handleExport('clients')}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
+                  className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center gap-3 cursor-pointer transition-colors duration-150"
                 >
-                  <FileSpreadsheet size={18} className="text-green-600" />
+                  <FileSpreadsheet size={18} className="text-success-600" />
                   <div>
                     <div className="font-medium text-sm">Πελάτες (Excel)</div>
-                    <div className="text-xs text-gray-500">Πλήρης λίστα πελατών</div>
+                    <div className="text-xs text-slate-500">Πλήρης λίστα πελατών</div>
                   </div>
                 </button>
                 <button
                   onClick={() => handleExport('obligations')}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
+                  className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center gap-3 cursor-pointer transition-colors duration-150"
                 >
-                  <FileSpreadsheet size={18} className="text-blue-600" />
+                  <FileSpreadsheet size={18} className="text-brand-600" />
                   <div>
                     <div className="font-medium text-sm">Υποχρεώσεις (Excel)</div>
-                    <div className="text-xs text-gray-500">Τρέχουσες υποχρεώσεις</div>
+                    <div className="text-xs text-slate-500">Τρέχουσες υποχρεώσεις</div>
                   </div>
                 </button>
                 <button
                   onClick={() => handleExport('monthly-pdf')}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center gap-3"
+                  className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center gap-3 cursor-pointer transition-colors duration-150"
                 >
-                  <FileText size={18} className="text-red-600" />
+                  <FileText size={18} className="text-danger-600" />
                   <div>
                     <div className="font-medium text-sm">Μηνιαία Αναφορά (PDF)</div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-slate-500">
                       {currentMonth}/{currentYear}
                     </div>
                   </div>
@@ -169,15 +168,15 @@ export default function Reports() {
               </div>
             )}
           </div>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Error Banner */}
       {isError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-danger-50 border border-danger-100 rounded-lg p-4">
           <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-            <span className="text-red-700">
+            <AlertCircle className="w-5 h-5 text-danger-600 mr-2" />
+            <span className="text-danger-700">
               Σφάλμα φόρτωσης δεδομένων: {error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}
             </span>
           </div>
@@ -185,11 +184,11 @@ export default function Reports() {
       )}
 
       {/* Date Range Selector */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex items-center gap-2">
-            <Calendar size={18} className="text-gray-400" />
-            <span className="text-sm text-gray-600">Περίοδος:</span>
+            <Calendar size={18} className="text-slate-400" />
+            <span className="text-sm text-slate-600">Περίοδος:</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {PERIOD_OPTIONS.map((option) => (
@@ -198,8 +197,8 @@ export default function Reports() {
                 onClick={() => setPeriod(option.value)}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${
                   period === option.value
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-brand-50 text-brand-700'
+                    : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
                 {option.label}
@@ -211,69 +210,69 @@ export default function Reports() {
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Users size={24} className="text-blue-600" />
+            <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
+              <Users size={24} className="text-brand-600" />
             </div>
             {renderChange(stats?.comparison?.clients_change)}
           </div>
-          <p className="text-sm text-gray-500 mb-1">Συνολικοί πελάτες</p>
-          <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.total_clients)}</p>
+          <p className="text-sm text-slate-500 mb-1">Συνολικοί πελάτες</p>
+          <p className="text-2xl font-bold text-slate-900">{renderStatValue(stats?.total_clients)}</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <ClipboardList size={24} className="text-green-600" />
+            <div className="w-12 h-12 bg-success-100 rounded-lg flex items-center justify-center">
+              <ClipboardList size={24} className="text-success-600" />
             </div>
             {renderChange(stats?.comparison?.completed_change)}
           </div>
-          <p className="text-sm text-gray-500 mb-1">Ολοκληρωμένες</p>
-          <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.completed_obligations)}</p>
+          <p className="text-sm text-slate-500 mb-1">Ολοκληρωμένες</p>
+          <p className="text-2xl font-bold text-slate-900">{renderStatValue(stats?.completed_obligations)}</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-              <ClipboardList size={24} className="text-yellow-600" />
+            <div className="w-12 h-12 bg-warning-100 rounded-lg flex items-center justify-center">
+              <ClipboardList size={24} className="text-warning-600" />
             </div>
           </div>
-          <p className="text-sm text-gray-500 mb-1">Σε εκκρεμότητα</p>
-          <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.pending_obligations)}</p>
+          <p className="text-sm text-slate-500 mb-1">Σε εκκρεμότητα</p>
+          <p className="text-2xl font-bold text-slate-900">{renderStatValue(stats?.pending_obligations)}</p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <ClipboardList size={24} className="text-red-600" />
+            <div className="w-12 h-12 bg-danger-100 rounded-lg flex items-center justify-center">
+              <ClipboardList size={24} className="text-danger-600" />
             </div>
           </div>
-          <p className="text-sm text-gray-500 mb-1">Εκπρόθεσμες</p>
-          <p className="text-2xl font-bold text-gray-900">{renderStatValue(stats?.overdue_obligations)}</p>
+          <p className="text-sm text-slate-500 mb-1">Εκπρόθεσμες</p>
+          <p className="text-2xl font-bold text-slate-900">{renderStatValue(stats?.overdue_obligations)}</p>
         </div>
       </div>
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Obligations by Type */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Υποχρεώσεις ανά τύπο</h3>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Υποχρεώσεις ανά τύπο</h3>
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
             </div>
           ) : stats?.obligations_by_type && stats.obligations_by_type.length > 0 ? (
             <div className="space-y-4">
               {stats.obligations_by_type.slice(0, 8).map((item) => (
                 <div key={item.obligation_type__code || item.obligation_type__name}>
                   <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">
+                    <span className="text-slate-600">
                       {item.obligation_type__code || item.obligation_type__name}
                     </span>
-                    <span className="text-gray-900 font-medium">{item.count}</span>
+                    <span className="text-slate-900 font-medium">{item.count}</span>
                   </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
                       className={`h-full ${getTypeColor(item.obligation_type__code)} rounded-full transition-all`}
                       style={{ width: `${(item.count / maxTypeCount) * 100}%` }}
@@ -283,18 +282,18 @@ export default function Reports() {
               ))}
             </div>
           ) : (
-            <div className="flex items-center justify-center h-48 text-gray-500">
+            <div className="flex items-center justify-center h-48 text-slate-500">
               Δεν υπάρχουν δεδομένα
             </div>
           )}
         </div>
 
         {/* Monthly Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Μηνιαία δραστηριότητα</h3>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Μηνιαία δραστηριότητα</h3>
           {isLoading ? (
             <div className="flex items-center justify-center h-48">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
             </div>
           ) : stats?.monthly_activity && stats.monthly_activity.length > 0 ? (
             <div className="h-48">
@@ -319,7 +318,7 @@ export default function Reports() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-48 text-gray-500">
+            <div className="flex items-center justify-center h-48 text-slate-500">
               Δεν υπάρχουν δεδομένα
             </div>
           )}
@@ -328,20 +327,20 @@ export default function Reports() {
 
       {/* Completion Rate Card */}
       {stats && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Ποσοστό Ολοκλήρωσης</h3>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Ποσοστό Ολοκλήρωσης</h3>
           <div className="flex items-center gap-4">
             <div className="flex-1">
-              <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-green-500 rounded-full transition-all"
+                  className="h-full bg-success-600 rounded-full transition-all"
                   style={{ width: `${stats.completion_rate}%` }}
                 />
               </div>
             </div>
-            <span className="text-2xl font-bold text-gray-900">{stats.completion_rate}%</span>
+            <span className="text-2xl font-bold text-slate-900">{stats.completion_rate}%</span>
           </div>
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="text-sm text-slate-500 mt-2">
             {stats.completed_obligations} ολοκληρωμένες από συνολικά{' '}
             {stats.completed_obligations + stats.pending_obligations + stats.overdue_obligations} υποχρεώσεις
           </p>
@@ -349,11 +348,11 @@ export default function Reports() {
       )}
 
       {/* Reports List */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Διαθέσιμες αναφορές</h3>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div className="p-6 border-b border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900">Διαθέσιμες αναφορές</h3>
         </div>
-        <div className="divide-y divide-gray-200">
+        <div className="divide-y divide-slate-100">
           {[
             { name: 'Αναφορά πελατών', description: 'Πλήρης λίστα πελατών με στοιχεία επικοινωνίας', type: 'clients', enabled: true },
             { name: 'Αναφορά υποχρεώσεων', description: 'Κατάσταση υποχρεώσεων ανά μήνα', type: 'obligations', enabled: true },
@@ -367,18 +366,18 @@ export default function Reports() {
                                   report.type === 'financial' ? TrendingUp : BarChart3;
             const isCurrentlyExporting = isExporting && exportType === report.type;
             return (
-              <div key={index} className="flex items-center justify-between p-4 hover:bg-gray-50">
+              <div key={index} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors duration-150">
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    report.enabled ? 'bg-gray-100' : 'bg-gray-50'
+                    report.enabled ? 'bg-slate-100' : 'bg-slate-50'
                   }`}>
-                    <IconComponent size={20} className={report.enabled ? 'text-gray-600' : 'text-gray-400'} />
+                    <IconComponent size={20} className={report.enabled ? 'text-slate-600' : 'text-slate-400'} />
                   </div>
                   <div>
-                    <p className={`font-medium ${report.enabled ? 'text-gray-900' : 'text-gray-400'}`}>
+                    <p className={`font-medium ${report.enabled ? 'text-slate-900' : 'text-slate-400'}`}>
                       {report.name}
                     </p>
-                    <p className="text-sm text-gray-500">{report.description}</p>
+                    <p className="text-sm text-slate-500">{report.description}</p>
                   </div>
                 </div>
                 <Button
