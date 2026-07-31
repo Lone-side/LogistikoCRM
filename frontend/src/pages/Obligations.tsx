@@ -32,16 +32,22 @@ import {
   Paperclip, Mail, AlertTriangle, Settings, UserPlus
 } from 'lucide-react';
 import type { Obligation, ObligationFormData, BulkObligationFormData } from '../types';
+import { Badge, EmptyState, PageHeader, type BadgeVariant } from '../components/ui';
 import {
   OBLIGATION_STATUS_LABELS,
-  OBLIGATION_STATUS_COLORS,
   MONTHS,
   YEARS,
 } from '../constants';
 
 // Alias for backwards compatibility within this file
 const STATUS_LABELS = OBLIGATION_STATUS_LABELS;
-const STATUS_COLORS = OBLIGATION_STATUS_COLORS;
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  pending: 'warning',
+  in_progress: 'info',
+  completed: 'success',
+  overdue: 'danger',
+  cancelled: 'neutral',
+};
 const currentYear = new Date().getFullYear();
 
 interface Filters {
@@ -425,17 +431,19 @@ export default function Obligations() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-yellow-100 rounded-lg">
-            <FileText className="w-6 h-6 text-yellow-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Υποχρεώσεις</h1>
-            <p className="text-sm text-gray-500">{totalCount} συνολικά</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title={
+          <span className="flex items-center gap-3">
+            <span className="p-2 bg-brand-50 rounded-lg">
+              <FileText className="w-6 h-6 text-brand-600" />
+            </span>
+            Υποχρεώσεις
+          </span>
+        }
+        subtitle={`${totalCount} συνολικά`}
+        className="mb-0"
+        actions={
+          <>
           <Link to="/settings/obligations">
             <Button variant="secondary" title="Ρυθμίσεις τύπων υποχρεώσεων">
               <Settings className="w-4 h-4 mr-2" />
@@ -458,32 +466,33 @@ export default function Obligations() {
             <Plus className="w-4 h-4 mr-2" />
             Νέα Υποχρέωση
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Filter Controls */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           {/* Quick filters row */}
           <div className="flex items-center justify-between gap-4 mb-4">
             <div className="flex items-center gap-4">
-              <div className="flex items-center text-gray-600">
+              <div className="flex items-center text-slate-600">
                 <Filter className="w-5 h-5 mr-2" />
                 <span className="font-medium">Κατάσταση:</span>
               </div>
               <div className="flex gap-2">
                 {[
-                  { value: 'all', label: 'Όλες', className: 'bg-gray-800 text-white' },
-                  { value: 'pending', label: 'Εκκρεμείς', className: 'bg-yellow-500 text-white' },
-                  { value: 'completed', label: 'Ολοκληρωμένες', className: 'bg-green-500 text-white' },
-                  { value: 'overdue', label: 'Εκπρόθεσμες', className: 'bg-red-500 text-white' },
+                  { value: 'all', label: 'Όλες', className: 'bg-slate-800 text-white' },
+                  { value: 'pending', label: 'Εκκρεμείς', className: 'bg-warning-600 text-white' },
+                  { value: 'completed', label: 'Ολοκληρωμένες', className: 'bg-success-600 text-white' },
+                  { value: 'overdue', label: 'Εκπρόθεσμες', className: 'bg-danger-600 text-white' },
                 ].map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => handleFilterChange('status', opt.value)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors duration-150 ${
                       filters.status === opt.value
                         ? opt.className
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
                   >
                     {opt.label}
@@ -509,14 +518,14 @@ export default function Obligations() {
 
           {/* Extended filters */}
           {showFilters && (
-            <div className="border-t border-gray-200 pt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="border-t border-slate-200 pt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
               {/* Client filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Πελάτης</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
                 <select
                   value={filters.client || ''}
                   onChange={(e) => handleFilterChange('client', e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 >
                   <option value="">Όλοι</option>
                   {clients.map((client) => (
@@ -529,11 +538,11 @@ export default function Obligations() {
 
               {/* Type filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Τύπος</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Τύπος</label>
                 <select
                   value={filters.type}
                   onChange={(e) => handleFilterChange('type', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 >
                   <option value="">Όλοι</option>
                   {obligationTypes?.map((type) => (
@@ -546,11 +555,11 @@ export default function Obligations() {
 
               {/* Month filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Μήνας</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
                 <select
                   value={filters.month || ''}
                   onChange={(e) => handleFilterChange('month', e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 >
                   <option value="">Όλοι</option>
                   {MONTHS.map((m) => (
@@ -563,11 +572,11 @@ export default function Obligations() {
 
               {/* Year filter */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Έτος</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
                 <select
                   value={filters.year || ''}
                   onChange={(e) => handleFilterChange('year', e.target.value ? Number(e.target.value) : null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 >
                   <option value="">Όλα</option>
                   {YEARS.map((y) => (
@@ -580,23 +589,23 @@ export default function Obligations() {
 
               {/* Deadline from */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Προθεσμία από</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία από</label>
                 <input
                   type="date"
                   value={filters.deadline_from}
                   onChange={(e) => handleFilterChange('deadline_from', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
 
               {/* Deadline to */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Προθεσμία έως</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία έως</label>
                 <input
                   type="date"
                   value={filters.deadline_to}
                   onChange={(e) => handleFilterChange('deadline_to', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
 
@@ -612,8 +621,8 @@ export default function Obligations() {
 
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-            <span className="text-blue-800 font-medium">
+        <div className="bg-brand-50 border border-brand-200 rounded-lg p-4 flex items-center justify-between">
+            <span className="text-brand-800 font-medium">
               {selectedIds.size} επιλεγμένα
             </span>
             <div className="flex items-center gap-2">
@@ -639,7 +648,7 @@ export default function Obligations() {
                 setSelectedIds(new Set());
                 setSelectAll(false);
               }}
-              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+              className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded"
               title="Ακύρωση επιλογής"
               aria-label="Ακύρωση επιλογής"
             >
@@ -651,11 +660,11 @@ export default function Obligations() {
 
       {/* Error Banner */}
       {isError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-danger-50 border border-danger-100 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-              <span className="text-red-700">
+              <AlertCircle className="w-5 h-5 text-danger-600 mr-2" />
+              <span className="text-danger-700">
                 Σφάλμα φόρτωσης: {error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}
               </span>
             </div>
@@ -674,29 +683,30 @@ export default function Obligations() {
 
       {/* Obligations Table */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <p className="text-sm text-gray-500">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200">
+              <p className="text-sm text-slate-500">
                 {obligations.length} από {totalCount} υποχρεώσεις
               </p>
             </div>
 
             {obligations.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                Δεν βρέθηκαν υποχρεώσεις με τα επιλεγμένα φίλτρα.
-              </div>
+              <EmptyState
+                icon={FileText}
+                title="Δεν βρέθηκαν υποχρεώσεις με τα επιλεγμένα φίλτρα."
+              />
             ) : (
               <>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                  <table className="min-w-full divide-y divide-slate-200">
+                    <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left">
                           <button
                             onClick={handleSelectAll}
                             aria-label="Επιλογή όλων"
                             aria-pressed={selectAll}
-                            className="text-gray-400 hover:text-gray-600"
+                            className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150"
                           >
                             {selectAll ? (
                               <CheckSquare className="w-5 h-5" />
@@ -705,83 +715,79 @@ export default function Obligations() {
                             )}
                           </button>
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Πελάτης
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Τύπος
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Περίοδος
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Προθεσμία
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Κατάσταση
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Ανάθεση
                         </th>
-                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-center text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Έγγραφα
                         </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">
                           Ενέργειες
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white divide-y divide-slate-100">
                       {obligations.map((obligation) => (
-                        <tr key={obligation.id} className={`hover:bg-gray-50 ${selectedIds.has(obligation.id) ? 'bg-blue-50' : ''}`}>
+                        <tr key={obligation.id} className={`transition-colors duration-150 hover:bg-slate-50 ${selectedIds.has(obligation.id) ? 'bg-brand-50' : ''}`}>
                           <td className="px-4 py-4">
                             <button
                               onClick={() => handleSelectOne(obligation.id)}
-                              className="text-gray-400 hover:text-gray-600"
+                              className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150"
                             >
                               {selectedIds.has(obligation.id) ? (
-                                <CheckSquare className="w-5 h-5 text-blue-600" />
+                                <CheckSquare className="w-5 h-5 text-brand-600" />
                               ) : (
                                 <Square className="w-5 h-5" />
                               )}
                             </button>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">
+                            <div className="text-sm font-medium text-slate-900">
                               {obligation.client_name || `Πελάτης #${obligation.client}`}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex px-2 py-1 text-sm font-medium bg-gray-100 text-gray-800 rounded">
+                            <span className="inline-flex px-2 py-1 text-sm font-medium bg-slate-100 text-slate-800 rounded">
                               {obligation.type_name || obligation.type_code || obligation.obligation_type}
                             </span>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                             {String(obligation.month).padStart(2, '0')}/{obligation.year}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                             {formatDate(obligation.deadline)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                STATUS_COLORS[obligation.status]
-                              }`}
-                            >
+                            <Badge variant={STATUS_VARIANTS[obligation.status] ?? 'neutral'}>
                               {STATUS_LABELS[obligation.status]}
-                            </span>
+                            </Badge>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                             {obligation.assigned_to_name || '-'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             {(obligation.documents_count ?? 0) > 0 ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-brand-50 text-brand-700 text-xs font-medium">
                                 <Paperclip className="w-3 h-3" />
                                 {obligation.documents_count}
                               </span>
                             ) : (
-                              <span className="text-gray-300 text-sm">-</span>
+                              <span className="text-slate-300 text-sm">-</span>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -790,7 +796,7 @@ export default function Obligations() {
                               {obligation.status !== 'completed' && (
                                 <button
                                   onClick={() => handleCompleteClick(obligation)}
-                                  className="text-green-600 hover:text-green-900 p-1.5 hover:bg-green-50 rounded"
+                                  className="text-success-600 hover:text-success-700 p-1.5 hover:bg-success-50 rounded-lg cursor-pointer transition-colors duration-150"
                                   title="Ολοκλήρωση"
                                   aria-label="Ολοκλήρωση"
                                 >
@@ -800,7 +806,7 @@ export default function Obligations() {
                               {/* Attach document button */}
                               <button
                                 onClick={() => handleUploadClick(obligation)}
-                                className="text-purple-600 hover:text-purple-900 p-1.5 hover:bg-purple-50 rounded"
+                                className="text-purple-600 hover:text-purple-900 p-1.5 hover:bg-purple-50 rounded-lg cursor-pointer transition-colors duration-150"
                                 title="Επισύναψη εγγράφου"
                                 aria-label="Επισύναψη εγγράφου"
                               >
@@ -809,7 +815,7 @@ export default function Obligations() {
                               {/* Send email button */}
                               <button
                                 onClick={() => handleEmailClick(obligation)}
-                                className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded"
+                                className="text-brand-600 hover:text-brand-900 p-1.5 hover:bg-brand-50 rounded-lg cursor-pointer transition-colors duration-150"
                                 title="Αποστολή email"
                                 aria-label="Αποστολή email"
                               >
@@ -818,7 +824,7 @@ export default function Obligations() {
                               {/* Edit button */}
                               <button
                                 onClick={() => handleEdit(obligation)}
-                                className="text-gray-600 hover:text-gray-900 p-1.5 hover:bg-gray-100 rounded"
+                                className="text-slate-600 hover:text-slate-900 p-1.5 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors duration-150"
                                 title="Επεξεργασία"
                                 aria-label="Επεξεργασία"
                               >
@@ -827,7 +833,7 @@ export default function Obligations() {
                               {/* Delete button */}
                               <button
                                 onClick={() => handleDeleteClick(obligation)}
-                                className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded"
+                                className="text-danger-600 hover:text-danger-700 p-1.5 hover:bg-danger-50 rounded-lg cursor-pointer transition-colors duration-150"
                                 title="Διαγραφή"
                                 aria-label="Διαγραφή"
                               >
@@ -843,7 +849,7 @@ export default function Obligations() {
 
                 {/* Load More / Pagination */}
                 {hasMore && (
-                  <div className="px-6 py-4 border-t border-gray-200 text-center">
+                  <div className="px-6 py-4 border-t border-slate-200 text-center">
                     <Button variant="secondary" onClick={() => setPage((p) => p + 1)}>
                       Φόρτωση περισσότερων ({obligations.length} από {totalCount})
                     </Button>
@@ -904,7 +910,7 @@ export default function Obligations() {
         <div className="space-y-4">
           {/* Obligation Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Τύπος Υποχρέωσης *
             </label>
             <select
@@ -912,7 +918,7 @@ export default function Obligations() {
               onChange={(e) =>
                 setBulkCreateForm((prev) => ({ ...prev, obligation_type: Number(e.target.value) }))
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             >
               <option value={0}>-- Επιλέξτε τύπο --</option>
               {obligationTypes?.map((type) => (
@@ -926,13 +932,13 @@ export default function Obligations() {
           {/* Period */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Μήνας</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
               <select
                 value={bulkCreateForm.month}
                 onChange={(e) =>
                   setBulkCreateForm((prev) => ({ ...prev, month: Number(e.target.value) }))
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 {MONTHS.map((m) => (
                   <option key={m.value} value={m.value}>
@@ -942,13 +948,13 @@ export default function Obligations() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Έτος</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
               <select
                 value={bulkCreateForm.year}
                 onChange={(e) =>
                   setBulkCreateForm((prev) => ({ ...prev, year: Number(e.target.value) }))
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 {YEARS.map((y) => (
                   <option key={y} value={y}>
@@ -962,31 +968,31 @@ export default function Obligations() {
           {/* Client Selection */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-slate-700">
                 Πελάτες ({bulkCreateForm.client_ids.length} επιλεγμένοι) *
               </label>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={selectAllClients}
-                  className="text-xs text-blue-600 hover:text-blue-800"
+                  className="text-xs text-brand-600 hover:text-brand-800"
                 >
                   Επιλογή όλων
                 </button>
                 <button
                   type="button"
                   onClick={deselectAllClients}
-                  className="text-xs text-gray-600 hover:text-gray-800"
+                  className="text-xs text-slate-600 hover:text-slate-800"
                 >
                   Αποεπιλογή όλων
                 </button>
               </div>
             </div>
-            <div className="border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+            <div className="border border-slate-300 rounded-md max-h-60 overflow-y-auto">
               {clients.map((client) => (
                 <label
                   key={client.id}
-                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                  className="flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -1003,7 +1009,7 @@ export default function Obligations() {
           </div>
 
           {/* Buttons */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <div className="flex gap-3 pt-4 border-t border-slate-200">
             <Button
               type="button"
               variant="secondary"
@@ -1245,27 +1251,27 @@ function GenerateMonthModal({
         <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
             <div className="flex items-center">
-              <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
-              <h2 className="text-lg font-semibold text-gray-900">Ολοκληρώθηκε</h2>
+              <CheckCircle className="w-6 h-6 text-success-600 mr-2" />
+              <h2 className="text-lg font-semibold text-slate-900">Ολοκληρώθηκε</h2>
             </div>
-            <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
-              <X className="w-5 h-5 text-gray-400" />
+            <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-lg">
+              <X className="w-5 h-5 text-slate-400" />
             </button>
           </div>
           <div className="p-6 space-y-4 overflow-y-auto">
             {/* Summary */}
             <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="bg-green-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-green-700">{result.created_count}</p>
-                <p className="text-sm text-green-600">Δημιουργήθηκαν</p>
+              <div className="bg-success-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-success-700">{result.created_count}</p>
+                <p className="text-sm text-success-600">Δημιουργήθηκαν</p>
               </div>
-              <div className="bg-yellow-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-yellow-700">{result.skipped_count}</p>
-                <p className="text-sm text-yellow-600">Παραλείφθηκαν</p>
+              <div className="bg-warning-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-warning-700">{result.skipped_count}</p>
+                <p className="text-sm text-warning-600">Παραλείφθηκαν</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-blue-700">{result.clients_processed}</p>
-                <p className="text-sm text-blue-600">Πελάτες</p>
+              <div className="bg-brand-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-brand-700">{result.clients_processed}</p>
+                <p className="text-sm text-brand-600">Πελάτες</p>
               </div>
             </div>
 
@@ -1299,12 +1305,12 @@ function GenerateMonthModal({
             {/* Details */}
             {result.details && result.details.length > 0 && (
               <div>
-                <h3 className="font-medium text-gray-900 mb-2">Λεπτομέρειες</h3>
+                <h3 className="font-medium text-slate-900 mb-2">Λεπτομέρειες</h3>
                 <div className="border rounded-lg max-h-60 overflow-y-auto divide-y">
                   {result.details.map((detail) => (
                     <div key={detail.client_id} className="p-3 text-sm">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900">{detail.client_name}</p>
+                        <p className="font-medium text-slate-900">{detail.client_name}</p>
                         {detail.note && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
                             <AlertTriangle className="w-3 h-3 mr-1" />
@@ -1313,12 +1319,12 @@ function GenerateMonthModal({
                         )}
                       </div>
                       {detail.created.length > 0 && (
-                        <p className="text-green-600 text-xs mt-1">
+                        <p className="text-success-600 text-xs mt-1">
                           Δημιουργήθηκαν: {detail.created.join(', ')}
                         </p>
                       )}
                       {detail.skipped.length > 0 && (
-                        <p className="text-yellow-600 text-xs mt-1">
+                        <p className="text-warning-600 text-xs mt-1">
                           Παραλείφθηκαν: {detail.skipped.join(', ')}
                         </p>
                       )}
@@ -1328,7 +1334,7 @@ function GenerateMonthModal({
               </div>
             )}
           </div>
-          <div className="p-4 border-t bg-gray-50">
+          <div className="p-4 border-t bg-slate-50">
             <Button onClick={handleClose} className="w-full">
               Κλείσιμο
             </Button>
@@ -1343,30 +1349,30 @@ function GenerateMonthModal({
       <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center">
-            <CalendarPlus className="w-6 h-6 text-yellow-600 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">Δημιουργία Υποχρεώσεων Μήνα</h2>
+            <CalendarPlus className="w-6 h-6 text-warning-600 mr-2" />
+            <h2 className="text-lg font-semibold text-slate-900">Δημιουργία Υποχρεώσεων Μήνα</h2>
           </div>
-          <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
-            <X className="w-5 h-5 text-gray-400" />
+          <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-lg" disabled={isLoading}>
+            <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>
         <div className="p-4 space-y-4 overflow-y-auto">
           {/* Statistics Cards */}
           {!isLoadingClients && (
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-gray-700">{stats.total}</p>
-                <p className="text-xs text-gray-500">Ενεργοί πελάτες</p>
+              <div className="bg-slate-50 rounded-lg p-3 text-center">
+                <p className="text-xl font-bold text-slate-700">{stats.total}</p>
+                <p className="text-xs text-slate-500">Ενεργοί πελάτες</p>
               </div>
-              <div className="bg-green-50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-green-700">{stats.withProfile}</p>
-                <p className="text-xs text-green-600">Με υποχρεώσεις</p>
+              <div className="bg-success-50 rounded-lg p-3 text-center">
+                <p className="text-xl font-bold text-success-700">{stats.withProfile}</p>
+                <p className="text-xs text-success-600">Με υποχρεώσεις</p>
               </div>
-              <div className={`rounded-lg p-3 text-center ${stats.withoutProfile > 0 ? 'bg-amber-50' : 'bg-gray-50'}`}>
-                <p className={`text-xl font-bold ${stats.withoutProfile > 0 ? 'text-amber-700' : 'text-gray-700'}`}>
+              <div className={`rounded-lg p-3 text-center ${stats.withoutProfile > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                <p className={`text-xl font-bold ${stats.withoutProfile > 0 ? 'text-amber-700' : 'text-slate-700'}`}>
                   {stats.withoutProfile}
                 </p>
-                <p className={`text-xs ${stats.withoutProfile > 0 ? 'text-amber-600' : 'text-gray-500'}`}>
+                <p className={`text-xs ${stats.withoutProfile > 0 ? 'text-amber-600' : 'text-slate-500'}`}>
                   Χωρίς υποχρεώσεις
                 </p>
               </div>
@@ -1402,11 +1408,11 @@ function GenerateMonthModal({
           {/* Period Selection */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Μήνας</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
               <select
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 disabled={isLoading}
               >
                 {MONTHS.map((m) => (
@@ -1417,11 +1423,11 @@ function GenerateMonthModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Έτος</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
               <select
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 disabled={isLoading}
               >
                 {YEARS.map((y) => (
@@ -1435,17 +1441,17 @@ function GenerateMonthModal({
 
           {/* Client Selection Mode */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Πελάτες</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Πελάτες</label>
             <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   checked={useAllClients}
                   onChange={() => setUseAllClients(true)}
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-brand-600"
                   disabled={isLoading}
                 />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-slate-700">
                   Όλοι οι πελάτες με ρυθμισμένες υποχρεώσεις ({stats.withProfile})
                 </span>
               </label>
@@ -1454,10 +1460,10 @@ function GenerateMonthModal({
                   type="radio"
                   checked={!useAllClients}
                   onChange={() => setUseAllClients(false)}
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-brand-600"
                   disabled={isLoading}
                 />
-                <span className="text-sm text-gray-700">Επιλεγμένοι πελάτες</span>
+                <span className="text-sm text-slate-700">Επιλεγμένοι πελάτες</span>
               </label>
             </div>
           </div>
@@ -1466,14 +1472,14 @@ function GenerateMonthModal({
           {!useAllClients && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-slate-700">
                   Επιλέξτε πελάτες ({selectedClientIds.length} επιλεγμένοι)
                 </label>
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={selectAll}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-brand-600 hover:text-brand-800"
                     disabled={isLoading}
                   >
                     Επιλογή όλων
@@ -1481,7 +1487,7 @@ function GenerateMonthModal({
                   <button
                     type="button"
                     onClick={deselectAll}
-                    className="text-xs text-gray-600 hover:text-gray-800"
+                    className="text-xs text-slate-600 hover:text-slate-800"
                     disabled={isLoading}
                   >
                     Αποεπιλογή όλων
@@ -1497,36 +1503,36 @@ function GenerateMonthModal({
                   aria-label="Αναζήτηση πελάτη"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   disabled={isLoading}
                 />
-                <label className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-300 rounded-md cursor-pointer">
+                <label className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border border-slate-300 rounded-md cursor-pointer">
                   <input
                     type="checkbox"
                     checked={showOnlyWithProfiles}
                     onChange={(e) => setShowOnlyWithProfiles(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 rounded"
+                    className="h-4 w-4 text-brand-600 rounded"
                     disabled={isLoading}
                   />
-                  <span className="text-xs text-gray-600 whitespace-nowrap">Μόνο με προφίλ</span>
+                  <span className="text-xs text-slate-600 whitespace-nowrap">Μόνο με προφίλ</span>
                 </label>
               </div>
 
               {/* Client List */}
-              <div className="border border-gray-300 rounded-md max-h-48 overflow-y-auto">
+              <div className="border border-slate-300 rounded-md max-h-48 overflow-y-auto">
                 {isLoadingClients ? (
-                  <div className="p-4 text-center text-gray-500 text-sm">
+                  <div className="p-4 text-center text-slate-500 text-sm">
                     Φόρτωση πελατών...
                   </div>
                 ) : filteredClients.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500 text-sm">
+                  <div className="p-4 text-center text-slate-500 text-sm">
                     Δεν βρέθηκαν πελάτες
                   </div>
                 ) : (
                   filteredClients.map((client) => (
                     <label
                       key={client.id}
-                      className={`flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer ${
+                      className={`flex items-center px-3 py-2 hover:bg-slate-50 cursor-pointer ${
                         !client.has_obligation_profile ? 'bg-amber-50/50' : ''
                       }`}
                     >
@@ -1534,7 +1540,7 @@ function GenerateMonthModal({
                         type="checkbox"
                         checked={selectedClientIds.includes(client.id)}
                         onChange={() => toggleClient(client.id)}
-                        className="mr-3 h-4 w-4 text-blue-600 rounded"
+                        className="mr-3 h-4 w-4 text-brand-600 rounded"
                         disabled={isLoading || !client.has_obligation_profile}
                       />
                       <div className="flex-1 min-w-0">
@@ -1543,7 +1549,7 @@ function GenerateMonthModal({
                             {client.eponimia}
                           </span>
                           {client.has_obligation_profile ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-success-100 text-success-700">
                               {client.obligation_types_count} υποχρ.
                             </span>
                           ) : (
@@ -1553,13 +1559,13 @@ function GenerateMonthModal({
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-slate-500">
                           <span>{client.afm}</span>
                           {client.obligation_profile_names.length > 0 && (
                             <span> • {client.obligation_profile_names.join(', ')}</span>
                           )}
                           {client.groups_used && client.groups_used.length > 0 && (
-                            <span className="text-blue-600"> • Ομάδες: {client.groups_used.join(', ')}</span>
+                            <span className="text-brand-600"> • Ομάδες: {client.groups_used.join(', ')}</span>
                           )}
                         </div>
                       </div>
@@ -1571,14 +1577,14 @@ function GenerateMonthModal({
           )}
 
           {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-700">
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
+            <p className="text-sm text-brand-700">
               Θα δημιουργηθούν υποχρεώσεις βάσει του προφίλ κάθε πελάτη.
               Υποχρεώσεις που υπάρχουν ήδη θα παραλειφθούν.
             </p>
           </div>
         </div>
-        <div className="flex gap-3 p-4 border-t bg-gray-50">
+        <div className="flex gap-3 p-4 border-t bg-slate-50">
           <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
             Ακύρωση
           </Button>
@@ -1757,38 +1763,38 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
         <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-lg mx-4 max-h-[90vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between p-4 border-b">
             <div className="flex items-center">
-              <CheckCircle className="w-6 h-6 text-green-600 mr-2" />
-              <h2 className="text-lg font-semibold text-gray-900">Ολοκληρώθηκε</h2>
+              <CheckCircle className="w-6 h-6 text-success-600 mr-2" />
+              <h2 className="text-lg font-semibold text-slate-900">Ολοκληρώθηκε</h2>
             </div>
-            <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg">
-              <X className="w-5 h-5 text-gray-400" />
+            <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-lg">
+              <X className="w-5 h-5 text-slate-400" />
             </button>
           </div>
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="bg-green-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-green-700">{result.created_count}</p>
-                <p className="text-sm text-green-600">Νέα προφίλ</p>
+              <div className="bg-success-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-success-700">{result.created_count}</p>
+                <p className="text-sm text-success-600">Νέα προφίλ</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-blue-700">{result.updated_count}</p>
-                <p className="text-sm text-blue-600">Ενημερωμένα</p>
+              <div className="bg-brand-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-brand-700">{result.updated_count}</p>
+                <p className="text-sm text-brand-600">Ενημερωμένα</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-2xl font-bold text-gray-700">{result.clients_processed}</p>
-                <p className="text-sm text-gray-500">Πελάτες</p>
+              <div className="bg-slate-50 rounded-lg p-4">
+                <p className="text-2xl font-bold text-slate-700">{result.clients_processed}</p>
+                <p className="text-sm text-slate-500">Πελάτες</p>
               </div>
             </div>
-            <p className="text-sm text-gray-700 text-center">{result.message}</p>
+            <p className="text-sm text-slate-700 text-center">{result.message}</p>
             {generateCurrentMonth && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <p className="text-sm text-blue-700">
+              <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
+                <p className="text-sm text-brand-700">
                   Δημιουργήθηκαν επίσης οι υποχρεώσεις του τρέχοντος μήνα για τους επιλεγμένους πελάτες.
                 </p>
               </div>
             )}
           </div>
-          <div className="p-4 border-t bg-gray-50">
+          <div className="p-4 border-t bg-slate-50">
             <Button onClick={handleClose} className="w-full">
               Κλείσιμο
             </Button>
@@ -1803,11 +1809,11 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
       <div role="dialog" aria-modal="true" className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center">
-            <UserPlus className="w-6 h-6 text-blue-600 mr-2" />
-            <h2 className="text-lg font-semibold text-gray-900">Μαζική Ανάθεση Υποχρεώσεων</h2>
+            <UserPlus className="w-6 h-6 text-brand-600 mr-2" />
+            <h2 className="text-lg font-semibold text-slate-900">Μαζική Ανάθεση Υποχρεώσεων</h2>
           </div>
-          <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg" disabled={isLoading}>
-            <X className="w-5 h-5 text-gray-400" />
+          <button aria-label="Κλείσιμο" onClick={handleClose} className="p-2 hover:bg-slate-100 rounded-lg" disabled={isLoading}>
+            <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>
 
@@ -1815,19 +1821,19 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
           {/* Statistics */}
           {!isLoadingClients && (
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-gray-700">{stats.total}</p>
-                <p className="text-xs text-gray-500">Ενεργοί πελάτες</p>
+              <div className="bg-slate-50 rounded-lg p-3 text-center">
+                <p className="text-xl font-bold text-slate-700">{stats.total}</p>
+                <p className="text-xs text-slate-500">Ενεργοί πελάτες</p>
               </div>
-              <div className="bg-green-50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-green-700">{stats.withProfile}</p>
-                <p className="text-xs text-green-600">Με υποχρεώσεις</p>
+              <div className="bg-success-50 rounded-lg p-3 text-center">
+                <p className="text-xl font-bold text-success-700">{stats.withProfile}</p>
+                <p className="text-xs text-success-600">Με υποχρεώσεις</p>
               </div>
-              <div className={`rounded-lg p-3 text-center ${stats.withoutProfile > 0 ? 'bg-amber-50' : 'bg-gray-50'}`}>
-                <p className={`text-xl font-bold ${stats.withoutProfile > 0 ? 'text-amber-700' : 'text-gray-700'}`}>
+              <div className={`rounded-lg p-3 text-center ${stats.withoutProfile > 0 ? 'bg-amber-50' : 'bg-slate-50'}`}>
+                <p className={`text-xl font-bold ${stats.withoutProfile > 0 ? 'text-amber-700' : 'text-slate-700'}`}>
                   {stats.withoutProfile}
                 </p>
-                <p className={`text-xs ${stats.withoutProfile > 0 ? 'text-amber-600' : 'text-gray-500'}`}>
+                <p className={`text-xs ${stats.withoutProfile > 0 ? 'text-amber-600' : 'text-slate-500'}`}>
                   Χωρίς υποχρεώσεις
                 </p>
               </div>
@@ -1836,25 +1842,25 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
 
           {/* Mode Selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Τρόπος ανάθεσης</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">Τρόπος ανάθεσης</label>
             <div className="flex gap-3">
               <label className={`flex-1 flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
-                assignMode === 'add' ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'
+                assignMode === 'add' ? 'border-brand-500 bg-brand-50' : 'border-slate-300 hover:bg-slate-50'
               }`}>
                 <input
                   type="radio"
                   checked={assignMode === 'add'}
                   onChange={() => setAssignMode('add')}
-                  className="h-4 w-4 text-blue-600"
+                  className="h-4 w-4 text-brand-600"
                   disabled={isLoading}
                 />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Προσθήκη</p>
-                  <p className="text-xs text-gray-500">Προσθήκη στις υπάρχουσες</p>
+                  <p className="text-sm font-medium text-slate-900">Προσθήκη</p>
+                  <p className="text-xs text-slate-500">Προσθήκη στις υπάρχουσες</p>
                 </div>
               </label>
               <label className={`flex-1 flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
-                assignMode === 'replace' ? 'border-amber-500 bg-amber-50' : 'border-gray-300 hover:bg-gray-50'
+                assignMode === 'replace' ? 'border-amber-500 bg-amber-50' : 'border-slate-300 hover:bg-slate-50'
               }`}>
                 <input
                   type="radio"
@@ -1864,8 +1870,8 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                   disabled={isLoading}
                 />
                 <div>
-                  <p className="text-sm font-medium text-gray-900">Αντικατάσταση</p>
-                  <p className="text-xs text-gray-500">Αφαίρεση των παλιών</p>
+                  <p className="text-sm font-medium text-slate-900">Αντικατάσταση</p>
+                  <p className="text-xs text-slate-500">Αφαίρεση των παλιών</p>
                 </div>
               </label>
             </div>
@@ -1875,7 +1881,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
             {/* Client Selection */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700">
+                <label className="text-sm font-medium text-slate-700">
                   Πελάτες ({selectedClientIds.length} επιλεγμένοι)
                 </label>
                 <div className="flex gap-2">
@@ -1890,7 +1896,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                   <button
                     type="button"
                     onClick={selectAllFiltered}
-                    className="text-xs text-blue-600 hover:text-blue-800"
+                    className="text-xs text-brand-600 hover:text-brand-800"
                     disabled={isLoading}
                   >
                     Όλους
@@ -1898,7 +1904,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                   <button
                     type="button"
                     onClick={deselectAllClients}
-                    className="text-xs text-gray-600 hover:text-gray-800"
+                    className="text-xs text-slate-600 hover:text-slate-800"
                     disabled={isLoading}
                   >
                     Κανένα
@@ -1913,10 +1919,10 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                   aria-label="Αναζήτηση πελάτη"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm"
+                  className="flex-1 px-2 py-1.5 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   disabled={isLoading}
                 />
-                <label className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50 border border-gray-300 rounded cursor-pointer text-xs">
+                <label className="flex items-center gap-1.5 px-2 py-1.5 bg-slate-50 border border-slate-300 rounded cursor-pointer text-xs">
                   <input
                     type="checkbox"
                     checked={showOnlyWithoutProfiles}
@@ -1928,16 +1934,16 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                 </label>
               </div>
 
-              <div className="border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+              <div className="border border-slate-300 rounded-md max-h-60 overflow-y-auto">
                 {isLoadingClients ? (
-                  <div className="p-4 text-center text-gray-500 text-sm">Φόρτωση...</div>
+                  <div className="p-4 text-center text-slate-500 text-sm">Φόρτωση...</div>
                 ) : filteredClients.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500 text-sm">Δεν βρέθηκαν πελάτες</div>
+                  <div className="p-4 text-center text-slate-500 text-sm">Δεν βρέθηκαν πελάτες</div>
                 ) : (
                   filteredClients.map((client) => (
                     <label
                       key={client.id}
-                      className={`flex items-center px-2 py-1.5 hover:bg-gray-50 cursor-pointer text-sm ${
+                      className={`flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-sm ${
                         !client.has_obligation_profile ? 'bg-amber-50/50' : ''
                       }`}
                     >
@@ -1945,20 +1951,20 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
                         type="checkbox"
                         checked={selectedClientIds.includes(client.id)}
                         onChange={() => toggleClient(client.id)}
-                        className="mr-2 h-4 w-4 text-blue-600 rounded"
+                        className="mr-2 h-4 w-4 text-brand-600 rounded"
                         disabled={isLoading}
                       />
                       <div className="flex-1 min-w-0">
                         <span className="truncate block">{client.eponimia}</span>
                         <div className="flex items-center gap-1 flex-wrap">
-                          <span className="text-xs text-gray-500">{client.afm}</span>
+                          <span className="text-xs text-slate-500">{client.afm}</span>
                           {client.has_obligation_profile && client.obligation_types_count > 0 && (
-                            <span className="text-xs text-green-600">
+                            <span className="text-xs text-success-600">
                               ({client.obligation_types_count} υποχρ.)
                             </span>
                           )}
                           {client.groups_used && client.groups_used.length > 0 && (
-                            <span className="text-xs text-blue-600">
+                            <span className="text-xs text-brand-600">
                               [{client.groups_used.join(', ')}]
                             </span>
                           )}
@@ -1977,31 +1983,31 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
             <div className="space-y-3">
               {/* Profiles */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
                   Profiles υποχρεώσεων ({selectedProfileIds.length})
                 </label>
-                <div className="border border-gray-300 rounded-md max-h-28 overflow-y-auto">
+                <div className="border border-slate-300 rounded-md max-h-28 overflow-y-auto">
                   {isLoadingProfiles ? (
-                    <div className="p-2 text-center text-gray-500 text-sm">Φόρτωση...</div>
+                    <div className="p-2 text-center text-slate-500 text-sm">Φόρτωση...</div>
                   ) : !profiles || profiles.length === 0 ? (
-                    <div className="p-2 text-center text-gray-500 text-sm">Δεν υπάρχουν profiles</div>
+                    <div className="p-2 text-center text-slate-500 text-sm">Δεν υπάρχουν profiles</div>
                   ) : (
                     profiles.map((profile) => (
                       <label
                         key={profile.id}
-                        className="flex items-center px-2 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+                        className="flex items-center px-2 py-1.5 hover:bg-slate-50 cursor-pointer text-sm"
                       >
                         <input
                           type="checkbox"
                           checked={selectedProfileIds.includes(profile.id)}
                           onChange={() => toggleProfile(profile.id)}
-                          className="mr-2 h-4 w-4 text-blue-600 rounded"
+                          className="mr-2 h-4 w-4 text-brand-600 rounded"
                           disabled={isLoading}
                         />
                         <div className="flex-1">
                           <span className="font-medium">{profile.name}</span>
                           {profile.description && (
-                            <span className="text-gray-500 ml-1">- {profile.description}</span>
+                            <span className="text-slate-500 ml-1">- {profile.description}</span>
                           )}
                         </div>
                       </label>
@@ -2012,33 +2018,33 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
 
               {/* Obligation Types */}
               <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">
+                <label className="text-sm font-medium text-slate-700 mb-1 block">
                   Μεμονωμένες υποχρεώσεις ({selectedTypeIds.length})
                 </label>
-                <div className="border border-gray-300 rounded-md max-h-40 overflow-y-auto">
+                <div className="border border-slate-300 rounded-md max-h-40 overflow-y-auto">
                   {isLoadingTypes ? (
-                    <div className="p-2 text-center text-gray-500 text-sm">Φόρτωση...</div>
+                    <div className="p-2 text-center text-slate-500 text-sm">Φόρτωση...</div>
                   ) : !typesGrouped || typesGrouped.length === 0 ? (
-                    <div className="p-2 text-center text-gray-500 text-sm">Δεν υπάρχουν τύποι</div>
+                    <div className="p-2 text-center text-slate-500 text-sm">Δεν υπάρχουν τύποι</div>
                   ) : (
                     typesGrouped.map((group) => (
                       <div key={group.group_id || 'other'}>
-                        <div className="px-2 py-1 bg-gray-100 text-xs font-medium text-gray-600 sticky top-0">
+                        <div className="px-2 py-1 bg-slate-100 text-xs font-medium text-slate-600 sticky top-0">
                           {group.group_name}
                         </div>
                         {group.types.map((type) => (
                           <label
                             key={type.id}
-                            className="flex items-center px-2 py-1 hover:bg-gray-50 cursor-pointer text-sm"
+                            className="flex items-center px-2 py-1 hover:bg-slate-50 cursor-pointer text-sm"
                           >
                             <input
                               type="checkbox"
                               checked={selectedTypeIds.includes(type.id)}
                               onChange={() => toggleType(type.id)}
-                              className="mr-2 h-3 w-3 text-blue-600 rounded"
+                              className="mr-2 h-3 w-3 text-brand-600 rounded"
                               disabled={isLoading}
                             />
-                            <span className="text-gray-600 mr-1">{type.code}</span>
+                            <span className="text-slate-600 mr-1">{type.code}</span>
                             <span>{type.name}</span>
                           </label>
                         ))}
@@ -2051,20 +2057,20 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
           </div>
 
           {/* Generate Current Month Option */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="bg-brand-50 border border-brand-200 rounded-lg p-3">
             <label className="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={generateCurrentMonth}
                 onChange={(e) => setGenerateCurrentMonth(e.target.checked)}
-                className="mt-0.5 h-4 w-4 text-blue-600 rounded"
+                className="mt-0.5 h-4 w-4 text-brand-600 rounded"
                 disabled={isLoading}
               />
               <div>
-                <p className="text-sm font-medium text-blue-800">
+                <p className="text-sm font-medium text-brand-800">
                   Δημιουργία υποχρεώσεων τρέχοντος μήνα
                 </p>
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-brand-600">
                   Μετά την ανάθεση, θα δημιουργηθούν αυτόματα οι υποχρεώσεις του τρέχοντος μήνα
                 </p>
               </div>
@@ -2072,7 +2078,7 @@ function BulkAssignModal({ isOpen, onClose, onSuccess }: BulkAssignModalProps) {
           </div>
         </div>
 
-        <div className="flex gap-3 p-4 border-t bg-gray-50">
+        <div className="flex gap-3 p-4 border-t bg-slate-50">
           <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
             Ακύρωση
           </Button>
