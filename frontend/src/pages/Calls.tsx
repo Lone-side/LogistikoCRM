@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Button } from '../components';
+import { PageHeader } from '../components/ui';
 import { useCalls, useMatchCallToClient, useCreateTicketFromCall, useSearchClientsForMatch, useDeleteCall, type CallsFilters } from '../hooks/useVoIP';
 import type { VoIPCallFull } from '../types';
 import {
@@ -129,131 +130,133 @@ export default function Calls() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Κλήσεις</h1>
-          <p className="text-gray-500 mt-1">
+      <PageHeader
+        title="Κλήσεις"
+        subtitle={
+          <>
             Ιστορικό κλήσεων και VoIP ενσωμάτωση
             {autoRefresh && (
-              <span className="ml-2 text-xs text-blue-500">
+              <span className="ml-2 text-xs text-brand-500">
                 • Αυτόματη ανανέωση σε {secondsUntilRefresh}s
               </span>
             )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Auto-refresh toggle */}
-          <button
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              autoRefresh
-                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            title={autoRefresh ? 'Απενεργοποίηση αυτόματης ανανέωσης' : 'Ενεργοποίηση αυτόματης ανανέωσης'}
-          >
-            {autoRefresh ? <Pause size={16} /> : <Play size={16} />}
-            <span className="hidden sm:inline">{autoRefresh ? 'Live' : 'Παύση'}</span>
-          </button>
+          </>
+        }
+        actions={
+          <>
+            {/* Auto-refresh toggle */}
+            <button
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer transition-colors duration-150 ${
+                autoRefresh
+                  ? 'bg-brand-100 text-brand-700 hover:bg-brand-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+              title={autoRefresh ? 'Απενεργοποίηση αυτόματης ανανέωσης' : 'Ενεργοποίηση αυτόματης ανανέωσης'}
+            >
+              {autoRefresh ? <Pause size={16} /> : <Play size={16} />}
+              <span className="hidden sm:inline">{autoRefresh ? 'Live' : 'Παύση'}</span>
+            </button>
 
-          {/* Manual refresh */}
-          <Button variant="secondary" onClick={handleManualRefresh} disabled={isFetching}>
-            <RefreshCw size={18} className={`mr-2 ${isFetching ? 'animate-spin' : ''}`} />
-            Ανανέωση
-          </Button>
-
-          <Link to="/tickets">
-            <Button>
-              <Ticket size={18} className="mr-2" />
-              Tickets
+            {/* Manual refresh */}
+            <Button variant="secondary" onClick={handleManualRefresh} disabled={isFetching}>
+              <RefreshCw size={18} className={`mr-2 ${isFetching ? 'animate-spin' : ''}`} />
+              Ανανέωση
             </Button>
-          </Link>
-        </div>
-      </div>
+
+            <Link to="/tickets">
+              <Button>
+                <Ticket size={18} className="mr-2" />
+                Tickets
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
               <Phone size={20} className="text-purple-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Σύνολο</p>
-              <p className="text-xl font-bold text-gray-900">{data?.stats?.total || 0}</p>
+              <p className="text-sm text-slate-500">Σύνολο</p>
+              <p className="text-xl font-bold text-slate-900">{data?.stats?.total || 0}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <PhoneIncoming size={20} className="text-green-600" />
+            <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
+              <PhoneIncoming size={20} className="text-success-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Εισερχόμενες</p>
-              <p className="text-xl font-bold text-gray-900">{data?.stats?.incoming || 0}</p>
+              <p className="text-sm text-slate-500">Εισερχόμενες</p>
+              <p className="text-xl font-bold text-slate-900">{data?.stats?.incoming || 0}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <PhoneOutgoing size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+              <PhoneOutgoing size={20} className="text-brand-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Εξερχόμενες</p>
-              <p className="text-xl font-bold text-gray-900">{data?.stats?.outgoing || 0}</p>
+              <p className="text-sm text-slate-500">Εξερχόμενες</p>
+              <p className="text-xl font-bold text-slate-900">{data?.stats?.outgoing || 0}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-              <PhoneMissed size={20} className="text-red-600" />
+            <div className="w-10 h-10 bg-danger-100 rounded-lg flex items-center justify-center">
+              <PhoneMissed size={20} className="text-danger-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Αναπάντητες</p>
-              <p className="text-xl font-bold text-gray-900">{data?.stats?.missed || 0}</p>
+              <p className="text-sm text-slate-500">Αναπάντητες</p>
+              <p className="text-xl font-bold text-slate-900">{data?.stats?.missed || 0}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
               <Calendar size={20} className="text-orange-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500">Σήμερα</p>
-              <p className="text-xl font-bold text-gray-900">{data?.stats?.today || 0}</p>
+              <p className="text-sm text-slate-500">Σήμερα</p>
+              <p className="text-xl font-bold text-slate-900">{data?.stats?.today || 0}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               placeholder="Αναζήτηση με αριθμό ή πελάτη..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>
           <button
             onClick={handleSearch}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors duration-150"
           >
             Αναζήτηση
           </button>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
-              showFilters ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+            className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors duration-150 ${
+              showFilters ? 'border-brand-500 text-brand-600 bg-brand-50' : 'border-slate-200 hover:bg-slate-50'
             }`}
           >
             <Filter size={18} />
@@ -262,7 +265,7 @@ export default function Calls() {
           {(filters.direction || filters.date_from || filters.date_to || filters.search) && (
             <button
               onClick={handleClearFilters}
-              className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors duration-150"
             >
               <X size={18} />
               Καθαρισμός
@@ -272,14 +275,14 @@ export default function Calls() {
 
         {/* Expanded Filters */}
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-slate-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Κατεύθυνση</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Κατεύθυνση</label>
                 <select
                   value={filters.direction || ''}
                   onChange={(e) => handleFilterChange('direction', e.target.value as CallsFilters['direction'])}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 >
                   {DIRECTION_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -289,21 +292,21 @@ export default function Calls() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Από ημερομηνία</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Από ημερομηνία</label>
                 <input
                   type="date"
                   value={filters.date_from || ''}
                   onChange={(e) => handleFilterChange('date_from', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Έως ημερομηνία</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Έως ημερομηνία</label>
                 <input
                   type="date"
                   value={filters.date_to || ''}
                   onChange={(e) => handleFilterChange('date_to', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 />
               </div>
             </div>
@@ -312,14 +315,14 @@ export default function Calls() {
       </div>
 
       {/* Calls Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-            <span className="ml-2 text-gray-500">Φόρτωση κλήσεων...</span>
+            <RefreshCw className="w-6 h-6 animate-spin text-slate-400" />
+            <span className="ml-2 text-slate-500">Φόρτωση κλήσεων...</span>
           </div>
         ) : isError ? (
-          <div className="text-center py-12 text-red-600">
+          <div className="text-center py-12 text-danger-600">
             <p>Σφάλμα φόρτωσης. Δοκιμάστε ξανά.</p>
             <Button variant="secondary" onClick={() => refetch()} className="mt-4">
               Επανάληψη
@@ -329,32 +332,32 @@ export default function Calls() {
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Τύπος
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Αριθμός
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Πελάτης
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Διάρκεια
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Ημ/νία
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                       Ενέργειες
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-100">
                   {data?.results?.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                         Δεν βρέθηκαν κλήσεις
                       </td>
                     </tr>
@@ -375,8 +378,8 @@ export default function Calls() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
-                <p className="text-sm text-gray-500">
+              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200">
+                <p className="text-sm text-slate-500">
                   Εμφάνιση {((currentPage - 1) * (filters.page_size || 20)) + 1} -{' '}
                   {Math.min(currentPage * (filters.page_size || 20), data?.count || 0)} από {data?.count || 0}
                 </p>
@@ -384,17 +387,17 @@ export default function Calls() {
                   <button
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className="p-2 border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="p-2 border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer transition-colors duration-150"
                   >
                     <ChevronLeft size={18} />
                   </button>
-                  <span className="text-sm text-gray-700">
+                  <span className="text-sm text-slate-700">
                     Σελίδα {currentPage} από {totalPages}
                   </span>
                   <button
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className="p-2 border border-gray-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    className="p-2 border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 cursor-pointer transition-colors duration-150"
                   >
                     <ChevronRight size={18} />
                   </button>
@@ -469,12 +472,12 @@ function CallRow({
 
   const getCallIcon = () => {
     if (call.status === 'missed') {
-      return <PhoneMissed size={18} className="text-red-500" />;
+      return <PhoneMissed size={18} className="text-danger-600" />;
     }
     if (call.direction === 'incoming') {
-      return <PhoneIncoming size={18} className="text-green-500" />;
+      return <PhoneIncoming size={18} className="text-success-600" />;
     }
-    return <PhoneOutgoing size={18} className="text-blue-500" />;
+    return <PhoneOutgoing size={18} className="text-brand-500" />;
   };
 
   const getDirectionLabel = () => {
@@ -494,38 +497,38 @@ function CallRow({
   const { date, time } = formatDate(call.started_at);
 
   return (
-    <tr className="hover:bg-gray-50">
+    <tr className="hover:bg-slate-50 transition-colors duration-150">
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
           {getCallIcon()}
-          <span className={`text-sm ${STATUS_COLORS[call.status] || 'text-gray-600'}`}>
+          <span className={`text-sm ${STATUS_COLORS[call.status] || 'text-slate-600'}`}>
             {getDirectionLabel()}
           </span>
         </div>
       </td>
-      <td className="px-6 py-4 text-sm font-mono text-gray-900">{call.phone_number}</td>
+      <td className="px-6 py-4 text-sm font-mono text-slate-900">{call.phone_number}</td>
       <td className="px-6 py-4 text-sm">
         {call.client ? (
           <Link
             to={`/clients/${call.client.id}`}
-            className="text-blue-600 hover:underline font-medium"
+            className="text-brand-600 hover:underline font-medium"
           >
             {call.client.eponimia}
           </Link>
         ) : (
-          <span className="text-gray-400 italic">Άγνωστος</span>
+          <span className="text-slate-400 italic">Άγνωστος</span>
         )}
       </td>
-      <td className="px-6 py-4 text-sm text-gray-500">{call.duration_formatted || '-'}</td>
-      <td className="px-6 py-4 text-sm text-gray-500">
-        {date} <span className="text-gray-400">{time}</span>
+      <td className="px-6 py-4 text-sm text-slate-500">{call.duration_formatted || '-'}</td>
+      <td className="px-6 py-4 text-sm text-slate-500">
+        {date} <span className="text-slate-400">{time}</span>
       </td>
       <td className="px-6 py-4">
         <div className="flex items-center gap-2">
           {!call.client && (
             <button
               onClick={onMatchClient}
-              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              className="p-1.5 text-brand-600 hover:bg-brand-50 rounded transition-colors duration-150"
               title="Αντιστοίχιση πελάτη"
             >
               <User size={16} />
@@ -534,20 +537,20 @@ function CallRow({
           {!call.has_ticket && (
             <button
               onClick={onCreateTicket}
-              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors duration-150"
               title="Δημιουργία ticket"
             >
               <Ticket size={16} />
             </button>
           )}
           {call.has_ticket && (
-            <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
+            <span className="text-xs text-success-600 bg-success-50 px-2 py-0.5 rounded">
               Ticket
             </span>
           )}
           <button
             onClick={handleDelete}
-            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+            className="p-1.5 text-danger-600 hover:bg-danger-50 rounded transition-colors duration-150"
             title="Διαγραφή κλήσης"
             disabled={deleteMutation.isPending}
           >
@@ -589,18 +592,18 @@ function MatchClientModal({
       <div className="bg-white rounded-lg max-w-md w-full">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">Αντιστοίχιση Πελάτη</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-4 space-y-4">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-sm text-gray-600">Κλήση από:</p>
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-sm text-slate-600">Κλήση από:</p>
             <p className="font-mono font-medium">{call.phone_number}</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Αναζήτηση πελάτη
             </label>
             <input
@@ -608,37 +611,37 @@ function MatchClientModal({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Επωνυμία, ΑΦΜ ή τηλέφωνο..."
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               autoFocus
             />
           </div>
 
           {isLoading && (
             <div className="text-center py-4">
-              <RefreshCw className="w-5 h-5 animate-spin mx-auto text-gray-400" />
+              <RefreshCw className="w-5 h-5 animate-spin mx-auto text-slate-400" />
             </div>
           )}
 
           {clients && clients.length > 0 && (
-            <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y">
+            <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-lg divide-y">
               {clients.map((client) => (
                 <button
                   key={client.id}
                   onClick={() => handleMatch(client.id)}
-                  className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors"
+                  className="w-full px-4 py-3 text-left hover:bg-brand-50 transition-colors duration-150"
                 >
-                  <p className="font-medium text-gray-900">{client.eponimia}</p>
-                  <p className="text-sm text-gray-500">ΑΦΜ: {client.afm}</p>
+                  <p className="font-medium text-slate-900">{client.eponimia}</p>
+                  <p className="text-sm text-slate-500">ΑΦΜ: {client.afm}</p>
                 </button>
               ))}
             </div>
           )}
 
           {searchQuery.length >= 2 && clients?.length === 0 && (
-            <p className="text-center text-gray-500 py-4">Δεν βρέθηκαν αποτελέσματα</p>
+            <p className="text-center text-slate-500 py-4">Δεν βρέθηκαν αποτελέσματα</p>
           )}
         </div>
-        <div className="flex justify-end p-4 border-t bg-gray-50">
+        <div className="flex justify-end p-4 border-t bg-slate-50">
           <Button variant="secondary" onClick={onClose}>
             Ακύρωση
           </Button>
@@ -684,52 +687,52 @@ function CreateTicketFromCallModal({
       <div className="bg-white rounded-lg max-w-md w-full">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">Δημιουργία Ticket</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-4 space-y-4">
-          <div className="bg-gray-50 rounded-lg p-3">
-            <p className="text-sm text-gray-600">Κλήση:</p>
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-sm text-slate-600">Κλήση:</p>
             <p className="font-mono font-medium">{call.phone_number}</p>
             {call.client && (
-              <p className="text-sm text-blue-600 mt-1">{call.client.eponimia}</p>
+              <p className="text-sm text-brand-600 mt-1">{call.client.eponimia}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Τίτλος *
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Περιγραφή
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg resize-none"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               placeholder="Λεπτομέρειες..."
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Προτεραιότητα
             </label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             >
               <option value="low">Χαμηλή</option>
               <option value="medium">Μεσαία</option>
@@ -738,7 +741,7 @@ function CreateTicketFromCallModal({
             </select>
           </div>
         </div>
-        <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
+        <div className="flex justify-end gap-3 p-4 border-t bg-slate-50">
           <Button variant="secondary" onClick={onClose}>
             Ακύρωση
           </Button>

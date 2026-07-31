@@ -138,18 +138,18 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900">
             {isEdit ? 'Επεξεργασία Τύπου' : 'Νέος Τύπος Υποχρέωσης'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <div className="flex items-center gap-2 p-3 bg-danger-50 text-danger-700 rounded-lg text-sm">
               <AlertCircle size={16} />
               {error}
             </div>
@@ -157,27 +157,27 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Κωδικός <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Κωδικός <span className="text-danger-600">*</span>
               </label>
               <input
                 type="text"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 placeholder="π.χ. ΦΠΑ"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Όνομα <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Όνομα <span className="text-danger-600">*</span>
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 placeholder="Φόρος Προστιθέμενης Αξίας"
                 required
               />
@@ -185,22 +185,22 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Περιγραφή</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
             <textarea
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Συχνότητα</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Συχνότητα</label>
               <select
                 value={formData.frequency}
                 onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 {FREQUENCY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -210,11 +210,11 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Τύπος Προθεσμίας</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Τύπος Προθεσμίας</label>
               <select
                 value={formData.deadline_type}
                 onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 {DEADLINE_TYPE_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -227,7 +227,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           {formData.deadline_type === 'specific_day' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ημέρα Προθεσμίας</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Ημέρα Προθεσμίας</label>
               <input
                 type="number"
                 min={1}
@@ -236,7 +236,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                 onChange={(e) =>
                   setFormData({ ...formData, deadline_day: e.target.value ? parseInt(e.target.value) : null })
                 }
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 placeholder="π.χ. 20"
               />
             </div>
@@ -244,15 +244,15 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           {(formData.frequency === 'quarterly' || formData.frequency === 'annual') && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Μήνες Εφαρμογής
-                <span className="text-gray-400 text-xs ml-1">(π.χ. 3,6,9,12)</span>
+                <span className="text-slate-400 text-xs ml-1">(π.χ. 3,6,9,12)</span>
               </label>
               <input
                 type="text"
                 value={formData.applicable_months || ''}
                 onChange={(e) => setFormData({ ...formData, applicable_months: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                 placeholder="3,6,9,12"
               />
             </div>
@@ -260,41 +260,41 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Προφίλ
-                <span className="ml-2 text-xs text-gray-500">
+                <span className="ml-2 text-xs text-slate-500">
                   ({(formData.profiles || []).length} επιλεγμένα)
                 </span>
               </label>
-              <div className="border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
+              <div className="border border-slate-200 rounded-lg max-h-32 overflow-y-auto">
                 {profiles.length === 0 ? (
-                  <p className="p-2 text-gray-500 text-sm">Δεν υπάρχουν προφίλ.</p>
+                  <p className="p-2 text-slate-500 text-sm">Δεν υπάρχουν προφίλ.</p>
                 ) : (
                   profiles.map((p) => (
                     <label
                       key={p.id}
-                      className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                      className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
                     >
                       <input
                         type="checkbox"
                         checked={(formData.profiles || []).includes(p.id)}
                         onChange={() => toggleProfile(p.id)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                       />
-                      <span className="text-sm text-gray-700">{p.name}</span>
+                      <span className="text-sm text-slate-700">{p.name}</span>
                     </label>
                   ))
                 )}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Ομάδα Αλληλοαποκλεισμού</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Ομάδα Αλληλοαποκλεισμού</label>
               <select
                 value={formData.exclusion_group || ''}
                 onChange={(e) =>
                   setFormData({ ...formData, exclusion_group: e.target.value ? parseInt(e.target.value) : null })
                 }
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 <option value="">-- Χωρίς ομάδα --</option>
                 {groups.map((g) => (
@@ -308,12 +308,12 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Προτεραιότητα</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
               <input
                 type="number"
                 value={formData.priority || 0}
                 onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               />
             </div>
             <div className="flex items-center pt-6">
@@ -322,14 +322,14 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
                   type="checkbox"
                   checked={formData.is_active}
                   onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                 />
-                <span className="text-sm text-gray-700">Ενεργό</span>
+                <span className="text-sm text-slate-700">Ενεργό</span>
               </label>
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
             <Button type="button" variant="secondary" onClick={onClose}>
               Ακύρωση
             </Button>
@@ -456,73 +456,73 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900">
             {isEdit ? 'Επεξεργασία Προφίλ' : 'Νέο Προφίλ Υποχρεώσεων'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <div className="flex items-center gap-2 p-3 bg-danger-50 text-danger-700 rounded-lg text-sm">
               <AlertCircle size={16} />
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Όνομα <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Όνομα <span className="text-danger-600">*</span>
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               placeholder="π.χ. Μισθοδοσία"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Περιγραφή</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
             <textarea
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               placeholder="Περιγραφή του προφίλ..."
             />
           </div>
 
           {/* Obligation Types Checklist */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               Τύποι Υποχρεώσεων στο προφίλ
-              <span className="ml-2 text-xs text-gray-500">
+              <span className="ml-2 text-xs text-slate-500">
                 ({selectedTypeIds.length} επιλεγμένοι)
               </span>
             </label>
-            <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+            <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto">
               {activeTypes.length === 0 ? (
-                <p className="p-3 text-gray-500 text-sm">Δεν υπάρχουν τύποι υποχρεώσεων.</p>
+                <p className="p-3 text-slate-500 text-sm">Δεν υπάρχουν τύποι υποχρεώσεων.</p>
               ) : (
                 activeTypes.map((type) => (
                   <label
                     key={type.id}
-                    className="flex items-center gap-3 p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
                   >
                     <input
                       type="checkbox"
                       checked={selectedTypeIds.includes(type.id)}
                       onChange={() => toggleType(type.id)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                     />
-                    <span className="text-sm text-gray-700">
-                      <span className="font-medium text-blue-600">{type.code}</span>
+                    <span className="text-sm text-slate-700">
+                      <span className="font-medium text-brand-600">{type.code}</span>
                       {' - '}
                       {type.name}
                     </span>
@@ -530,12 +530,12 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
                 ))
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Επιλέξτε τους τύπους υποχρεώσεων που θα ανήκουν σε αυτό το προφίλ.
             </p>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
             <Button type="button" variant="secondary" onClick={onClose}>
               Ακύρωση
             </Button>
@@ -624,80 +624,80 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900">
             {isEdit ? 'Επεξεργασία Ομάδας' : 'Νέα Ομάδα Αλληλοαποκλεισμού'}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            <div className="flex items-center gap-2 p-3 bg-danger-50 text-danger-700 rounded-lg text-sm">
               <AlertCircle size={16} />
               {error}
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Όνομα <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Όνομα <span className="text-danger-600">*</span>
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               placeholder="π.χ. ΦΠΑ Περίοδος"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Περιγραφή</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
             <textarea
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               placeholder="Υποχρεώσεις που αλληλοαποκλείονται..."
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               Τύποι Υποχρεώσεων στην ομάδα
             </label>
-            <div className="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+            <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto">
               {activeTypes.length === 0 ? (
-                <p className="p-3 text-gray-500 text-sm">Δεν υπάρχουν τύποι υποχρεώσεων.</p>
+                <p className="p-3 text-slate-500 text-sm">Δεν υπάρχουν τύποι υποχρεώσεων.</p>
               ) : (
                 activeTypes.map((type) => (
                   <label
                     key={type.id}
-                    className="flex items-center gap-3 p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
                   >
                     <input
                       type="checkbox"
                       checked={formData.obligation_types?.includes(type.id) || false}
                       onChange={() => toggleType(type.id)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                     />
-                    <span className="text-sm text-gray-700">
+                    <span className="text-sm text-slate-700">
                       <span className="font-medium">{type.code}</span> - {type.name}
                     </span>
                   </label>
                 ))
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               Οι επιλεγμένοι τύποι αλληλοαποκλείονται (μόνο ένας μπορεί να επιλεγεί ανά πελάτη).
             </p>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
             <Button type="button" variant="secondary" onClick={onClose}>
               Ακύρωση
             </Button>
@@ -727,33 +727,33 @@ function ViewTypesModal({ isOpen, onClose, profile }: ViewTypesModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Τύποι στο "{profile.name}"</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+          <h3 className="text-lg font-semibold text-slate-900">Τύποι στο "{profile.name}"</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
             <X size={20} />
           </button>
         </div>
 
         <div className="p-4">
           {profile.obligation_types.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-4">
+            <p className="text-slate-500 text-sm text-center py-4">
               Δεν υπάρχουν τύποι σε αυτό το προφίλ.
             </p>
           ) : (
             <ul className="space-y-2">
               {profile.obligation_types.map((type) => (
-                <li key={type.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-                  <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                <li key={type.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                  <span className="px-2 py-1 text-xs font-medium bg-brand-100 text-brand-700 rounded">
                     {type.code}
                   </span>
-                  <span className="text-sm text-gray-700">{type.name}</span>
+                  <span className="text-sm text-slate-700">{type.name}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <div className="flex justify-end p-4 border-t border-gray-200">
+        <div className="flex justify-end p-4 border-t border-slate-200">
           <Button variant="secondary" onClick={onClose}>
             Κλείσιμο
           </Button>
@@ -783,11 +783,11 @@ function DeleteConfirmModal({ isOpen, onClose, onConfirm, title, message, isPend
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
         <div className="p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-          <p className="text-sm text-gray-600">{message}</p>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
+          <p className="text-sm text-slate-600">{message}</p>
         </div>
 
-        <div className="flex justify-end gap-3 p-4 border-t border-gray-200">
+        <div className="flex justify-end gap-3 p-4 border-t border-slate-200">
           <Button type="button" variant="secondary" onClick={onClose}>
             Ακύρωση
           </Button>
@@ -906,12 +906,12 @@ export default function ObligationSettings() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Settings className="text-blue-600" size={20} />
+          <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+            <Settings className="text-brand-600" size={20} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Ρυθμίσεις Υποχρεώσεων</h1>
-            <p className="text-gray-500 text-sm">Διαχείριση τύπων, προφίλ και ομάδων υποχρεώσεων</p>
+            <h1 className="text-2xl font-bold text-slate-900">Ρυθμίσεις Υποχρεώσεων</h1>
+            <p className="text-slate-500 text-sm">Διαχείριση τύπων, προφίλ και ομάδων υποχρεώσεων</p>
           </div>
         </div>
         <Button onClick={handleCreate}>
@@ -921,23 +921,23 @@ export default function ObligationSettings() {
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="flex border-b border-gray-200">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex border-b border-slate-200">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-6 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'text-blue-600 border-b-2 border-blue-600 -mb-px bg-blue-50/50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-brand-600 border-b-2 border-brand-600 -mb-px bg-brand-50/50'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               <tab.icon size={18} />
               {tab.label}
               <span
                 className={`px-2 py-0.5 text-xs rounded-full ${
-                  activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                  activeTab === tab.id ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-600'
                 }`}
               >
                 {tab.count}
@@ -947,15 +947,15 @@ export default function ObligationSettings() {
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-gray-200">
+        <div className="p-4 border-b border-slate-200">
           <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Αναζήτηση..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>
         </div>
@@ -966,46 +966,46 @@ export default function ObligationSettings() {
           {activeTab === 'types' && (
             <div>
               {typesLoading ? (
-                <div className="text-center py-8 text-gray-500">Φόρτωση...</div>
+                <div className="text-center py-8 text-slate-500">Φόρτωση...</div>
               ) : types.length === 0 ? (
                 <div className="text-center py-8">
-                  <List className="mx-auto text-gray-300 mb-3" size={48} />
-                  <p className="text-gray-500">Δεν υπάρχουν τύποι υποχρεώσεων.</p>
-                  <p className="text-gray-400 text-sm">Προσθέστε τον πρώτο!</p>
+                  <List className="mx-auto text-slate-300 mb-3" size={48} />
+                  <p className="text-slate-500">Δεν υπάρχουν τύποι υποχρεώσεων.</p>
+                  <p className="text-slate-400 text-sm">Προσθέστε τον πρώτο!</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-gray-50 text-left">
-                        <th className="px-4 py-3 font-medium text-gray-600">Κωδικός</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Όνομα</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Συχνότητα</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Προθεσμία</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Προφίλ</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Κατάσταση</th>
-                        <th className="px-4 py-3 font-medium text-gray-600 text-right">Ενέργειες</th>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Κωδικός</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Όνομα</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Συχνότητα</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Προθεσμία</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Προφίλ</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Κατάσταση</th>
+                        <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500 text-right">Ενέργειες</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {types.map((type) => (
-                        <tr key={type.id} className="hover:bg-gray-50">
+                        <tr key={type.id} className="hover:bg-slate-50 transition-colors duration-150">
                           <td className="px-4 py-3">
-                            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded">
+                            <span className="px-2 py-1 text-xs font-medium bg-brand-100 text-brand-700 rounded">
                               {type.code}
                             </span>
                           </td>
-                          <td className="px-4 py-3 font-medium text-gray-900">{type.name}</td>
-                          <td className="px-4 py-3 text-gray-600">
+                          <td className="px-4 py-3 font-medium text-slate-900">{type.name}</td>
+                          <td className="px-4 py-3 text-slate-600">
                             {FREQUENCY_LABELS[type.frequency] || type.frequency}
                           </td>
-                          <td className="px-4 py-3 text-gray-600">
+                          <td className="px-4 py-3 text-slate-600">
                             {DEADLINE_TYPE_LABELS[type.deadline_type] || type.deadline_type}
                             {type.deadline_type === 'specific_day' && type.deadline_day && (
-                              <span className="ml-1 text-gray-400">({type.deadline_day}η)</span>
+                              <span className="ml-1 text-slate-400">({type.deadline_day}η)</span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-gray-600">
+                          <td className="px-4 py-3 text-slate-600">
                             {type.profile_names && type.profile_names.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
                                 {type.profile_names.map((name, idx) => (
@@ -1023,12 +1023,12 @@ export default function ObligationSettings() {
                           </td>
                           <td className="px-4 py-3">
                             {type.is_active ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-success-100 text-success-700 rounded">
                                 <CheckCircle size={12} />
                                 Ενεργό
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
+                              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-slate-100 text-slate-600 rounded">
                                 <X size={12} />
                                 Ανενεργό
                               </span>
@@ -1038,14 +1038,14 @@ export default function ObligationSettings() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEdit('types', type)}
-                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                className="p-1 text-slate-400 hover:text-brand-600 transition-colors cursor-pointer"
                                 title="Επεξεργασία"
                               >
                                 <Pencil size={16} />
                               </button>
                               <button
                                 onClick={() => handleDelete('types', type.id, type.name)}
-                                className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                className="p-1 text-slate-400 hover:text-danger-600 transition-colors cursor-pointer"
                                 title="Διαγραφή"
                               >
                                 <Trash2 size={16} />
@@ -1065,33 +1065,33 @@ export default function ObligationSettings() {
           {activeTab === 'profiles' && (
             <div>
               {profilesLoading ? (
-                <div className="text-center py-8 text-gray-500">Φόρτωση...</div>
+                <div className="text-center py-8 text-slate-500">Φόρτωση...</div>
               ) : profiles.length === 0 ? (
                 <div className="text-center py-8">
-                  <Layers className="mx-auto text-gray-300 mb-3" size={48} />
-                  <p className="text-gray-500">Δεν υπάρχουν προφίλ υποχρεώσεων.</p>
-                  <p className="text-gray-400 text-sm">Προσθέστε το πρώτο!</p>
+                  <Layers className="mx-auto text-slate-300 mb-3" size={48} />
+                  <p className="text-slate-500">Δεν υπάρχουν προφίλ υποχρεώσεων.</p>
+                  <p className="text-slate-400 text-sm">Προσθέστε το πρώτο!</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-gray-50 text-left">
-                        <th className="px-4 py-3 font-medium text-gray-600">Όνομα</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Περιγραφή</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Πλήθος Τύπων</th>
-                        <th className="px-4 py-3 font-medium text-gray-600 text-right">Ενέργειες</th>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Όνομα</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Περιγραφή</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Πλήθος Τύπων</th>
+                        <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500 text-right">Ενέργειες</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {profiles.map((profile) => (
-                        <tr key={profile.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-900">{profile.name}</td>
-                          <td className="px-4 py-3 text-gray-600">{profile.description || '-'}</td>
+                        <tr key={profile.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-medium text-slate-900">{profile.name}</td>
+                          <td className="px-4 py-3 text-slate-600">{profile.description || '-'}</td>
                           <td className="px-4 py-3">
                             <button
                               onClick={() => handleViewTypes(profile)}
-                              className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                              className="px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded hover:bg-brand-200 transition-colors cursor-pointer"
                             >
                               {profile.obligation_types_count} τύποι
                             </button>
@@ -1100,14 +1100,14 @@ export default function ObligationSettings() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEdit('profiles', profile)}
-                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                className="p-1 text-slate-400 hover:text-brand-600 transition-colors cursor-pointer"
                                 title="Επεξεργασία"
                               >
                                 <Pencil size={16} />
                               </button>
                               <button
                                 onClick={() => handleDelete('profiles', profile.id, profile.name)}
-                                className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                className="p-1 text-slate-400 hover:text-danger-600 transition-colors cursor-pointer"
                                 title="Διαγραφή"
                               >
                                 <Trash2 size={16} />
@@ -1127,38 +1127,38 @@ export default function ObligationSettings() {
           {activeTab === 'groups' && (
             <div>
               {groupsLoading ? (
-                <div className="text-center py-8 text-gray-500">Φόρτωση...</div>
+                <div className="text-center py-8 text-slate-500">Φόρτωση...</div>
               ) : groups.length === 0 ? (
                 <div className="text-center py-8">
-                  <GitBranch className="mx-auto text-gray-300 mb-3" size={48} />
-                  <p className="text-gray-500">Δεν υπάρχουν ομάδες αλληλοαποκλεισμού.</p>
-                  <p className="text-gray-400 text-sm">Προσθέστε την πρώτη!</p>
+                  <GitBranch className="mx-auto text-slate-300 mb-3" size={48} />
+                  <p className="text-slate-500">Δεν υπάρχουν ομάδες αλληλοαποκλεισμού.</p>
+                  <p className="text-slate-400 text-sm">Προσθέστε την πρώτη!</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-gray-50 text-left">
-                        <th className="px-4 py-3 font-medium text-gray-600">Όνομα</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Περιγραφή</th>
-                        <th className="px-4 py-3 font-medium text-gray-600">Τύποι στην Ομάδα</th>
-                        <th className="px-4 py-3 font-medium text-gray-600 text-right">Ενέργειες</th>
+                      <tr className="bg-slate-50 text-left">
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Όνομα</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Περιγραφή</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-slate-500">Τύποι στην Ομάδα</th>
+                        <th className="px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500 text-right">Ενέργειες</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-100">
                       {groups.map((group) => (
-                        <tr key={group.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 font-medium text-gray-900">{group.name}</td>
-                          <td className="px-4 py-3 text-gray-600">{group.description || '-'}</td>
+                        <tr key={group.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-medium text-slate-900">{group.name}</td>
+                          <td className="px-4 py-3 text-slate-600">{group.description || '-'}</td>
                           <td className="px-4 py-3">
                             {group.obligation_type_names.length === 0 ? (
-                              <span className="text-gray-400">Κανένας</span>
+                              <span className="text-slate-400">Κανένας</span>
                             ) : (
                               <div className="flex flex-wrap gap-1">
                                 {group.obligation_type_names.map((name, idx) => (
                                   <span
                                     key={idx}
-                                    className="px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded"
+                                    className="px-2 py-0.5 text-xs bg-warning-100 text-warning-700 rounded"
                                   >
                                     {name}
                                   </span>
@@ -1170,14 +1170,14 @@ export default function ObligationSettings() {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEdit('groups', group)}
-                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                className="p-1 text-slate-400 hover:text-brand-600 transition-colors cursor-pointer"
                                 title="Επεξεργασία"
                               >
                                 <Pencil size={16} />
                               </button>
                               <button
                                 onClick={() => handleDelete('groups', group.id, group.name)}
-                                className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                className="p-1 text-slate-400 hover:text-danger-600 transition-colors cursor-pointer"
                                 title="Διαγραφή"
                               >
                                 <Trash2 size={16} />

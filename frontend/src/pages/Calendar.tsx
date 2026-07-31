@@ -33,6 +33,7 @@ import type {
 import { useClients } from '../hooks/useClients';
 import { useObligationTypes } from '../hooks/useObligations';
 import { useToast } from '../components/Toast';
+import { PageHeader } from '../components/ui';
 import { CompleteObligationModal } from '../components/CompleteObligationModal';
 import { useCompleteAndNotify } from '../hooks/useEmail';
 import type { Obligation } from '../types';
@@ -57,9 +58,9 @@ function CalendarDayCell({ day, isCurrentMonth, isToday: isTodayDay, dayData, on
       onClick={onClick}
       disabled={!isCurrentMonth}
       className={`
-        min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-gray-200 text-left transition-colors
-        ${isCurrentMonth ? 'bg-white hover:bg-gray-50' : 'bg-gray-50 text-gray-400'}
-        ${isTodayDay ? 'ring-2 ring-blue-500 ring-inset' : ''}
+        min-h-[80px] md:min-h-[100px] p-1 md:p-2 border border-slate-200 text-left transition-colors
+        ${isCurrentMonth ? 'bg-white hover:bg-slate-50' : 'bg-slate-50 text-slate-400'}
+        ${isTodayDay ? 'ring-2 ring-brand-500 ring-inset' : ''}
         ${hasObligations ? 'cursor-pointer' : 'cursor-default'}
       `}
     >
@@ -68,7 +69,7 @@ function CalendarDayCell({ day, isCurrentMonth, isToday: isTodayDay, dayData, on
         <span
           className={`
             text-sm md:text-base font-medium
-            ${isTodayDay ? 'text-blue-600 font-bold' : ''}
+            ${isTodayDay ? 'text-brand-600 font-bold' : ''}
           `}
         >
           {day}
@@ -80,17 +81,17 @@ function CalendarDayCell({ day, isCurrentMonth, isToday: isTodayDay, dayData, on
             {/* Status indicators */}
             <div className="flex flex-wrap gap-1">
               {dayData.pending > 0 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-warning-100 text-warning-700">
                   {dayData.pending}
                 </span>
               )}
               {dayData.completed > 0 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-success-100 text-success-700">
                   {dayData.completed}
                 </span>
               )}
               {dayData.overdue > 0 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-danger-100 text-danger-700">
                   {dayData.overdue}
                 </span>
               )}
@@ -108,7 +109,7 @@ function CalendarDayCell({ day, isCurrentMonth, isToday: isTodayDay, dayData, on
                 </div>
               ))}
               {dayData.obligations.length > 2 && (
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-slate-500">
                   +{dayData.obligations.length - 2} ακόμη
                 </div>
               )}
@@ -173,31 +174,31 @@ function DayDetailModal({
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
           {/* Header */}
-          <div className={`flex items-center justify-between p-4 border-b border-gray-200 ${
-            isDateToday ? 'bg-blue-50' : isPastDate ? 'bg-gray-50' : 'bg-white'
+          <div className={`flex items-center justify-between p-4 border-b border-slate-200 ${
+            isDateToday ? 'bg-brand-50' : isPastDate ? 'bg-slate-50' : 'bg-white'
           }`}>
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${
-                isDateToday ? 'bg-blue-100' : 'bg-gray-100'
+                isDateToday ? 'bg-brand-100' : 'bg-slate-100'
               }`}>
-                <CalendarIcon size={20} className={isDateToday ? 'text-blue-600' : 'text-gray-600'} />
+                <CalendarIcon size={20} className={isDateToday ? 'text-brand-600' : 'text-slate-600'} />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">{dateStr}</h3>
+                <h3 className="text-lg font-semibold text-slate-900">{dateStr}</h3>
                 {isDateToday && (
-                  <span className="text-xs text-blue-600 font-medium">Σήμερα</span>
+                  <span className="text-xs text-brand-600 font-medium">Σήμερα</span>
                 )}
                 {isPastDate && !isDateToday && (
-                  <span className="text-xs text-gray-500">Παρελθούσα ημερομηνία</span>
+                  <span className="text-xs text-slate-500">Παρελθούσα ημερομηνία</span>
                 )}
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors duration-150"
               aria-label="Κλείσιμο"
             >
-              <X size={20} className="text-gray-500" />
+              <X size={20} className="text-slate-500" />
             </button>
           </div>
 
@@ -206,30 +207,30 @@ function DayDetailModal({
             {dayData && dayData.obligations.length > 0 ? (
               <>
                 {/* Summary badges */}
-                <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-gray-200">
-                  <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-700">
+                <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-slate-200">
+                  <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-slate-100 text-slate-700">
                     Σύνολο: {dayData.total}
                   </span>
                   {dayData.pending > 0 && (
-                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 flex items-center gap-1">
+                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-warning-100 text-warning-700 flex items-center gap-1">
                       <Clock size={14} />
                       Εκκρεμείς: {dayData.pending}
                     </span>
                   )}
                   {dayData.in_progress > 0 && (
-                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 flex items-center gap-1">
+                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-brand-100 text-brand-800 flex items-center gap-1">
                       <Clock size={14} />
                       Σε εξέλιξη: {dayData.in_progress}
                     </span>
                   )}
                   {dayData.completed > 0 && (
-                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-800 flex items-center gap-1">
+                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-success-100 text-success-700 flex items-center gap-1">
                       <Check size={14} />
                       Ολοκληρωμένες: {dayData.completed}
                     </span>
                   )}
                   {dayData.overdue > 0 && (
-                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 text-red-800 flex items-center gap-1">
+                    <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-danger-100 text-danger-700 flex items-center gap-1">
                       <AlertCircle size={14} />
                       Εκπρόθεσμες: {dayData.overdue}
                     </span>
@@ -243,12 +244,12 @@ function DayDetailModal({
                       key={obl.id}
                       className={`p-4 rounded-lg border transition-all ${
                         obl.status === 'completed'
-                          ? 'bg-green-50 border-green-200'
+                          ? 'bg-success-50 border-success-100'
                           : obl.status === 'overdue'
-                          ? 'bg-red-50 border-red-200'
+                          ? 'bg-danger-50 border-danger-100'
                           : obl.status === 'in_progress'
-                          ? 'bg-blue-50 border-blue-200'
-                          : 'bg-white border-gray-200 hover:border-gray-300'
+                          ? 'bg-brand-50 border-brand-200'
+                          : 'bg-white border-slate-200 hover:border-slate-300'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -261,26 +262,26 @@ function DayDetailModal({
                               {obl.type_code}
                             </span>
                             <span className={`text-xs font-medium ${
-                              obl.status === 'overdue' ? 'text-red-600' :
-                              obl.status === 'completed' ? 'text-green-600' :
-                              obl.status === 'in_progress' ? 'text-blue-600' :
-                              'text-gray-500'
+                              obl.status === 'overdue' ? 'text-danger-600' :
+                              obl.status === 'completed' ? 'text-success-600' :
+                              obl.status === 'in_progress' ? 'text-brand-600' :
+                              'text-slate-500'
                             }`}>
                               {getStatusLabel(obl.status)}
                             </span>
                           </div>
 
                           {/* Client name */}
-                          <p className="mt-2 text-base font-semibold text-gray-900">
+                          <p className="mt-2 text-base font-semibold text-slate-900">
                             {obl.client_name}
                           </p>
 
                           {/* Type name */}
-                          <p className="text-sm text-gray-600">{obl.type_name}</p>
+                          <p className="text-sm text-slate-600">{obl.type_name}</p>
 
                           {/* Notes if present */}
                           {obl.notes && (
-                            <div className="mt-2 flex items-start gap-1.5 text-xs text-gray-500">
+                            <div className="mt-2 flex items-start gap-1.5 text-xs text-slate-500">
                               <FileText size={12} className="mt-0.5 flex-shrink-0" />
                               <span className="line-clamp-2">{obl.notes}</span>
                             </div>
@@ -296,7 +297,7 @@ function DayDetailModal({
                               <button
                                 onClick={() => onQuickComplete(obl.id)}
                                 disabled={isCompleting}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-success-700 bg-success-100 hover:bg-success-100 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Γρήγορη ολοκλήρωση"
                               >
                                 <Zap size={14} />
@@ -306,7 +307,7 @@ function DayDetailModal({
                               <button
                                 onClick={() => onFullComplete(obl)}
                                 disabled={isCompleting}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                                 title="Ολοκλήρωση με έγγραφα & email"
                               >
                                 <CheckCircle size={14} />
@@ -318,7 +319,7 @@ function DayDetailModal({
                           {/* Edit link */}
                           <Link
                             to={`/obligations/${obl.id}/edit`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors duration-150"
                             title="Επεξεργασία"
                           >
                             <Edit3 size={14} />
@@ -328,7 +329,7 @@ function DayDetailModal({
                           {/* View client */}
                           <Link
                             to={`/clients/${obl.client_id}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-100 hover:bg-brand-200 rounded-lg transition-colors duration-150"
                             title="Προβολή πελάτη"
                           >
                             <ExternalLink size={14} />
@@ -342,8 +343,8 @@ function DayDetailModal({
               </>
             ) : (
               <div className="text-center py-12">
-                <CalendarIcon size={48} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-500 font-medium">
+                <CalendarIcon size={48} className="mx-auto text-slate-300 mb-4" />
+                <p className="text-slate-500 font-medium">
                   Δεν υπάρχουν υποχρεώσεις για αυτή την ημερομηνία.
                 </p>
               </div>
@@ -351,9 +352,9 @@ function DayDetailModal({
           </div>
 
           {/* Footer with keyboard hint */}
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 text-center">
-            <span className="text-xs text-gray-400">
-              Πατήστε <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-gray-600">Esc</kbd> για κλείσιμο
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-center">
+            <span className="text-xs text-slate-400">
+              Πατήστε <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-600">Esc</kbd> για κλείσιμο
             </span>
           </div>
         </div>
@@ -402,13 +403,13 @@ function CalendarGrid({ month, year, days, onDayClick }: CalendarGridProps) {
   }, [month, year, daysInMonth, firstDayOfWeek, daysInPrevMonth]);
 
   return (
-    <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       {/* Day headers */}
-      <div className="grid grid-cols-7 bg-gray-100 border-b border-gray-200">
+      <div className="grid grid-cols-7 bg-slate-100 border-b border-slate-200">
         {GREEK_DAY_NAMES.map((dayName) => (
           <div
             key={dayName}
-            className="py-2 text-center text-xs md:text-sm font-medium text-gray-600"
+            className="py-2 text-center text-xs md:text-sm font-medium text-slate-600"
           >
             {dayName}
           </div>
@@ -601,50 +602,46 @@ export default function Calendar() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ημερολόγιο</h1>
-          <p className="text-sm text-gray-500">
-            Προβολή υποχρεώσεων ανά ημερομηνία προθεσμίας
-          </p>
-        </div>
-
-        {/* Navigation and actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={goToToday}
-            className="px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-          >
-            Σήμερα
-          </button>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              hasActiveFilters
-                ? 'bg-blue-100 text-blue-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <Filter size={16} />
-            Φίλτρα
-            {hasActiveFilters && (
-              <span className="ml-1 px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">
-                !
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Ημερολόγιο"
+        subtitle="Προβολή υποχρεώσεων ανά ημερομηνία προθεσμίας"
+        actions={
+          <>
+            <button
+              onClick={goToToday}
+              className="px-3 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 rounded-lg cursor-pointer transition-colors duration-150"
+            >
+              Σήμερα
+            </button>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors duration-150 ${
+                hasActiveFilters
+                  ? 'bg-brand-100 text-brand-700'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Filter size={16} />
+              Φίλτρα
+              {hasActiveFilters && (
+                <span className="ml-1 px-1.5 py-0.5 bg-brand-600 text-white text-xs rounded-full">
+                  !
+                </span>
+              )}
+            </button>
+          </>
+        }
+      />
 
       {/* Filters panel */}
       {showFilters && (
-        <div className="bg-white rounded-lg shadow p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-gray-900">Φίλτρα</h3>
+            <h3 className="font-medium text-slate-900">Φίλτρα</h3>
             {hasActiveFilters && (
               <button
                 onClick={clearFilters}
-                className="text-sm text-red-600 hover:text-red-700"
+                className="text-sm text-danger-600 hover:text-danger-700"
               >
                 Καθαρισμός
               </button>
@@ -653,7 +650,7 @@ export default function Calendar() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Client filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Πελάτης
               </label>
               <select
@@ -664,7 +661,7 @@ export default function Calendar() {
                     client_id: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 <option value="">Όλοι οι πελάτες</option>
                 {clientsData?.results?.map((client) => (
@@ -677,7 +674,7 @@ export default function Calendar() {
 
             {/* Type filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Τύπος υποχρέωσης
               </label>
               <select
@@ -688,7 +685,7 @@ export default function Calendar() {
                     type_id: e.target.value ? Number(e.target.value) : undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 <option value="">Όλοι οι τύποι</option>
                 {obligationTypes?.map((type) => (
@@ -701,7 +698,7 @@ export default function Calendar() {
 
             {/* Status filter */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Κατάσταση
               </label>
               <select
@@ -712,7 +709,7 @@ export default function Calendar() {
                     status: e.target.value || undefined,
                   })
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
               >
                 <option value="">Όλες οι καταστάσεις</option>
                 <option value="pending">Εκκρεμεί</option>
@@ -726,58 +723,58 @@ export default function Calendar() {
       )}
 
       {/* Month navigation */}
-      <div className="flex items-center justify-between bg-white rounded-lg shadow px-4 py-3">
+      <div className="flex items-center justify-between bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3">
         <button
           onClick={goToPreviousMonth}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-slate-100 rounded-lg transition-colors duration-150"
           aria-label="Προηγούμενος μήνας"
         >
-          <ChevronLeft size={20} className="text-gray-600" />
+          <ChevronLeft size={20} className="text-slate-600" />
         </button>
 
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold text-slate-900">
           {GREEK_MONTH_NAMES[currentMonth - 1]} {currentYear}
         </h2>
 
         <button
           onClick={goToNextMonth}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 hover:bg-slate-100 rounded-lg transition-colors duration-150"
           aria-label="Επόμενος μήνας"
         >
-          <ChevronRight size={20} className="text-gray-600" />
+          <ChevronRight size={20} className="text-slate-600" />
         </button>
       </div>
 
       {/* Summary stats */}
       {calendarData?.summary && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-500">Σύνολο</p>
-            <p className="text-2xl font-bold text-gray-900">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <p className="text-sm text-slate-500">Σύνολο</p>
+            <p className="text-2xl font-bold text-slate-900">
               {calendarData.summary.total}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-500">Εκκρεμείς</p>
-            <p className="text-2xl font-bold text-yellow-600">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <p className="text-sm text-slate-500">Εκκρεμείς</p>
+            <p className="text-2xl font-bold text-warning-600">
               {calendarData.summary.pending}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-500">Ολοκληρωμένες</p>
-            <p className="text-2xl font-bold text-green-600">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <p className="text-sm text-slate-500">Ολοκληρωμένες</p>
+            <p className="text-2xl font-bold text-success-600">
               {calendarData.summary.completed}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <p className="text-sm text-gray-500">Εκπρόθεσμες</p>
-            <p className="text-2xl font-bold text-red-600">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+            <p className="text-sm text-slate-500">Εκπρόθεσμες</p>
+            <p className="text-2xl font-bold text-danger-600">
               {calendarData.summary.overdue}
             </p>
           </div>
-          <div className="bg-white rounded-lg shadow p-4 col-span-2 md:col-span-1">
-            <p className="text-sm text-gray-500">Σε εξέλιξη</p>
-            <p className="text-2xl font-bold text-blue-600">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 col-span-2 md:col-span-1">
+            <p className="text-sm text-slate-500">Σε εξέλιξη</p>
+            <p className="text-2xl font-bold text-brand-600">
               {calendarData.summary.in_progress}
             </p>
           </div>
@@ -787,11 +784,11 @@ export default function Calendar() {
       {/* Calendar grid */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-500">Φόρτωση...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+          <span className="ml-3 text-slate-500">Φόρτωση...</span>
         </div>
       ) : isError ? (
-        <div className="bg-red-50 text-red-600 rounded-lg p-4 text-center">
+        <div className="bg-danger-50 text-danger-600 rounded-lg p-4 text-center">
           Σφάλμα φόρτωσης: {(error as Error)?.message || 'Άγνωστο σφάλμα'}
         </div>
       ) : (
@@ -804,28 +801,28 @@ export default function Calendar() {
       )}
 
       {/* Legend */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Υπόμνημα</h3>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+        <h3 className="text-sm font-medium text-slate-700 mb-3">Υπόμνημα</h3>
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded bg-yellow-100"></span>
-            <span className="text-sm text-gray-600">Εκκρεμείς</span>
+            <span className="w-4 h-4 rounded bg-warning-100"></span>
+            <span className="text-sm text-slate-600">Εκκρεμείς</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded bg-green-100"></span>
-            <span className="text-sm text-gray-600">Ολοκληρωμένες</span>
+            <span className="w-4 h-4 rounded bg-success-100"></span>
+            <span className="text-sm text-slate-600">Ολοκληρωμένες</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded bg-red-100"></span>
-            <span className="text-sm text-gray-600">Εκπρόθεσμες</span>
+            <span className="w-4 h-4 rounded bg-danger-100"></span>
+            <span className="text-sm text-slate-600">Εκπρόθεσμες</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded bg-blue-100"></span>
-            <span className="text-sm text-gray-600">Σε εξέλιξη</span>
+            <span className="w-4 h-4 rounded bg-brand-100"></span>
+            <span className="text-sm text-slate-600">Σε εξέλιξη</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-4 h-4 rounded ring-2 ring-blue-500"></span>
-            <span className="text-sm text-gray-600">Σήμερα</span>
+            <span className="w-4 h-4 rounded ring-2 ring-brand-500"></span>
+            <span className="text-sm text-slate-600">Σήμερα</span>
           </div>
         </div>
       </div>
@@ -868,9 +865,9 @@ export default function Calendar() {
       />
 
       {/* Keyboard shortcuts hint */}
-      <div className="text-center text-xs text-gray-400 pb-4">
+      <div className="text-center text-xs text-slate-400 pb-4">
         <span className="hidden md:inline">
-          Συντομεύσεις: <kbd className="px-1 py-0.5 bg-gray-100 rounded">←</kbd> / <kbd className="px-1 py-0.5 bg-gray-100 rounded">→</kbd> για πλοήγηση μηνών, <kbd className="px-1 py-0.5 bg-gray-100 rounded">T</kbd> για σήμερα
+          Συντομεύσεις: <kbd className="px-1 py-0.5 bg-slate-100 rounded">←</kbd> / <kbd className="px-1 py-0.5 bg-slate-100 rounded">→</kbd> για πλοήγηση μηνών, <kbd className="px-1 py-0.5 bg-slate-100 rounded">T</kbd> για σήμερα
         </span>
       </div>
     </div>

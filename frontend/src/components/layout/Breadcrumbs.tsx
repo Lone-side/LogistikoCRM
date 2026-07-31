@@ -55,7 +55,7 @@ export default function Breadcrumbs() {
         <li>
           <Link
             to="/"
-            className="flex items-center gap-1 text-gray-500 hover:text-gray-700 transition-colors"
+            className="flex items-center gap-1 text-slate-500 hover:text-slate-700 transition-colors"
           >
             <Home size={14} />
             <span className="sr-only">Αρχική</span>
@@ -64,16 +64,16 @@ export default function Breadcrumbs() {
 
         {breadcrumbs.map((item, index) => (
           <li key={index} className="flex items-center gap-1">
-            <ChevronRight size={14} className="text-gray-400" />
+            <ChevronRight size={14} className="text-slate-400" />
             {item.path ? (
               <Link
                 to={item.path}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
+                className="text-slate-500 hover:text-slate-700 transition-colors"
               >
                 {item.label}
               </Link>
             ) : (
-              <span className="text-gray-900 font-medium">{item.label}</span>
+              <span className="text-slate-900 font-medium">{item.label}</span>
             )}
           </li>
         ))}

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useDashboardStats, useDashboardRecentActivity, useDashboardCalendar } from '../hooks/useDashboard';
 import {
@@ -30,14 +31,47 @@ const CHART_STATUS_COLORS: Record<string, string> = {
 // Κοινό στυλ tooltip για όλα τα charts
 const TOOLTIP_STYLE = {
   borderRadius: '0.75rem',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--chart-tooltip-border)',
+  backgroundColor: 'var(--chart-tooltip-bg)',
+  color: 'var(--chart-tooltip-text)',
   boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
   fontSize: '13px',
   padding: '8px 12px',
 };
-const AXIS_TICK = { fontSize: 12, fill: '#64748b' };
+const AXIS_TICK = { fontSize: 12, fill: 'var(--chart-axis)' };
 // Σταθερή σειρά ώστε τα χρώματα να μην «κυκλώνουν» ανάλογα με τα δεδομένα
 const CHART_STATUS_ORDER = ['completed', 'in_progress', 'pending', 'overdue', 'cancelled'];
+
+// Κοινή «συνταγή» bento κελιού
+const BENTO_CARD = 'bg-white rounded-xl border border-slate-200 shadow-sm';
+// Καθυστέρηση εισόδου ανά tile (staggered entrance)
+const rise = (i: number): CSSProperties => ({ '--rise-delay': `${i * 50}ms` } as CSSProperties);
+
+// Count-up στο hero νούμερο — σέβεται το prefers-reduced-motion
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(value);
+  const frameRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value);
+      return;
+    }
+    const duration = 600;
+    const start = performance.now();
+    const from = 0;
+    const step = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(from + (value - from) * eased));
+      if (t < 1) frameRef.current = requestAnimationFrame(step);
+    };
+    frameRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [value]);
+
+  return <>{display}</>;
+}
 
 export default function Dashboard() {
   const { data: stats, isLoading, isError, error, refetch } = useDashboardStats();
@@ -124,10 +158,10 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 animate-rise" style={rise(0)}>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Πίνακας Ελέγχου</h1>
-          <p className="text-gray-600 text-sm">
+          <h1 className="text-2xl font-bold text-slate-900">Πίνακας Ελέγχου</h1>
+          <p className="text-slate-600 text-sm">
             Σήμερα: {new Date().toLocaleDateString('el-GR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </p>
         </div>
@@ -141,81 +175,100 @@ export default function Dashboard() {
 
       {/* Error Banner */}
       {isError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-danger-50 border border-danger-200 rounded-xl p-4">
           <div className="flex items-center">
-            <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-            <span className="text-red-700">
+            <AlertCircle className="w-5 h-5 text-danger-500 mr-2" />
+            <span className="text-danger-700">
               Σφάλμα φόρτωσης δεδομένων: {error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}
             </span>
           </div>
         </div>
       )}
 
-      {/* Quick Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: 'Πελάτες',
-            value: stats?.total_clients,
-            icon: <Users className="w-5 h-5 text-white" />,
-            iconBg: 'bg-gradient-to-br from-blue-500 to-indigo-600',
-            accent: 'border-t-blue-500',
-            to: '/clients',
-          },
-          {
-            label: 'Εκκρεμείς',
-            value: stats?.total_obligations_pending,
-            icon: <Clock className="w-5 h-5 text-white" />,
-            iconBg: 'bg-gradient-to-br from-amber-400 to-orange-500',
-            accent: 'border-t-amber-400',
-            to: '/obligations?status=pending',
-          },
-          {
-            label: 'Ολοκληρώθηκαν (μήνας)',
-            value: stats?.total_obligations_completed_this_month,
-            icon: <TrendingUp className="w-5 h-5 text-white" />,
-            iconBg: 'bg-gradient-to-br from-emerald-400 to-green-600',
-            accent: 'border-t-emerald-500',
-            to: '/obligations?status=completed',
-          },
-          {
-            label: 'Εκπρόθεσμες',
-            value: stats?.overdue_count,
-            icon: <AlertCircle className="w-5 h-5 text-white" />,
-            iconBg: 'bg-gradient-to-br from-red-400 to-rose-600',
-            accent: 'border-t-red-500',
-            to: '/obligations?status=overdue',
-          },
-        ].map((tile) => (
-          <Link
-            key={tile.label}
-            to={tile.to}
-            className={`bg-white rounded-xl border border-gray-200 border-t-4 ${tile.accent} p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150`}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-[13px] font-medium text-gray-500">{tile.label}</p>
-                <p className="text-3xl font-bold text-gray-900 mt-1 tabular-nums">
+      {/* Bento Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4">
+        {/* Hero tile — Εκκρεμείς υποχρεώσεις μήνα */}
+        <Link
+          to="/obligations?status=pending"
+          className={`${BENTO_CARD} card-lift animate-rise sm:col-span-2 lg:col-span-8 relative overflow-hidden p-6 lg:p-8 bg-gradient-to-br from-brand-50 via-white to-white border-brand-200/70`}
+          style={rise(1)}
+        >
+          <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-brand-100/50 blur-2xl pointer-events-none" aria-hidden="true" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-brand-700 uppercase tracking-wide">Εκκρεμείς</p>
+              <p className="text-6xl lg:text-7xl font-bold text-slate-900 mt-2 tabular-nums leading-none">
+                {typeof stats?.total_obligations_pending === 'number' ? (
+                  <AnimatedNumber value={stats.total_obligations_pending} />
+                ) : (
+                  renderStatValue(stats?.total_obligations_pending)
+                )}
+              </p>
+              <p className="text-sm text-slate-500 mt-3">Υποχρεώσεις σε εκκρεμότητα αυτόν τον μήνα</p>
+            </div>
+            <div className="p-3 rounded-2xl bg-brand-600 shadow-sm shrink-0">
+              <Clock className="w-6 h-6 text-white" />
+            </div>
+          </div>
+          <div className="relative mt-6 inline-flex items-center gap-1 text-sm font-medium text-brand-600">
+            Προβολή όλων <ArrowRight className="w-4 h-4" />
+          </div>
+        </Link>
+
+        {/* Medium stat tiles */}
+        <div className="sm:col-span-2 lg:col-span-4 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+          {[
+            {
+              label: 'Πελάτες',
+              value: stats?.total_clients,
+              icon: <Users className="w-5 h-5 text-white" />,
+              iconBg: 'bg-brand-600',
+              to: '/clients',
+              delay: 2,
+            },
+            {
+              label: 'Ολοκληρώθηκαν (μήνας)',
+              value: stats?.total_obligations_completed_this_month,
+              icon: <TrendingUp className="w-5 h-5 text-white" />,
+              iconBg: 'bg-success-600',
+              to: '/obligations?status=completed',
+              delay: 3,
+            },
+            {
+              label: 'Εκπρόθεσμες',
+              value: stats?.overdue_count,
+              icon: <AlertCircle className="w-5 h-5 text-white" />,
+              iconBg: 'bg-danger-600',
+              to: '/obligations?status=overdue',
+              delay: 4,
+            },
+          ].map((tile) => (
+            <Link
+              key={tile.label}
+              to={tile.to}
+              className={`${BENTO_CARD} card-lift animate-rise p-5 flex items-center justify-between gap-3`}
+              style={rise(tile.delay)}
+            >
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-slate-500 truncate">{tile.label}</p>
+                <p className="text-3xl font-bold text-slate-900 mt-1 tabular-nums">
                   {renderStatValue(tile.value)}
                 </p>
               </div>
-              <div className={`p-2.5 rounded-xl ${tile.iconBg} shadow-sm`}>
+              <div className={`p-2.5 rounded-xl ${tile.iconBg} shadow-sm shrink-0`}>
                 {tile.icon}
               </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Status Breakdown Pie Chart */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900">Κατανομή Υποχρεώσεων</h3>
-          <p className="text-xs text-gray-500 mb-4">Τρέχων μήνας, ανά κατάσταση</p>
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-5 p-6`} style={rise(5)}>
+          <h3 className="text-lg font-semibold text-slate-900">Κατανομή Υποχρεώσεων</h3>
+          <p className="text-xs text-slate-500 mb-4">Τρέχων μήνας, ανά κατάσταση</p>
           {isLoading ? (
             <div className="h-64 flex items-center justify-center">
-              <div className="w-32 h-32 bg-gray-200 rounded-full animate-pulse" />
+              <div className="w-32 h-32 bg-slate-200 rounded-full animate-pulse" />
             </div>
           ) : pieChartData.length > 0 ? (
             <div className="h-64 relative">
@@ -246,14 +299,14 @@ export default function Dashboard() {
               </ResponsiveContainer>
               {/* Σύνολο στο κέντρο του donut */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-3xl font-bold text-gray-900 tabular-nums">
+                <span className="text-3xl font-bold text-slate-900 tabular-nums">
                   {pieChartData.reduce((sum, d) => sum + d.value, 0)}
                 </span>
-                <span className="text-xs text-gray-500">σύνολο</span>
+                <span className="text-xs text-slate-500">σύνολο</span>
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-slate-500">
               Δεν υπάρχουν δεδομένα
             </div>
           )}
@@ -266,22 +319,22 @@ export default function Dashboard() {
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-sm text-gray-600">{entry.name}</span>
+                <span className="text-sm text-slate-600">{entry.name}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Κατανομή μήνα ανά τύπο (stacked by status) */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900">
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-7 p-6`} style={rise(6)}>
+          <h3 className="text-lg font-semibold text-slate-900">
             Προθεσμίες Μήνα ανά Τύπο
           </h3>
-          <p className="text-xs text-gray-500 mb-4">ΦΠΑ, ΑΠΔ, δηλώσεις κ.λπ. — με ανάλυση κατάστασης</p>
+          <p className="text-xs text-slate-500 mb-4">ΦΠΑ, ΑΠΔ, δηλώσεις κ.λπ. — με ανάλυση κατάστασης</p>
           {isLoading ? (
             <div className="h-64 flex items-end justify-around gap-2 animate-pulse">
               {[70, 50, 85, 40, 60, 45].map((h, i) => (
-                <div key={i} className="bg-gray-200 rounded-t flex-1" style={{ height: `${h}%` }} />
+                <div key={i} className="bg-slate-200 rounded-t flex-1" style={{ height: `${h}%` }} />
               ))}
             </div>
           ) : typeChartData.length > 0 ? (
@@ -309,23 +362,74 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-slate-500">
               Δεν υπάρχουν δεδομένα
             </div>
           )}
         </div>
-      </div>
 
-      {/* Φόρτος Εργασίας + Τάση 6 Μηνών */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Επερχόμενες Προθεσμίες — ψηλό κάθετο tile */}
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-2 lg:col-span-4 lg:row-span-2 p-6`} style={rise(7)}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-warning-600" />
+              Επερχόμενες Προθεσμίες
+            </h3>
+            <span className="text-sm text-slate-500">Επόμενες 7 ημέρες</span>
+          </div>
+          {isLoading ? (
+            <DeadlineListSkeleton count={5} />
+          ) : stats?.upcoming_deadlines && stats.upcoming_deadlines.length > 0 ? (
+            <div className="space-y-3">
+              {stats.upcoming_deadlines.slice(0, 5).map((deadline) => (
+                <div
+                  key={deadline.id}
+                  className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">{deadline.client_name}</p>
+                    <p className="text-sm text-slate-500">
+                      {deadline.type} - {deadline.type_code}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-medium text-slate-900">{deadline.deadline}</p>
+                    <p className={`text-sm font-medium ${
+                      deadline.days_until <= 2 ? 'text-danger-600' : 'text-slate-500'
+                    }`}>
+                      {deadline.days_until === 0
+                        ? 'Σήμερα!'
+                        : deadline.days_until === 1
+                        ? 'Αύριο'
+                        : `Σε ${deadline.days_until} ημέρες`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {stats.upcoming_deadlines.length > 5 && (
+                <Link
+                  to="/obligations"
+                  className="block text-center text-sm text-brand-600 hover:text-brand-700 font-medium py-2"
+                >
+                  Προβολή όλων ({stats.upcoming_deadlines.length} προθεσμίες)
+                </Link>
+              )}
+            </div>
+          ) : (
+            <p className="text-slate-500 text-center py-4">
+              Δεν υπάρχουν επερχόμενες προθεσμίες τις επόμενες 7 ημέρες.
+            </p>
+          )}
+        </div>
+
         {/* Φόρτος ανά υπάλληλο */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900">Φόρτος ανά Υπάλληλο</h3>
-          <p className="text-xs text-gray-500 mb-4">Ανοιχτές αναθέσεις και απόδοση μήνα</p>
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-8 p-6`} style={rise(8)}>
+          <h3 className="text-lg font-semibold text-slate-900">Φόρτος ανά Υπάλληλο</h3>
+          <p className="text-xs text-slate-500 mb-4">Ανοιχτές αναθέσεις και απόδοση μήνα</p>
           {isLoading ? (
             <div className="h-64 flex flex-col justify-around gap-2 animate-pulse">
               {[80, 60, 45, 30].map((w, i) => (
-                <div key={i} className="bg-gray-200 rounded h-6" style={{ width: `${w}%` }} />
+                <div key={i} className="bg-slate-200 rounded h-6" style={{ width: `${w}%` }} />
               ))}
             </div>
           ) : workloadData.length > 0 ? (
@@ -353,18 +457,18 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-slate-500">
               Δεν υπάρχουν ανατεθειμένες υποχρεώσεις
             </div>
           )}
         </div>
 
         {/* Τάση 6 μηνών */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900">Τάση 6 Μηνών</h3>
-          <p className="text-xs text-gray-500 mb-4">Σύνολο υποχρεώσεων και ολοκληρώσεις ανά μήνα</p>
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-8 p-6`} style={rise(9)}>
+          <h3 className="text-lg font-semibold text-slate-900">Τάση 6 Μηνών</h3>
+          <p className="text-xs text-slate-500 mb-4">Σύνολο υποχρεώσεων και ολοκληρώσεις ανά μήνα</p>
           {isLoading ? (
-            <div className="h-64 bg-gray-100 rounded animate-pulse" />
+            <div className="h-64 bg-slate-100 rounded animate-pulse" />
           ) : (stats?.monthly_trend?.length || 0) > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -399,28 +503,27 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-64 text-gray-500">
+            <div className="flex items-center justify-center h-64 text-slate-500">
               Δεν υπάρχουν δεδομένα
             </div>
           )}
         </div>
-      </div>
 
-      {/* VoIP Widget and Calendar Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* VoIP Widget */}
-        <VoIPWidget />
+        <div className="animate-rise sm:col-span-1 lg:col-span-6" style={rise(10)}>
+          <VoIPWidget />
+        </div>
 
         {/* Mini Calendar */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-6 p-6`} style={rise(11)}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-brand-600" />
               Εβδομάδα
             </h3>
             <Link
               to="/calendar"
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              className="text-sm text-brand-600 hover:text-brand-700 font-medium"
             >
               Πλήρες ημερολόγιο
             </Link>
@@ -428,7 +531,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-7 gap-2">
             {/* Day names */}
             {GREEK_DAY_NAMES.map((day) => (
-              <div key={day} className="text-center text-xs font-medium text-gray-500 pb-2">
+              <div key={day} className="text-center text-xs font-medium text-slate-500 pb-2">
                 {day}
               </div>
             ))}
@@ -443,8 +546,8 @@ export default function Dashboard() {
                   key={index}
                   className={`
                     text-center p-2 rounded-lg cursor-pointer transition-colors
-                    ${isToday ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'}
-                    ${isPast && !isToday ? 'text-gray-400' : ''}
+                    ${isToday ? 'bg-brand-600 text-white' : 'hover:bg-slate-100'}
+                    ${isPast && !isToday ? 'text-slate-400' : ''}
                   `}
                 >
                   <div className={`text-sm font-medium ${isToday ? 'text-white' : ''}`}>
@@ -454,7 +557,7 @@ export default function Dashboard() {
                     <div
                       className={`
                         text-xs mt-1 px-1.5 py-0.5 rounded-full
-                        ${isToday ? 'bg-blue-400 text-white' : 'bg-yellow-100 text-yellow-700'}
+                        ${isToday ? 'bg-brand-500 text-white' : 'bg-warning-100 text-warning-700'}
                       `}
                     >
                       {obligationCount}
@@ -466,28 +569,28 @@ export default function Dashboard() {
           </div>
           {/* Calendar summary */}
           {calendarData && (
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-3 gap-4 text-center">
+            <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-3 gap-4 text-center">
               <div>
-                <p className="text-xl font-bold text-yellow-600">{calendarData.pending}</p>
-                <p className="text-xs text-gray-500">Εκκρεμείς</p>
+                <p className="text-xl font-bold text-warning-600">{calendarData.pending}</p>
+                <p className="text-xs text-slate-500">Εκκρεμείς</p>
               </div>
               <div>
-                <p className="text-xl font-bold text-green-600">{calendarData.completed}</p>
-                <p className="text-xs text-gray-500">Ολοκληρ.</p>
+                <p className="text-xl font-bold text-success-600">{calendarData.completed}</p>
+                <p className="text-xs text-slate-500">Ολοκληρ.</p>
               </div>
               <div>
-                <p className="text-xl font-bold text-red-600">{calendarData.overdue}</p>
-                <p className="text-xs text-gray-500">Εκπρόθεσμες</p>
+                <p className="text-xl font-bold text-danger-600">{calendarData.overdue}</p>
+                <p className="text-xs text-slate-500">Εκπρόθεσμες</p>
               </div>
             </div>
           )}
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-6 p-6`} style={rise(12)}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-green-600" />
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-success-600" />
               Πρόσφατη Δραστηριότητα
             </h3>
           </div>
@@ -496,47 +599,47 @@ export default function Dashboard() {
               recentActivity.recent_completions.slice(0, 5).map((item) => (
                 <div
                   key={`completion-${item.id}`}
-                  className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg"
+                  className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg"
                 >
-                  <div className="p-1.5 bg-green-100 rounded-full mt-0.5">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                  <div className="p-1.5 bg-success-100 rounded-full mt-0.5">
+                    <CheckCircle className="w-4 h-4 text-success-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-slate-900 truncate">
                       {item.client_name}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-slate-500">
                       {item.obligation_type} - {item.period}
                     </p>
                   </div>
-                  <span className="text-xs text-gray-400 whitespace-nowrap">
+                  <span className="text-xs text-slate-400 whitespace-nowrap">
                     {item.completed_date ? formatRelativeTime(item.completed_date) : '-'}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="text-gray-500 text-sm text-center py-4">
+              <p className="text-slate-500 text-sm text-center py-4">
                 Δεν υπάρχει πρόσφατη δραστηριότητα
               </p>
             )}
             {recentActivity?.new_clients && recentActivity.new_clients.length > 0 && (
               <>
-                <div className="border-t border-gray-200 my-2"></div>
+                <div className="border-t border-slate-200 my-2"></div>
                 {recentActivity.new_clients.slice(0, 3).map((client) => (
                   <div
                     key={`client-${client.id}`}
-                    className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg"
+                    className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg"
                   >
-                    <div className="p-1.5 bg-blue-100 rounded-full mt-0.5">
-                      <Plus className="w-4 h-4 text-blue-600" />
+                    <div className="p-1.5 bg-brand-100 rounded-full mt-0.5">
+                      <Plus className="w-4 h-4 text-brand-600" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-medium text-slate-900 truncate">
                         Νέος πελάτης: {client.eponimia}
                       </p>
-                      <p className="text-xs text-gray-500">ΑΦΜ: {client.afm}</p>
+                      <p className="text-xs text-slate-500">ΑΦΜ: {client.afm}</p>
                     </div>
-                    <span className="text-xs text-gray-400 whitespace-nowrap">
+                    <span className="text-xs text-slate-400 whitespace-nowrap">
                       {formatRelativeTime(client.created_at)}
                     </span>
                   </div>
@@ -545,107 +648,50 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Upcoming Deadlines and Quick Actions Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Upcoming Deadlines */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-yellow-600" />
-              Επερχόμενες Προθεσμίες
-            </h3>
-            <span className="text-sm text-gray-500">Επόμενες 7 ημέρες</span>
-          </div>
-          {isLoading ? (
-            <DeadlineListSkeleton count={5} />
-          ) : stats?.upcoming_deadlines && stats.upcoming_deadlines.length > 0 ? (
-            <div className="space-y-3">
-              {stats.upcoming_deadlines.slice(0, 5).map((deadline) => (
-                <div
-                  key={deadline.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <div>
-                    <p className="font-medium text-gray-900">{deadline.client_name}</p>
-                    <p className="text-sm text-gray-500">
-                      {deadline.type} - {deadline.type_code}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">{deadline.deadline}</p>
-                    <p className={`text-sm font-medium ${
-                      deadline.days_until <= 2 ? 'text-red-600' : 'text-gray-500'
-                    }`}>
-                      {deadline.days_until === 0
-                        ? 'Σήμερα!'
-                        : deadline.days_until === 1
-                        ? 'Αύριο'
-                        : `Σε ${deadline.days_until} ημέρες`}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {stats.upcoming_deadlines.length > 5 && (
-                <Link
-                  to="/obligations"
-                  className="block text-center text-sm text-blue-600 hover:text-blue-700 font-medium py-2"
-                >
-                  Προβολή όλων ({stats.upcoming_deadlines.length} προθεσμίες)
-                </Link>
-              )}
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-4">
-              Δεν υπάρχουν επερχόμενες προθεσμίες τις επόμενες 7 ημέρες.
-            </p>
-          )}
-        </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Γρήγορες Ενέργειες</h3>
+        <div className={`${BENTO_CARD} animate-rise sm:col-span-1 lg:col-span-6 p-6`} style={rise(13)}>
+          <h3 className="text-lg font-semibold text-slate-900 mb-4">Γρήγορες Ενέργειες</h3>
           <div className="grid grid-cols-1 gap-3">
             <Link
               to="/clients"
-              className="flex items-center justify-between p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-brand-50 rounded-lg hover:bg-brand-100 transition-colors group"
             >
               <div className="flex items-center">
-                <Users className="w-5 h-5 text-blue-600 mr-3" />
-                <span className="text-blue-900 font-medium">Διαχείριση Πελατών</span>
+                <Users className="w-5 h-5 text-brand-600 mr-3" />
+                <span className="text-slate-900 font-medium">Διαχείριση Πελατών</span>
               </div>
-              <ArrowRight className="w-5 h-5 text-blue-600 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 text-brand-600 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
               to="/obligations"
-              className="flex items-center justify-between p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-warning-50 rounded-lg hover:bg-warning-100 transition-colors group"
             >
               <div className="flex items-center">
-                <FileText className="w-5 h-5 text-yellow-600 mr-3" />
-                <span className="text-yellow-900 font-medium">Διαχείριση Υποχρεώσεων</span>
+                <FileText className="w-5 h-5 text-warning-600 mr-3" />
+                <span className="text-warning-900 font-medium">Διαχείριση Υποχρεώσεων</span>
               </div>
-              <ArrowRight className="w-5 h-5 text-yellow-600 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 text-warning-600 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
               to="/calendar"
-              className="flex items-center justify-between p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-success-50 rounded-lg hover:bg-success-100 transition-colors group"
             >
               <div className="flex items-center">
-                <Calendar className="w-5 h-5 text-green-600 mr-3" />
-                <span className="text-green-900 font-medium">Ημερολόγιο Προθεσμιών</span>
+                <Calendar className="w-5 h-5 text-success-600 mr-3" />
+                <span className="text-success-900 font-medium">Ημερολόγιο Προθεσμιών</span>
               </div>
-              <ArrowRight className="w-5 h-5 text-green-600 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 text-success-600 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link
               to="/reports"
-              className="flex items-center justify-between p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors group"
+              className="flex items-center justify-between p-4 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors group"
             >
               <div className="flex items-center">
-                <TrendingUp className="w-5 h-5 text-purple-600 mr-3" />
-                <span className="text-purple-900 font-medium">Αναφορές & Στατιστικά</span>
+                <TrendingUp className="w-5 h-5 text-slate-600 mr-3" />
+                <span className="text-slate-900 font-medium">Αναφορές & Στατιστικά</span>
               </div>
-              <ArrowRight className="w-5 h-5 text-purple-600 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 text-slate-600 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
         </div>

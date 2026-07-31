@@ -26,8 +26,8 @@ const CATEGORIES = {
   clients: {
     label: 'ΠΕΛΑΤΕΣ',
     icon: Users,
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600'
+    iconBg: 'bg-brand-100',
+    iconColor: 'text-brand-700'
   },
   obligations: {
     label: 'ΥΠΟΧΡΕΩΣΕΙΣ',
@@ -149,7 +149,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const extra = item.extra as Record<string, string> | undefined;
     if (!extra?.status) return null;
 
-    let colorClass = 'bg-gray-100 text-gray-700';
+    let colorClass = 'bg-slate-100 text-slate-700';
     let statusText = extra.status_display || extra.status;
 
     if (item.type === 'obligation') {
@@ -182,8 +182,8 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
         key={`${item.type}-${item.id}`}
         data-index={globalIndex}
         onClick={() => navigateToResult(item)}
-        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-          isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'
+        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer ${
+          isSelected ? 'bg-brand-50' : 'hover:bg-slate-50'
         }`}
       >
         <div
@@ -192,8 +192,8 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
           <Icon size={18} className={config.iconColor} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-gray-900 truncate">{item.title}</p>
-          <p className="text-sm text-gray-500 truncate">{item.subtitle}</p>
+          <p className="font-medium text-slate-900 truncate">{item.title}</p>
+          <p className="text-sm text-slate-500 truncate">{item.subtitle}</p>
         </div>
         {getStatusBadge(item)}
       </button>
@@ -209,7 +209,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
     const element = (
       <div key={category}>
-        <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-t border-gray-100 first:border-t-0">
+        <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-t border-slate-100 first:border-t-0">
           {config.label}
         </div>
         {items.map((item, idx) => renderResultItem(item, category, startIndex + idx))}
@@ -247,41 +247,41 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     >
       <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
-          <Search size={20} className="text-gray-400 flex-shrink-0" />
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
+          <Search size={20} className="text-slate-400 flex-shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Αναζήτηση πελατών, υποχρεώσεων, tickets, κλήσεων..."
-            className="flex-1 text-lg outline-none placeholder-gray-400"
+            className="flex-1 text-lg outline-none placeholder-slate-400"
           />
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
           >
-            <X size={18} className="text-gray-400" />
+            <X size={18} className="text-slate-400" />
           </button>
         </div>
 
         {/* Results */}
         <div ref={resultsContainerRef} className="max-h-[60vh] overflow-y-auto">
           {query.length < 2 ? (
-            <div className="px-4 py-8 text-center text-gray-500">
+            <div className="px-4 py-8 text-center text-slate-500">
               <Search size={40} className="mx-auto mb-2 opacity-50" />
               <p>Πληκτρολογήστε τουλάχιστον 2 χαρακτήρες</p>
-              <p className="text-sm text-gray-400 mt-1">
+              <p className="text-sm text-slate-400 mt-1">
                 Αναζήτηση με επωνυμία, ΑΦΜ, τηλέφωνο ή τύπο
               </p>
             </div>
           ) : isLoading ? (
-            <div className="px-4 py-8 text-center text-gray-500">
+            <div className="px-4 py-8 text-center text-slate-500">
               <Loader2 size={24} className="mx-auto mb-2 animate-spin" />
               <p>Αναζήτηση...</p>
             </div>
           ) : flatResults.length === 0 ? (
-            <div className="px-4 py-8 text-center text-gray-500">
+            <div className="px-4 py-8 text-center text-slate-500">
               <p>Δεν βρέθηκαν αποτελέσματα για "{query}"</p>
             </div>
           ) : (
@@ -290,30 +290,30 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="px-4 py-2 border-t border-slate-200 bg-slate-50">
+          <div className="flex items-center justify-between text-xs text-slate-500">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px]">
+                <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px]">
                   ↑↓
                 </kbd>
                 <span>Πλοήγηση</span>
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px]">
+                <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px]">
                   Enter
                 </kbd>
                 <span>Επιλογή</span>
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px]">
+                <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px]">
                   Esc
                 </kbd>
                 <span>Κλείσιμο</span>
               </span>
             </div>
             {searchData && searchData.total > 0 && (
-              <span className="text-gray-400">
+              <span className="text-slate-400">
                 {searchData.total} αποτελέσματα
               </span>
             )}

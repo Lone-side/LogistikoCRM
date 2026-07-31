@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button } from '../components';
+import { PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { backupApi, type BackupItem, type BackupSettings } from '../api/client';
 
@@ -196,7 +197,7 @@ export default function Backup() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin text-blue-600" size={32} />
+        <Loader2 className="animate-spin text-brand-600" size={32} />
       </div>
     );
   }
@@ -204,12 +205,10 @@ export default function Backup() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Backup & Restore</h1>
-          <p className="text-gray-500 mt-1">Διαχείριση αντιγράφων ασφαλείας</p>
-        </div>
-        <div className="flex gap-2">
+      <PageHeader
+        title="Backup & Restore"
+        subtitle="Διαχείριση αντιγράφων ασφαλείας"
+        actions={<>
           <Button variant="secondary" onClick={() => setShowSettingsModal(true)}>
             <Settings size={18} className="mr-2" />
             Ρυθμίσεις
@@ -222,70 +221,70 @@ export default function Backup() {
             <Plus size={18} className="mr-2" />
             Νέο Backup
           </Button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Database size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center">
+              <Database size={20} className="text-brand-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{backups.length}</p>
-              <p className="text-sm text-gray-500">Συνολικά Backups</p>
+              <p className="text-2xl font-bold text-slate-900">{backups.length}</p>
+              <p className="text-sm text-slate-500">Συνολικά Backups</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <Check size={20} className="text-green-600" />
+            <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
+              <Check size={20} className="text-success-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900">
                 {backups.filter(b => b.file_exists).length}
               </p>
-              <p className="text-sm text-gray-500">Διαθέσιμα</p>
+              <p className="text-sm text-slate-500">Διαθέσιμα</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
               <HardDrive size={20} className="text-purple-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-bold text-slate-900">
                 {formatSize(backups.reduce((sum, b) => sum + (b.file_exists ? b.file_size : 0), 0))}
               </p>
-              <p className="text-sm text-gray-500">Συνολικό Μέγεθος</p>
+              <p className="text-sm text-slate-500">Συνολικό Μέγεθος</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
               <Clock size={20} className="text-orange-600" />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900">
+              <p className="text-sm font-bold text-slate-900">
                 {backups[0] ? formatDate(backups[0].created_at) : '-'}
               </p>
-              <p className="text-sm text-gray-500">Τελευταίο Backup</p>
+              <p className="text-sm text-slate-500">Τελευταίο Backup</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Backup List */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Λίστα Backups</h2>
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Λίστα Backups</h2>
           <Button variant="secondary" size="sm" onClick={loadData}>
             <RefreshCw size={16} className="mr-1" />
             Ανανέωση
@@ -294,8 +293,8 @@ export default function Backup() {
 
         {backups.length === 0 ? (
           <div className="p-12 text-center">
-            <FileArchive size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500">Δεν υπάρχουν backups</p>
+            <FileArchive size={48} className="mx-auto text-slate-300 mb-4" />
+            <p className="text-slate-500">Δεν υπάρχουν backups</p>
             <Button className="mt-4" onClick={() => setShowCreateModal(true)}>
               <Plus size={18} className="mr-2" />
               Δημιουργία πρώτου backup
@@ -304,49 +303,49 @@ export default function Backup() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Αρχείο
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Μέγεθος
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Περιεχόμενα
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Ημερομηνία
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Κατάσταση
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Ενέργειες
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-100">
                 {backups.map((backup) => (
-                  <tr key={backup.id} className="hover:bg-gray-50">
+                  <tr key={backup.id} className="hover:bg-slate-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <FileArchive size={20} className="text-gray-400" />
+                        <FileArchive size={20} className="text-slate-400" />
                         <div>
-                          <p className="font-medium text-gray-900">{backup.filename}</p>
+                          <p className="font-medium text-slate-900">{backup.filename}</p>
                           {backup.notes && (
-                            <p className="text-sm text-gray-500">{backup.notes}</p>
+                            <p className="text-sm text-slate-500">{backup.notes}</p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">
+                    <td className="px-6 py-4 text-slate-600">
                       {backup.file_size_display || formatSize(backup.file_size)}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         {backup.includes_db && (
-                          <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded">
+                          <span className="px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded">
                             DB
                           </span>
                         )}
@@ -357,22 +356,22 @@ export default function Backup() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">
+                    <td className="px-6 py-4 text-slate-600">
                       {formatDate(backup.created_at)}
                       {backup.restored_at && (
-                        <p className="text-xs text-green-600 mt-1">
+                        <p className="text-xs text-success-600 mt-1">
                           Restored: {formatDate(backup.restored_at)}
                         </p>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       {backup.file_exists ? (
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded flex items-center gap-1 w-fit">
+                        <span className="px-2 py-1 text-xs bg-success-100 text-success-700 rounded flex items-center gap-1 w-fit">
                           <Check size={12} />
                           Διαθέσιμο
                         </span>
                       ) : (
-                        <span className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded flex items-center gap-1 w-fit">
+                        <span className="px-2 py-1 text-xs bg-danger-100 text-danger-700 rounded flex items-center gap-1 w-fit">
                           <X size={12} />
                           Μη διαθέσιμο
                         </span>
@@ -384,7 +383,7 @@ export default function Backup() {
                           <>
                             <button
                               onClick={() => handleDownload(backup)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-colors cursor-pointer"
                               title="Λήψη"
                               aria-label="Λήψη"
                             >
@@ -396,7 +395,7 @@ export default function Backup() {
                                 setShowRestoreModal(true);
                               }}
                               disabled={restoringId === backup.id}
-                              className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
+                              className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
                               title="Επαναφορά"
                               aria-label="Επαναφορά"
                             >
@@ -422,31 +421,31 @@ export default function Backup() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Δημιουργία Backup</h3>
-              <button aria-label="Κλείσιμο" onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Δημιουργία Backup</h3>
+              <button aria-label="Κλείσιμο" onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Σημειώσεις (προαιρετικό)
                 </label>
                 <input
                   type="text"
                   value={createNotes}
                   onChange={(e) => setCreateNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                   placeholder="π.χ. Πριν την αναβάθμιση"
                 />
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">Συμπερίληψη Media</p>
-                  <p className="text-sm text-gray-500">Uploaded αρχεία πελατών</p>
+                  <p className="font-medium text-slate-900">Συμπερίληψη Media</p>
+                  <p className="text-sm text-slate-500">Uploaded αρχεία πελατών</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -455,12 +454,12 @@ export default function Backup() {
                     checked={createIncludeMedia}
                     onChange={(e) => setCreateIncludeMedia(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+            <div className="flex justify-end gap-2 p-4 border-t border-slate-200 bg-slate-50 rounded-b-lg">
               <Button variant="secondary" onClick={() => setShowCreateModal(false)}>
                 Ακύρωση
               </Button>
@@ -486,71 +485,71 @@ export default function Backup() {
       {showRestoreModal && selectedBackup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Επαναφορά Backup</h3>
-              <button aria-label="Κλείσιμο" onClick={() => setShowRestoreModal(false)} className="text-gray-400 hover:text-gray-600">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Επαναφορά Backup</h3>
+              <button aria-label="Κλείσιμο" onClick={() => setShowRestoreModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
               {/* Warning */}
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex gap-3">
-                <AlertTriangle className="text-yellow-600 flex-shrink-0" size={20} />
-                <div className="text-sm text-yellow-800">
+              <div className="p-4 bg-warning-50 border border-warning-100 rounded-lg flex gap-3">
+                <AlertTriangle className="text-warning-600 flex-shrink-0" size={20} />
+                <div className="text-sm text-warning-700">
                   <p className="font-medium">Προσοχή!</p>
                   <p>Η επαναφορά με mode "Αντικατάσταση" θα διαγράψει τα τρέχοντα δεδομένα.</p>
                 </div>
               </div>
 
               {/* Backup info */}
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="font-medium text-gray-900">{selectedBackup.filename}</p>
-                <p className="text-sm text-gray-500">
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="font-medium text-slate-900">{selectedBackup.filename}</p>
+                <p className="text-sm text-slate-500">
                   {formatDate(selectedBackup.created_at)} · {selectedBackup.file_size_display || formatSize(selectedBackup.file_size)}
                 </p>
               </div>
 
               {/* Mode selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Τρόπος επαναφοράς</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Τρόπος επαναφοράς</label>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
                     <input
                       type="radio"
                       name="restoreMode"
                       value="replace"
                       checked={restoreMode === 'replace'}
                       onChange={() => setRestoreMode('replace')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
-                      <p className="font-medium text-gray-900">Αντικατάσταση</p>
-                      <p className="text-sm text-gray-500">Διαγραφή υπαρχόντων και φόρτωση backup</p>
+                      <p className="font-medium text-slate-900">Αντικατάσταση</p>
+                      <p className="text-sm text-slate-500">Διαγραφή υπαρχόντων και φόρτωση backup</p>
                     </div>
                   </label>
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
                     <input
                       type="radio"
                       name="restoreMode"
                       value="merge"
                       checked={restoreMode === 'merge'}
                       onChange={() => setRestoreMode('merge')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
-                      <p className="font-medium text-gray-900">Συγχώνευση</p>
-                      <p className="text-sm text-gray-500">Προσθήκη δεδομένων χωρίς διαγραφή</p>
+                      <p className="font-medium text-slate-900">Συγχώνευση</p>
+                      <p className="text-sm text-slate-500">Προσθήκη δεδομένων χωρίς διαγραφή</p>
                     </div>
                   </label>
                 </div>
               </div>
 
               {/* Safety backup option */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">Safety Backup</p>
-                  <p className="text-sm text-gray-500">Δημιουργία backup πριν την επαναφορά</p>
+                  <p className="font-medium text-slate-900">Safety Backup</p>
+                  <p className="text-sm text-slate-500">Δημιουργία backup πριν την επαναφορά</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -559,12 +558,12 @@ export default function Backup() {
                     checked={createSafetyBackup}
                     onChange={(e) => setCreateSafetyBackup(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+            <div className="flex justify-end gap-2 p-4 border-t border-slate-200 bg-slate-50 rounded-b-lg">
               <Button variant="secondary" onClick={() => setShowRestoreModal(false)}>
                 Ακύρωση
               </Button>
@@ -590,18 +589,18 @@ export default function Backup() {
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Upload & Restore</h3>
-              <button aria-label="Κλείσιμο" onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="text-gray-400 hover:text-gray-600">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Upload & Restore</h3>
+              <button aria-label="Κλείσιμο" onClick={() => { setShowUploadModal(false); setUploadFile(null); }} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
               {/* Warning */}
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex gap-3">
-                <AlertTriangle className="text-yellow-600 flex-shrink-0" size={20} />
-                <div className="text-sm text-yellow-800">
+              <div className="p-4 bg-warning-50 border border-warning-100 rounded-lg flex gap-3">
+                <AlertTriangle className="text-warning-600 flex-shrink-0" size={20} />
+                <div className="text-sm text-warning-700">
                   <p className="font-medium">Προσοχή!</p>
                   <p>Ανεβάστε μόνο backup αρχεία από αξιόπιστη πηγή.</p>
                 </div>
@@ -609,16 +608,16 @@ export default function Backup() {
 
               {/* File input */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Αρχείο Backup (ZIP)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Αρχείο Backup (ZIP)</label>
                 <input
                   type="file"
                   ref={fileInputRef}
                   accept=".zip"
                   onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
                 {uploadFile && (
-                  <p className="text-sm text-gray-500 mt-1">
+                  <p className="text-sm text-slate-500 mt-1">
                     {uploadFile.name} ({formatSize(uploadFile.size)})
                   </p>
                 )}
@@ -626,44 +625,44 @@ export default function Backup() {
 
               {/* Mode selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Τρόπος επαναφοράς</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Τρόπος επαναφοράς</label>
                 <div className="space-y-2">
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
                     <input
                       type="radio"
                       name="uploadRestoreMode"
                       value="replace"
                       checked={restoreMode === 'replace'}
                       onChange={() => setRestoreMode('replace')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
-                      <p className="font-medium text-gray-900">Αντικατάσταση</p>
-                      <p className="text-sm text-gray-500">Διαγραφή υπαρχόντων</p>
+                      <p className="font-medium text-slate-900">Αντικατάσταση</p>
+                      <p className="text-sm text-slate-500">Διαγραφή υπαρχόντων</p>
                     </div>
                   </label>
-                  <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
+                  <label className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50">
                     <input
                       type="radio"
                       name="uploadRestoreMode"
                       value="merge"
                       checked={restoreMode === 'merge'}
                       onChange={() => setRestoreMode('merge')}
-                      className="text-blue-600"
+                      className="text-brand-600"
                     />
                     <div>
-                      <p className="font-medium text-gray-900">Συγχώνευση</p>
-                      <p className="text-sm text-gray-500">Προσθήκη χωρίς διαγραφή</p>
+                      <p className="font-medium text-slate-900">Συγχώνευση</p>
+                      <p className="text-sm text-slate-500">Προσθήκη χωρίς διαγραφή</p>
                     </div>
                   </label>
                 </div>
               </div>
 
               {/* Safety backup option */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">Safety Backup</p>
-                  <p className="text-sm text-gray-500">Δημιουργία backup πριν την επαναφορά</p>
+                  <p className="font-medium text-slate-900">Safety Backup</p>
+                  <p className="text-sm text-slate-500">Δημιουργία backup πριν την επαναφορά</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -672,12 +671,12 @@ export default function Backup() {
                     checked={createSafetyBackup}
                     onChange={(e) => setCreateSafetyBackup(e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+            <div className="flex justify-end gap-2 p-4 border-t border-slate-200 bg-slate-50 rounded-b-lg">
               <Button variant="secondary" onClick={() => { setShowUploadModal(false); setUploadFile(null); }}>
                 Ακύρωση
               </Button>
@@ -703,29 +702,29 @@ export default function Backup() {
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Ρυθμίσεις Backup</h3>
-              <button aria-label="Κλείσιμο" onClick={() => setShowSettingsModal(false)} className="text-gray-400 hover:text-gray-600">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">Ρυθμίσεις Backup</h3>
+              <button aria-label="Κλείσιμο" onClick={() => setShowSettingsModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150">
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Φάκελος Backup
                 </label>
                 <input
                   type="text"
                   value={settingsForm.backup_path}
                   onChange={(e) => setSettingsForm({ ...settingsForm, backup_path: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">Σχετικό path από MEDIA_ROOT</p>
+                <p className="text-xs text-slate-500 mt-1">Σχετικό path από MEDIA_ROOT</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Μέγιστος αριθμός Backups
                 </label>
                 <input
@@ -733,15 +732,15 @@ export default function Backup() {
                   min="0"
                   value={settingsForm.max_backups}
                   onChange={(e) => setSettingsForm({ ...settingsForm, max_backups: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">0 = χωρίς όριο</p>
+                <p className="text-xs text-slate-500 mt-1">0 = χωρίς όριο</p>
               </div>
 
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                 <div>
-                  <p className="font-medium text-gray-900">Default: Συμπερίληψη Media</p>
-                  <p className="text-sm text-gray-500">Στα νέα backups</p>
+                  <p className="font-medium text-slate-900">Default: Συμπερίληψη Media</p>
+                  <p className="text-sm text-slate-500">Στα νέα backups</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -750,12 +749,12 @@ export default function Backup() {
                     checked={settingsForm.include_media}
                     onChange={(e) => setSettingsForm({ ...settingsForm, include_media: e.target.checked })}
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                 </label>
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+            <div className="flex justify-end gap-2 p-4 border-t border-slate-200 bg-slate-50 rounded-b-lg">
               <Button variant="secondary" onClick={() => setShowSettingsModal(false)}>
                 Ακύρωση
               </Button>

@@ -46,11 +46,11 @@ export default function ClientObligationsTab({
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Έτος:</label>
+          <label className="text-sm text-slate-600">Έτος:</label>
           <select
             value={yearFilter}
             onChange={(e) => setYearFilter(Number(e.target.value))}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -60,11 +60,11 @@ export default function ClientObligationsTab({
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Κατάσταση:</label>
+          <label className="text-sm text-slate-600">Κατάσταση:</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
           >
             <option value="">Όλες</option>
             <option value="pending">Εκκρεμείς</option>
@@ -74,7 +74,7 @@ export default function ClientObligationsTab({
         </div>
         <Link
           to={`/obligations?client=${clientId}`}
-          className="ml-auto text-sm text-blue-600 hover:underline"
+          className="ml-auto text-sm text-brand-600 hover:underline"
         >
           Προβολή όλων
           <ExternalLink className="w-3 h-3 inline ml-1" />
@@ -84,67 +84,67 @@ export default function ClientObligationsTab({
       {/* Loading */}
       {isLoading && (
         <div className="text-center py-8">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-slate-400" />
         </div>
       )}
 
       {/* Table */}
       {!isLoading && data && (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Τύπος
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Περίοδος
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Προθεσμία
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Κατάσταση
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Ολοκλήρωση
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-slate-200">
               {data.obligations.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                     Δεν βρέθηκαν υποχρεώσεις
                   </td>
                 </tr>
               ) : (
                 data.obligations.map((obl) => (
-                  <tr key={obl.id} className="hover:bg-gray-50">
+                  <tr key={obl.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3 text-sm">
                       <Link
                         to={`/obligations?id=${obl.id}`}
-                        className="text-blue-600 hover:underline font-medium"
+                        className="text-brand-600 hover:underline font-medium"
                       >
                         {obl.obligation_type_name || obl.obligation_type_code}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-slate-600">
                       {String(obl.month).padStart(2, '0')}/{obl.year}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-slate-600">
                       {new Date(obl.deadline).toLocaleDateString('el-GR')}
                     </td>
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 text-xs font-medium rounded ${
-                          STATUS_COLORS[obl.status] || 'bg-gray-100'
+                          STATUS_COLORS[obl.status] || 'bg-slate-100'
                         }`}
                       >
                         {STATUS_LABELS[obl.status] || obl.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-slate-600">
                       {obl.completed_date
                         ? new Date(obl.completed_date).toLocaleDateString('el-GR')
                         : '-'}

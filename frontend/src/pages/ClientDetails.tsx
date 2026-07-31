@@ -15,6 +15,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { Button } from '../components';
+import { Badge, StatCard } from '../components/ui';
 import {
   useClientFull,
   useClientDocuments,
@@ -136,18 +137,18 @@ export default function ClientDetails() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-500">Φόρτωση στοιχείων πελάτη...</span>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+        <span className="ml-3 text-slate-500">Φόρτωση στοιχείων πελάτη...</span>
       </div>
     );
   }
 
   if (isError || !client) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-        <h2 className="text-lg font-semibold text-red-800 mb-2">Σφάλμα φόρτωσης</h2>
-        <p className="text-red-600 mb-4">
+      <div className="bg-danger-50 border border-danger-100 rounded-lg p-6 text-center">
+        <AlertCircle className="w-12 h-12 text-danger-600 mx-auto mb-4" />
+        <h2 className="text-lg font-semibold text-danger-700 mb-2">Σφάλμα φόρτωσης</h2>
+        <p className="text-danger-600 mb-4">
           {error instanceof Error ? error.message : 'Δεν βρέθηκε ο πελάτης'}
         </p>
         <Button variant="secondary" onClick={() => navigate('/clients')}>
@@ -162,39 +163,57 @@ export default function ClientDetails() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      {/* Header — mini bento */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Identity card */}
+      <div
+        className="sm:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm p-6 animate-rise"
+        style={{ '--rise-delay': '0ms' } as React.CSSProperties}
+      >
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           {/* Back button and client info */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/clients')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
             >
-              <ChevronLeft className="w-5 h-5 text-gray-600" />
+              <ChevronLeft className="w-5 h-5 text-slate-600" />
             </button>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl font-bold text-blue-600">
+              <div className="w-16 h-16 bg-gradient-to-br from-brand-600 to-brand-700 rounded-2xl shadow-sm flex items-center justify-center">
+                <span className="text-2xl font-bold text-white">
                   {client.eponimia.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{client.eponimia}</h1>
-                <div className="flex items-center gap-3 mt-1">
-                  <span className="font-mono text-sm bg-gray-100 px-2 py-0.5 rounded">
+                <h1 className="text-2xl font-bold text-slate-900">{client.eponimia}</h1>
+                <div className="flex flex-wrap items-center gap-3 mt-1">
+                  <span className="font-mono text-sm bg-slate-100 px-2 py-0.5 rounded">
                     ΑΦΜ: {client.afm}
                   </span>
-                  <span
-                    className={`px-2 py-0.5 text-xs font-medium rounded ${
-                      client.is_active
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
+                  {client.doy && (
+                    <span className="text-sm text-slate-500">ΔΟΥ: {client.doy}</span>
+                  )}
+                  <Badge variant={client.is_active ? 'success' : 'neutral'}>
                     {client.is_active ? 'Ενεργός' : 'Ανενεργός'}
-                  </span>
+                  </Badge>
                 </div>
+                {(client.email || client.kinito_tilefono) && (
+                  <div className="flex flex-wrap items-center gap-4 mt-1.5 text-sm text-slate-500">
+                    {client.email && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        {client.email}
+                      </span>
+                    )}
+                    {client.kinito_tilefono && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        {client.kinito_tilefono}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -206,7 +225,7 @@ export default function ClientDetails() {
               href={`/accounting/client/${clientId}/files/`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition-colors"
+              className="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors"
               title="Άνοιγμα φακέλου αρχείων"
             >
               <FolderOpen className="w-4 h-4 mr-2" />
@@ -239,41 +258,51 @@ export default function ClientDetails() {
           </div>
         </div>
 
-        {/* Stats cards */}
-        {client.counts && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-200">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-blue-600">{client.counts.obligations}</p>
-              <p className="text-sm text-gray-500">Υποχρεώσεις</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-600">{client.counts.pending_obligations}</p>
-              <p className="text-sm text-gray-500">Εκκρεμείς</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{client.counts.documents}</p>
-              <p className="text-sm text-gray-500">Έγγραφα</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{client.counts.open_tickets}</p>
-              <p className="text-sm text-gray-500">Ανοιχτά Tickets</p>
-            </div>
-          </div>
-        )}
+      </div>
+
+      {/* Stat tiles */}
+      {client.counts && (
+        <>
+          <StatCard
+            icon={FileText}
+            label="Εκκρεμείς"
+            value={client.counts.pending_obligations}
+            color="#d97706"
+            className="animate-rise"
+            style={{ '--rise-delay': '60ms' } as React.CSSProperties}
+          />
+          <StatCard
+            icon={FolderOpen}
+            label="Έγγραφα"
+            value={client.counts.documents}
+            color="#16a34a"
+            className="animate-rise"
+            style={{ '--rise-delay': '120ms' } as React.CSSProperties}
+          />
+          <StatCard
+            icon={Ticket}
+            label="Ανοιχτά Tickets"
+            value={client.counts.open_tickets}
+            color="#2b6fe3"
+            className="animate-rise"
+            style={{ '--rise-delay': '180ms' } as React.CSSProperties}
+          />
+        </>
+      )}
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Tab navigation */}
-        <div className="flex overflow-x-auto border-b border-gray-200">
+        <div className="flex overflow-x-auto border-b border-slate-200">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap cursor-pointer border-b-2 transition-colors duration-150 ${
                 activeTab === tab.id
-                  ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-brand-700 border-brand-600'
+                  : 'text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-50'
               }`}
             >
               <tab.icon className="w-4 h-4" />

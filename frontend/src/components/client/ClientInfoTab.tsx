@@ -44,8 +44,8 @@ export interface ClientInfoTabProps {
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <div className="text-sm text-gray-900">{children}</div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      <div className="text-sm text-slate-900">{children}</div>
     </div>
   );
 }
@@ -132,7 +132,7 @@ export default function ClientInfoTab({
           type="checkbox"
           checked={!!value}
           onChange={(e) => onFieldChange(field, e.target.checked)}
-          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+          className="h-4 w-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
         />
       );
     }
@@ -142,7 +142,7 @@ export default function ClientInfoTab({
         <select
           value={stringValue}
           onChange={(e) => onFieldChange(field, e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
         >
           <option value="">-- Επιλέξτε --</option>
           {options.map((opt) => (
@@ -159,7 +159,7 @@ export default function ClientInfoTab({
         type={type}
         value={stringValue}
         onChange={(e) => onFieldChange(field, e.target.value)}
-        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
       />
     );
   };
@@ -168,8 +168,8 @@ export default function ClientInfoTab({
     <div className="space-y-8">
       {/* Basic Info Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <User className="w-5 h-5 text-blue-600" />
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+          <User className="w-5 h-5 text-brand-600" />
           Βασικά Στοιχεία
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -184,8 +184,8 @@ export default function ClientInfoTab({
 
       {/* Tax Info Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <Building className="w-5 h-5 text-green-600" />
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+          <Building className="w-5 h-5 text-success-600" />
           Φορολογικά Στοιχεία
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -208,7 +208,7 @@ export default function ClientInfoTab({
 
       {/* Contact Info Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
           <Phone className="w-5 h-5 text-purple-600" />
           Στοιχεία Επικοινωνίας
         </h3>
@@ -224,7 +224,7 @@ export default function ClientInfoTab({
 
       {/* Home Address Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
           <MapPin className="w-5 h-5 text-orange-600" />
           Διεύθυνση Κατοικίας
         </h3>
@@ -240,8 +240,8 @@ export default function ClientInfoTab({
 
       {/* Business Address Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <Building className="w-5 h-5 text-blue-600" />
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+          <Building className="w-5 h-5 text-brand-600" />
           Διεύθυνση Επιχείρησης
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -256,8 +256,8 @@ export default function ClientInfoTab({
 
       {/* Bank Info Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <CreditCard className="w-5 h-5 text-green-600" />
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+          <CreditCard className="w-5 h-5 text-success-600" />
           Τραπεζικά Στοιχεία
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -268,8 +268,8 @@ export default function ClientInfoTab({
 
       {/* Credentials Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <Key className="w-5 h-5 text-red-600" />
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+          <Key className="w-5 h-5 text-danger-600" />
           Διαπιστευτήρια (TAXISnet, ΙΚΑ, ΓΕΜΗ)
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -290,17 +290,17 @@ export default function ClientInfoTab({
 
       {/* myDATA ΑΑΔΕ Section */}
       <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900 mb-4">
-          <Building2 className="w-5 h-5 text-blue-600" />
+        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
+          <Building2 className="w-5 h-5 text-brand-600" />
           myDATA ΑΑΔΕ
           {myDataCreds?.is_verified && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-success-100 text-success-700">
               <ShieldCheck className="w-3 h-3" />
               Επιβεβαιωμένο
             </span>
           )}
           {myDataCreds && !myDataCreds.is_verified && (
-            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-yellow-100 text-yellow-700">
+            <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded bg-warning-100 text-warning-700">
               <ShieldAlert className="w-3 h-3" />
               Μη επιβεβαιωμένο
             </span>
@@ -309,7 +309,7 @@ export default function ClientInfoTab({
 
         {myDataLoading ? (
           <div className="flex items-center justify-center py-4">
-            <RefreshCw className="w-5 h-5 animate-spin text-gray-400" />
+            <RefreshCw className="w-5 h-5 animate-spin text-slate-400" />
           </div>
         ) : myDataCreds && !showMyDataForm ? (
           /* Display existing credentials */
@@ -324,8 +324,8 @@ export default function ClientInfoTab({
               <FieldRow label="Περιβάλλον">
                 <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                   myDataCreds.is_sandbox
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-green-100 text-green-800'
+                    ? 'bg-warning-100 text-warning-700'
+                    : 'bg-success-100 text-success-700'
                 }`}>
                   {myDataCreds.is_sandbox ? 'Sandbox (Test)' : 'Production'}
                 </span>
@@ -333,8 +333,8 @@ export default function ClientInfoTab({
               <FieldRow label="Κατάσταση">
                 <span className={`px-2 py-0.5 text-xs font-medium rounded ${
                   myDataCreds.is_active
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-gray-100 text-gray-800'
+                    ? 'bg-success-100 text-success-700'
+                    : 'bg-slate-100 text-slate-800'
                 }`}>
                   {myDataCreds.is_active ? 'Ενεργό' : 'Ανενεργό'}
                 </span>
@@ -347,7 +347,7 @@ export default function ClientInfoTab({
             </div>
 
             {/* Action buttons */}
-            <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-100">
+            <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100">
               <Button
                 variant="secondary"
                 size="sm"
@@ -385,7 +385,7 @@ export default function ClientInfoTab({
               </Button>
               <Link
                 to="/mydata"
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-brand-600 hover:text-brand-800 hover:bg-brand-50 rounded"
               >
                 <ExternalLink className="w-4 h-4" />
                 Προβολή ΦΠΑ
@@ -396,8 +396,8 @@ export default function ClientInfoTab({
             {verifyMyDataMutation.isSuccess && (
               <div className={`p-3 rounded-lg text-sm ${
                 verifyMyDataMutation.data.is_verified
-                  ? 'bg-green-50 text-green-700 border border-green-200'
-                  : 'bg-red-50 text-red-700 border border-red-200'
+                  ? 'bg-success-50 text-success-700 border border-success-100'
+                  : 'bg-danger-50 text-danger-700 border border-danger-100'
               }`}>
                 {verifyMyDataMutation.data.is_verified
                   ? 'Τα credentials επαληθεύτηκαν επιτυχώς!'
@@ -407,12 +407,12 @@ export default function ClientInfoTab({
 
             {/* Sync result */}
             {syncMyDataMutation.isSuccess && (
-              <div className="p-3 bg-green-50 text-green-700 border border-green-200 rounded-lg text-sm">
+              <div className="p-3 bg-success-50 text-success-700 border border-success-100 rounded-lg text-sm">
                 Ο συγχρονισμός ολοκληρώθηκε επιτυχώς!
               </div>
             )}
             {syncMyDataMutation.isError && (
-              <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
+              <div className="p-3 bg-danger-50 text-danger-700 border border-danger-100 rounded-lg text-sm">
                 Σφάλμα συγχρονισμού: {(syncMyDataMutation.error as Error)?.message || 'Άγνωστο σφάλμα'}
               </div>
             )}
@@ -422,7 +422,7 @@ export default function ClientInfoTab({
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   User ID *
                 </label>
                 <input
@@ -430,11 +430,11 @@ export default function ClientInfoTab({
                   value={myDataUserId}
                   onChange={(e) => setMyDataUserId(e.target.value)}
                   placeholder="Όνομα χρήστη myDATA"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Subscription Key *
                 </label>
                 <input
@@ -442,7 +442,7 @@ export default function ClientInfoTab({
                   value={myDataSubscriptionKey}
                   onChange={(e) => setMyDataSubscriptionKey(e.target.value)}
                   placeholder="Από το myAADE portal"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500"
                 />
               </div>
             </div>
@@ -452,9 +452,9 @@ export default function ClientInfoTab({
                   type="checkbox"
                   checked={myDataIsSandbox}
                   onChange={(e) => setMyDataIsSandbox(e.target.checked)}
-                  className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  className="h-4 w-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
                 />
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-slate-700">
                   Sandbox (Test περιβάλλον)
                 </span>
               </label>
@@ -486,11 +486,11 @@ export default function ClientInfoTab({
               )}
             </div>
             {saveMyDataMutation.isError && (
-              <div className="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
+              <div className="p-3 bg-danger-50 text-danger-700 border border-danger-100 rounded-lg text-sm">
                 Σφάλμα αποθήκευσης: {(saveMyDataMutation.error as Error)?.message || 'Άγνωστο σφάλμα'}
               </div>
             )}
-            <div className="p-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm">
+            <div className="p-3 bg-brand-50 text-brand-700 border border-brand-200 rounded-lg text-sm">
               <p className="font-medium mb-1">Οδηγίες:</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
                 <li>Συνδεθείτε στο <a href="https://mydata.aade.gr" target="_blank" rel="noopener noreferrer" className="underline">mydata.aade.gr</a></li>
@@ -504,8 +504,8 @@ export default function ClientInfoTab({
       </section>
 
       {/* Meta Info */}
-      <section className="bg-gray-50 rounded-lg p-4">
-        <div className="flex flex-wrap gap-6 text-sm text-gray-500">
+      <section className="bg-slate-50 rounded-lg p-4">
+        <div className="flex flex-wrap gap-6 text-sm text-slate-500">
           <span>
             <Calendar className="w-4 h-4 inline mr-1" />
             Δημιουργία: {new Date(client.created_at).toLocaleDateString('el-GR')}

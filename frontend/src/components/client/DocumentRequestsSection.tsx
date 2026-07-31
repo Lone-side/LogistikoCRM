@@ -57,13 +57,13 @@ function RequestCard({ request }: { request: DocumentRequest }) {
   };
 
   const statusBadge = {
-    open: ['bg-yellow-100 text-yellow-700', 'Ανοιχτό'],
-    completed: ['bg-green-100 text-green-700', 'Ολοκληρώθηκε'],
-    cancelled: ['bg-gray-100 text-gray-500', 'Ακυρώθηκε'],
+    open: ['bg-warning-100 text-warning-700', 'Ανοιχτό'],
+    completed: ['bg-success-100 text-success-700', 'Ολοκληρώθηκε'],
+    cancelled: ['bg-slate-100 text-slate-500', 'Ακυρώθηκε'],
   }[request.status];
 
   return (
-    <div className="border border-gray-200 rounded-lg p-3 bg-white">
+    <div className="border border-slate-200 rounded-lg p-3 bg-white">
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -72,12 +72,12 @@ function RequestCard({ request }: { request: DocumentRequest }) {
               {statusBadge[1]}
             </span>
             {linkExpired && request.status === 'open' && (
-              <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">
+              <span className="px-2 py-0.5 rounded-full text-xs bg-danger-100 text-danger-700">
                 Ο σύνδεσμος έληξε
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             {request.received_count}/{request.total_count} ελήφθησαν
             {request.reminder_count > 0 &&
               ` · Υπενθυμίσεις: ${request.reminder_count}/${request.max_reminders}`}
@@ -92,7 +92,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
                 onClick={handleCopy}
                 title="Αντιγραφή συνδέσμου"
                 aria-label="Αντιγραφή συνδέσμου"
-                className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
               >
                 <Copy className="w-4 h-4" />
               </button>
@@ -102,7 +102,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
               disabled={sendReminder.isPending || linkExpired}
               title="Αποστολή υπενθύμισης"
               aria-label="Αποστολή υπενθύμισης"
-              className="p-1.5 rounded hover:bg-gray-100 text-gray-500 disabled:opacity-40"
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 disabled:opacity-40"
             >
               <Bell className="w-4 h-4" />
             </button>
@@ -110,7 +110,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
               onClick={handleCancel}
               title="Ακύρωση αιτήματος"
               aria-label="Ακύρωση αιτήματος"
-              className="p-1.5 rounded hover:bg-red-50 text-red-500"
+              className="p-1.5 rounded hover:bg-danger-50 text-danger-600"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -134,12 +134,12 @@ function RequestCard({ request }: { request: DocumentRequest }) {
                 className="flex-shrink-0"
               >
                 {item.is_received ? (
-                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <CheckCircle2 className="w-4 h-4 text-success-600" />
                 ) : (
-                  <Circle className="w-4 h-4 text-gray-300 hover:text-gray-400" />
+                  <Circle className="w-4 h-4 text-slate-300 hover:text-slate-400" />
                 )}
               </button>
-              <span className={item.is_received ? 'text-gray-400 line-through' : 'text-gray-700'}>
+              <span className={item.is_received ? 'text-slate-400 line-through' : 'text-slate-700'}>
                 {item.label}
               </span>
             </li>
@@ -147,7 +147,7 @@ function RequestCard({ request }: { request: DocumentRequest }) {
         </ul>
       )}
 
-      {message && <p className="text-xs text-gray-600 mt-2">{message}</p>}
+      {message && <p className="text-xs text-slate-600 mt-2">{message}</p>}
     </div>
   );
 }
@@ -213,16 +213,16 @@ export function DocumentRequestModal({
       <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <h3 className="font-semibold">Αίτημα εγγράφων — {clientName}</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-            <X className="w-5 h-5 text-gray-500" />
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100">
+            <X className="w-5 h-5 text-slate-500" />
           </button>
         </div>
 
         {created ? (
           <div className="p-5 space-y-3">
-            <p className="text-green-700 font-medium">✅ Το αίτημα δημιουργήθηκε</p>
+            <p className="text-success-700 font-medium">✅ Το αίτημα δημιουργήθηκε</p>
             {created.emailSent ? (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600">
                 Στάλθηκε email στον πελάτη με τον σύνδεσμο του portal.
               </p>
             ) : (
@@ -231,21 +231,21 @@ export function DocumentRequestModal({
               </p>
             )}
             {created.url && (
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
+              <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
                 <code className="text-xs flex-1 truncate">{created.url}</code>
                 <button
                   onClick={() => navigator.clipboard.writeText(created.url!)}
-                  className="p-1.5 rounded hover:bg-gray-200"
+                  className="p-1.5 rounded hover:bg-slate-200"
                   title="Αντιγραφή"
                   aria-label="Αντιγραφή"
                 >
-                  <Copy className="w-4 h-4 text-gray-500" />
+                  <Copy className="w-4 h-4 text-slate-500" />
                 </button>
               </div>
             )}
             <button
               onClick={onClose}
-              className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700"
+              className="w-full bg-brand-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-700"
             >
               Κλείσιμο
             </button>
@@ -253,17 +253,17 @@ export function DocumentRequestModal({
         ) : (
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Τίτλος *</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Τίτλος *</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="π.χ. Δικαιολογητικά ΦΠΑ Ιουλίου"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Ζητούμενα έγγραφα *
               </label>
               <div className="space-y-2">
@@ -273,12 +273,12 @@ export function DocumentRequestModal({
                       value={item.label}
                       onChange={(e) => setItem(i, { label: e.target.value })}
                       placeholder={`Έγγραφο ${i + 1} — π.χ. Τιμολόγια αγορών`}
-                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                      className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm"
                     />
                     <select
                       value={item.category}
                       onChange={(e) => setItem(i, { category: e.target.value })}
-                      className="border border-gray-300 rounded-lg px-2 py-2 text-sm w-36"
+                      className="border border-slate-300 rounded-lg px-2 py-2 text-sm w-36"
                     >
                       <option value="">Κατηγορία…</option>
                       {DOCUMENT_CATEGORY_GROUPS.map((group) => (
@@ -292,7 +292,7 @@ export function DocumentRequestModal({
                     {items.length > 1 && (
                       <button
                         onClick={() => setItems((prev) => prev.filter((_, j) => j !== i))}
-                        className="p-2 text-gray-400 hover:text-red-500"
+                        className="p-2 text-slate-400 hover:text-danger-600"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -302,34 +302,34 @@ export function DocumentRequestModal({
               </div>
               <button
                 onClick={() => setItems((prev) => [...prev, { label: '', category: '' }])}
-                className="mt-2 flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                className="mt-2 flex items-center gap-1 text-sm text-brand-600 hover:underline"
               >
                 <Plus className="w-4 h-4" /> Προσθήκη εγγράφου
               </button>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Σημειώσεις</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Σημειώσεις</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Προθεσμία</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία</label>
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Λήξη link (μέρες)
                 </label>
                 <input
@@ -338,27 +338,27 @@ export function DocumentRequestModal({
                   max={365}
                   value={expiresInDays}
                   onChange={(e) => setExpiresInDays(Number(e.target.value) || 30)}
-                  className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Κωδικός</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Κωδικός</label>
                 <input
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Προαιρετικός"
-                  className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm"
+                  className="w-full border border-slate-300 rounded-lg px-2 py-2 text-sm"
                 />
               </div>
             </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            {error && <p className="text-sm text-danger-600">{error}</p>}
 
             <button
               onClick={handleCreate}
               disabled={createRequest.isPending}
-              className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="w-full bg-brand-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
             >
               {createRequest.isPending ? 'Δημιουργία…' : 'Δημιουργία & αποστολή στον πελάτη'}
             </button>
@@ -386,11 +386,11 @@ export default function DocumentRequestsSection({
   const openCount = (requests || []).filter((r) => r.status === 'open').length;
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <ClipboardList className="w-4 h-4 text-gray-500" />
-          <h4 className="text-sm font-medium text-gray-700">
+          <ClipboardList className="w-4 h-4 text-slate-500" />
+          <h4 className="text-sm font-medium text-slate-700">
             Αιτήματα εγγράφων {openCount > 0 && `(${openCount} ανοιχτά)`}
           </h4>
         </div>
@@ -398,14 +398,14 @@ export default function DocumentRequestsSection({
           {(requests || []).length > openCount && (
             <button
               onClick={() => setShowAll((v) => !v)}
-              className="text-xs text-gray-500 hover:underline"
+              className="text-xs text-slate-500 hover:underline"
             >
               {showAll ? 'Μόνο ανοιχτά' : 'Όλα'}
             </button>
           )}
           <button
             onClick={() => setModalOpen(true)}
-            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+            className="flex items-center gap-1 text-sm text-brand-600 hover:underline"
           >
             <Plus className="w-4 h-4" /> Νέο αίτημα
           </button>
@@ -413,9 +413,9 @@ export default function DocumentRequestsSection({
       </div>
 
       {isLoading ? (
-        <p className="text-xs text-gray-400">Φόρτωση…</p>
+        <p className="text-xs text-slate-400">Φόρτωση…</p>
       ) : visible.length === 0 ? (
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-slate-400">
           Κανένα {showAll ? '' : 'ανοιχτό '}αίτημα — ζήτησε συγκεκριμένα έγγραφα από τον
           πελάτη με ένα κλικ.
         </p>

@@ -13,6 +13,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { Button } from '../components';
+import { PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
@@ -77,36 +78,36 @@ export default function UserManagement() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Users className="text-blue-600" />
+      <PageHeader
+        title={
+          <span className="flex items-center gap-2">
+            <Users className="text-brand-600" />
             Διαχείριση Χρηστών
-          </h1>
-          <p className="text-gray-500 mt-1">
-            Διαχείριση λογαριασμών χρηστών του συστήματος
-          </p>
-        </div>
-        <Button onClick={handleCreate}>
-          <Plus size={18} className="mr-2" />
-          Νέος Χρήστης
-        </Button>
-      </div>
+          </span>
+        }
+        subtitle="Διαχείριση λογαριασμών χρηστών του συστήματος"
+        actions={
+          <Button onClick={handleCreate}>
+            <Plus size={18} className="mr-2" />
+            Νέος Χρήστης
+          </Button>
+        }
+      />
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search
               size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
             <input
               type="text"
               placeholder="Αναζήτηση χρήστη..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>
           <Button
@@ -123,43 +124,43 @@ export default function UserManagement() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center">
-            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-blue-600" />
-            <p className="text-gray-500">Φόρτωση χρηστών...</p>
+            <RefreshCw size={24} className="animate-spin mx-auto mb-2 text-brand-600" />
+            <p className="text-slate-500">Φόρτωση χρηστών...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="p-8 text-center">
-            <Users size={48} className="mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-500">Δεν βρέθηκαν χρήστες</p>
+            <Users size={48} className="mx-auto mb-4 text-slate-300" />
+            <p className="text-slate-500">Δεν βρέθηκαν χρήστες</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Χρήστης
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Email
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Ρόλος
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Κατάσταση
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Τελευταία Σύνδεση
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">
                     Ενέργειες
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-slate-100">
                 {filteredUsers.map((user) => (
                   <UserRow
                     key={user.id}
@@ -177,7 +178,7 @@ export default function UserManagement() {
 
         {/* Count */}
         {!isLoading && (
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 text-sm text-gray-500">
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-sm text-slate-500">
             {filteredUsers.length} χρήστ{filteredUsers.length === 1 ? 'ης' : 'ες'}
           </div>
         )}
@@ -241,30 +242,30 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
   };
 
   return (
-    <tr className={`hover:bg-gray-50 ${!user.is_active ? 'opacity-60' : ''}`}>
+    <tr className={`hover:bg-slate-50 ${!user.is_active ? 'opacity-60' : ''}`}>
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-            <span className="text-blue-600 font-medium">
+          <div className="w-10 h-10 bg-brand-100 rounded-full flex items-center justify-center">
+            <span className="text-brand-600 font-medium">
               {user.first_name?.charAt(0) || user.username.charAt(0).toUpperCase()}
             </span>
           </div>
           <div>
-            <p className="font-medium text-gray-900">
+            <p className="font-medium text-slate-900">
               {user.first_name && user.last_name
                 ? `${user.first_name} ${user.last_name}`
                 : user.username}
               {isCurrentUser && (
-                <span className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">
+                <span className="ml-2 px-2 py-0.5 text-xs bg-brand-100 text-brand-700 rounded">
                   Εσείς
                 </span>
               )}
             </p>
-            <p className="text-sm text-gray-500">@{user.username}</p>
+            <p className="text-sm text-slate-500">@{user.username}</p>
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 text-gray-600">{user.email || '-'}</td>
+      <td className="px-4 py-3 text-slate-600">{user.email || '-'}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           {user.is_superuser ? (
@@ -273,12 +274,12 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
               Διαχειριστής
             </span>
           ) : user.is_staff ? (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded-full">
               <UserCheck size={12} />
               Προσωπικό
             </span>
           ) : (
-            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">
+            <span className="px-2 py-1 text-xs bg-slate-100 text-slate-600 rounded-full">
               Χρήστης
             </span>
           )}
@@ -286,18 +287,18 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
       </td>
       <td className="px-4 py-3">
         {user.is_active ? (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-success-100 text-success-700 rounded-full">
             <UserCheck size={12} />
             Ενεργός
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-red-100 text-red-700 rounded-full">
+          <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-danger-100 text-danger-700 rounded-full">
             <UserX size={12} />
             Ανενεργός
           </span>
         )}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-500">
+      <td className="px-4 py-3 text-sm text-slate-500">
         {formatDate(user.last_login)}
       </td>
       <td className="px-4 py-3">
@@ -306,10 +307,10 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
             <button
               onClick={handleToggleActive}
               disabled={toggleActive.isPending}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`cursor-pointer p-1.5 rounded-lg transition-colors duration-150 ${
                 user.is_active
                   ? 'hover:bg-orange-100 text-orange-600'
-                  : 'hover:bg-green-100 text-green-600'
+                  : 'hover:bg-success-100 text-success-600'
               }`}
               title={user.is_active ? 'Απενεργοποίηση' : 'Ενεργοποίηση'}
             >
@@ -319,7 +320,7 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
           {canEdit && (
             <button
               onClick={onEdit}
-              className="p-1.5 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-brand-100 text-brand-600 rounded-lg transition-colors duration-150 cursor-pointer"
               title="Επεξεργασία"
             >
               <Pencil size={16} />
@@ -328,7 +329,7 @@ function UserRow({ user, currentUser, canEdit, onEdit, onDelete }: UserRowProps)
           {canEdit && !isCurrentUser && !user.is_superuser && (
             <button
               onClick={onDelete}
-              className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-danger-100 text-danger-600 rounded-lg transition-colors duration-150 cursor-pointer"
               title="Διαγραφή"
             >
               <Trash2 size={16} />
@@ -441,8 +442,8 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
 
         <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">
+          <div className="px-6 py-4 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900">
               {isEdit ? 'Επεξεργασία Χρήστη' : 'Νέος Χρήστης'}
             </h3>
           </div>
@@ -452,7 +453,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
             <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
               {/* Username */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Όνομα χρήστη *
                 </label>
                 <input
@@ -461,19 +462,19 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                   onChange={(e) =>
                     setFormData({ ...formData, username: e.target.value })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    errors.username ? 'border-red-500' : 'border-gray-200'
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 ${
+                    errors.username ? 'border-danger-600' : 'border-slate-200'
                   }`}
                   required
                 />
                 {errors.username && (
-                  <p className="mt-1 text-sm text-red-500">{errors.username[0]}</p>
+                  <p className="mt-1 text-sm text-danger-600">{errors.username[0]}</p>
                 )}
               </div>
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Email *
                 </label>
                 <input
@@ -482,20 +483,20 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    errors.email ? 'border-red-500' : 'border-gray-200'
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 ${
+                    errors.email ? 'border-danger-600' : 'border-slate-200'
                   }`}
                   required
                 />
                 {errors.email && (
-                  <p className="mt-1 text-sm text-red-500">{errors.email[0]}</p>
+                  <p className="mt-1 text-sm text-danger-600">{errors.email[0]}</p>
                 )}
               </div>
 
               {/* First Name & Last Name */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Όνομα
                   </label>
                   <input
@@ -504,11 +505,11 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, first_name: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Επώνυμο
                   </label>
                   <input
@@ -517,14 +518,14 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, last_name: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Κωδικός {!isEdit && '*'}
                 </label>
                 <div className="relative">
@@ -534,8 +535,8 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
-                    className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.password ? 'border-red-500' : 'border-gray-200'
+                    className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 ${
+                      errors.password ? 'border-danger-600' : 'border-slate-200'
                     }`}
                     required={!isEdit}
                     placeholder={isEdit ? 'Αφήστε κενό για να μην αλλάξει' : ''}
@@ -543,20 +544,20 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150"
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
                 {errors.password && (
-                  <p className="mt-1 text-sm text-red-500">{errors.password[0]}</p>
+                  <p className="mt-1 text-sm text-danger-600">{errors.password[0]}</p>
                 )}
               </div>
 
               {/* Password Confirm (only for create) */}
               {!isEdit && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Επιβεβαίωση κωδικού *
                   </label>
                   <input
@@ -565,13 +566,13 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, password_confirm: e.target.value })
                     }
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.password_confirm ? 'border-red-500' : 'border-gray-200'
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500 ${
+                      errors.password_confirm ? 'border-danger-600' : 'border-slate-200'
                     }`}
                     required={!isEdit}
                   />
                   {errors.password_confirm && (
-                    <p className="mt-1 text-sm text-red-500">
+                    <p className="mt-1 text-sm text-danger-600">
                       {errors.password_confirm[0]}
                     </p>
                   )}
@@ -587,11 +588,11 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, is_staff: e.target.checked })
                     }
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                   />
                   <div>
-                    <span className="font-medium text-gray-900">Προσωπικό</span>
-                    <p className="text-xs text-gray-500">
+                    <span className="font-medium text-slate-900">Προσωπικό</span>
+                    <p className="text-xs text-slate-500">
                       Πρόσβαση στο Django Admin
                     </p>
                   </div>
@@ -604,11 +605,11 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                     onChange={(e) =>
                       setFormData({ ...formData, is_active: e.target.checked })
                     }
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                   />
                   <div>
-                    <span className="font-medium text-gray-900">Ενεργός</span>
-                    <p className="text-xs text-gray-500">
+                    <span className="font-medium text-slate-900">Ενεργός</span>
+                    <p className="text-xs text-slate-500">
                       Μπορεί να συνδεθεί στο σύστημα
                     </p>
                   </div>
@@ -617,7 +618,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
               <Button type="button" variant="secondary" onClick={onClose}>
                 Ακύρωση
               </Button>

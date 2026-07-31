@@ -20,6 +20,7 @@ import {
   FolderTree,
 } from 'lucide-react';
 import { Button } from '../components';
+import { PageHeader } from '../components/ui';
 import { useToast } from '../components/Toast';
 import { useAuthStore } from '../stores/authStore';
 import { gsisApi, authApi } from '../api/client';
@@ -203,23 +204,20 @@ export default function Settings() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Ρυθμίσεις</h1>
-        <p className="text-gray-500 mt-1">Διαχείριση λογαριασμού και προτιμήσεων</p>
-      </div>
+      <PageHeader title="Ρυθμίσεις" subtitle="Διαχείριση λογαριασμού και προτιμήσεων" />
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Sidebar Tabs */}
         <div className="lg:w-64 flex-shrink-0">
-          <nav className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <nav className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${
                   activeTab === tab.id
-                    ? 'bg-blue-50 text-blue-700 border-l-2 border-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-brand-50 text-brand-700 border-l-2 border-brand-600'
+                    : 'text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <tab.icon size={18} />
@@ -232,19 +230,19 @@ export default function Settings() {
         {/* Content */}
         <div className="flex-1">
           {activeTab === 'profile' && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Στοιχεία προφίλ</h3>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-6">Στοιχεία προφίλ</h3>
 
               {/* Avatar */}
-              <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-200">
-                <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
+              <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-200">
+                <div className="w-20 h-20 bg-brand-600 rounded-full flex items-center justify-center">
                   <span className="text-3xl text-white font-bold">
                     {user?.first_name?.charAt(0) || user?.username?.charAt(0) || 'Χ'}
                   </span>
                 </div>
                 <div>
                   <Button variant="secondary" size="sm">Αλλαγή φωτογραφίας</Button>
-                  <p className="text-xs text-gray-500 mt-1">JPG, PNG έως 5MB</p>
+                  <p className="text-xs text-slate-500 mt-1">JPG, PNG έως 5MB</p>
                 </div>
               </div>
 
@@ -252,44 +250,44 @@ export default function Settings() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Όνομα</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Όνομα</label>
                     <input
                       type="text"
                       value={profileForm.first_name}
                       onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Επώνυμο</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Επώνυμο</label>
                     <input
                       type="text"
                       value={profileForm.last_name}
                       onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
                   <input
                     type="email"
                     value={profileForm.email}
                     onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Όνομα χρήστη</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Όνομα χρήστη</label>
                   <input
                     type="text"
                     defaultValue={user?.username || ''}
                     disabled
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-500"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Το όνομα χρήστη δεν μπορεί να αλλάξει</p>
+                  <p className="text-xs text-slate-500 mt-1">Το όνομα χρήστη δεν μπορεί να αλλάξει</p>
                 </div>
 
                 <div className="pt-4">
@@ -312,8 +310,8 @@ export default function Settings() {
           )}
 
           {activeTab === 'notifications' && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Ρυθμίσεις ειδοποιήσεων</h3>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-6">Ρυθμίσεις ειδοποιήσεων</h3>
 
               <div className="space-y-4">
                 {[
@@ -323,10 +321,10 @@ export default function Settings() {
                   { key: 'missed_calls' as const, title: 'Αναπάντητες κλήσεις', desc: 'Ειδοποίηση για αναπάντητες κλήσεις' },
                   { key: 'weekly_summary' as const, title: 'Εβδομαδιαία σύνοψη', desc: 'Αναφορά προόδου κάθε Δευτέρα' },
                 ].map((item) => (
-                  <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div key={item.key} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
                     <div>
-                      <p className="font-medium text-gray-900">{item.title}</p>
-                      <p className="text-sm text-gray-500">{item.desc}</p>
+                      <p className="font-medium text-slate-900">{item.title}</p>
+                      <p className="text-sm text-slate-500">{item.desc}</p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -335,7 +333,7 @@ export default function Settings() {
                         checked={notificationSettings[item.key]}
                         onChange={(e) => setNotificationSettings(prev => ({ ...prev, [item.key]: e.target.checked }))}
                       />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
                     </label>
                   </div>
                 ))}
@@ -361,49 +359,49 @@ export default function Settings() {
 
           {activeTab === 'security' && (
             <div className="space-y-6">
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Αλλαγή κωδικού</h3>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-6">Αλλαγή κωδικού</h3>
 
                 <div className="space-y-4 max-w-md">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Τρέχων κωδικός</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Τρέχων κωδικός</label>
                     <input
                       type="password"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Νέος κωδικός</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Νέος κωδικός</label>
                     <input
                       type="password"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Επιβεβαίωση νέου κωδικού</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Επιβεβαίωση νέου κωδικού</label>
                     <input
                       type="password"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                   <Button>Αλλαγή κωδικού</Button>
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Συνδεδεμένες συνεδρίες</h3>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Συνδεδεμένες συνεδρίες</h3>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                        <Globe size={18} className="text-green-600" />
+                      <div className="w-10 h-10 bg-success-100 rounded-lg flex items-center justify-center">
+                        <Globe size={18} className="text-success-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">Τρέχουσα συνεδρία</p>
-                        <p className="text-xs text-gray-500">Chrome · Linux · Athens, GR</p>
+                        <p className="font-medium text-slate-900">Τρέχουσα συνεδρία</p>
+                        <p className="text-xs text-slate-500">Chrome · Linux · Athens, GR</p>
                       </div>
                     </div>
-                    <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">Ενεργή</span>
+                    <span className="px-2 py-1 text-xs bg-success-100 text-success-700 rounded">Ενεργή</span>
                   </div>
                 </div>
               </div>
@@ -417,19 +415,19 @@ export default function Settings() {
                 {/* Obligation Settings */}
                 <Link
                   to="/settings/obligations"
-                  className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-blue-300 hover:shadow-md transition-all"
+                  className="block bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:border-brand-300 hover:shadow-md transition-all cursor-pointer"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <FileText size={24} className="text-blue-600" />
+                      <div className="w-12 h-12 bg-brand-100 rounded-lg flex items-center justify-center">
+                        <FileText size={24} className="text-brand-600" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">Υποχρεώσεις</h3>
-                        <p className="text-sm text-gray-500">Τύποι, προφίλ, ομάδες</p>
+                        <h3 className="font-semibold text-slate-900">Υποχρεώσεις</h3>
+                        <p className="text-sm text-slate-500">Τύποι, προφίλ, ομάδες</p>
                       </div>
                     </div>
-                    <ChevronRight className="text-gray-400" size={20} />
+                    <ChevronRight className="text-slate-400" size={20} />
                   </div>
                 </Link>
 
@@ -437,7 +435,7 @@ export default function Settings() {
                 {user?.is_staff && (
                   <Link
                     to="/settings/users"
-                    className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-purple-300 hover:shadow-md transition-all"
+                    className="block bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:border-purple-300 hover:shadow-md transition-all cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -445,11 +443,11 @@ export default function Settings() {
                           <Users size={24} className="text-purple-600" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900">Χρήστες</h3>
-                          <p className="text-sm text-gray-500">Διαχείριση λογαριασμών</p>
+                          <h3 className="font-semibold text-slate-900">Χρήστες</h3>
+                          <p className="text-sm text-slate-500">Διαχείριση λογαριασμών</p>
                         </div>
                       </div>
-                      <ChevronRight className="text-gray-400" size={20} />
+                      <ChevronRight className="text-slate-400" size={20} />
                     </div>
                   </Link>
                 )}
@@ -458,19 +456,19 @@ export default function Settings() {
                 {user?.is_staff && (
                   <Link
                     to="/settings/backup"
-                    className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-green-300 hover:shadow-md transition-all"
+                    className="block bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:border-success-100 hover:shadow-md transition-all cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                          <HardDrive size={24} className="text-green-600" />
+                        <div className="w-12 h-12 bg-success-100 rounded-lg flex items-center justify-center">
+                          <HardDrive size={24} className="text-success-600" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900">Backup & Restore</h3>
-                          <p className="text-sm text-gray-500">Αντίγραφα ασφαλείας</p>
+                          <h3 className="font-semibold text-slate-900">Backup & Restore</h3>
+                          <p className="text-sm text-slate-500">Αντίγραφα ασφαλείας</p>
                         </div>
                       </div>
-                      <ChevronRight className="text-gray-400" size={20} />
+                      <ChevronRight className="text-slate-400" size={20} />
                     </div>
                   </Link>
                 )}
@@ -479,7 +477,7 @@ export default function Settings() {
                 {user?.is_staff && (
                   <Link
                     to="/settings/filing"
-                    className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-cyan-300 hover:shadow-md transition-all"
+                    className="block bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:border-cyan-300 hover:shadow-md transition-all cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
@@ -487,11 +485,11 @@ export default function Settings() {
                           <FolderTree size={24} className="text-cyan-600" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900">Αρχειοθέτηση</h3>
-                          <p className="text-sm text-gray-500">Δομή φακέλων & ρυθμίσεις</p>
+                          <h3 className="font-semibold text-slate-900">Αρχειοθέτηση</h3>
+                          <p className="text-sm text-slate-500">Δομή φακέλων & ρυθμίσεις</p>
                         </div>
                       </div>
-                      <ChevronRight className="text-gray-400" size={20} />
+                      <ChevronRight className="text-slate-400" size={20} />
                     </div>
                   </Link>
                 )}
@@ -499,35 +497,35 @@ export default function Settings() {
                 {/* Email Settings */}
                 <Link
                   to="/settings/email"
-                  className="block bg-white rounded-lg border border-gray-200 p-6 hover:border-amber-300 hover:shadow-md transition-all"
+                  className="block bg-white rounded-xl border border-slate-200 shadow-sm p-6 hover:border-warning-100 hover:shadow-md transition-all cursor-pointer"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                        <Mail size={24} className="text-amber-600" />
+                      <div className="w-12 h-12 bg-warning-100 rounded-lg flex items-center justify-center">
+                        <Mail size={24} className="text-warning-600" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900">Ρυθμίσεις Email</h3>
-                        <p className="text-sm text-gray-500">SMTP server, αποστολέας</p>
+                        <h3 className="font-semibold text-slate-900">Ρυθμίσεις Email</h3>
+                        <p className="text-sm text-slate-500">SMTP server, αποστολέας</p>
                       </div>
                     </div>
-                    <ChevronRight className="text-gray-400" size={20} />
+                    <ChevronRight className="text-slate-400" size={20} />
                   </div>
                 </Link>
               </div>
 
               {/* GSIS Integration - Λήψη στοιχείων με ΑΦΜ */}
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">ΑΑΔΕ - Λήψη Στοιχείων</h3>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-6">ΑΑΔΕ - Λήψη Στοιχείων</h3>
 
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${gsisConfigured ? 'bg-green-100' : 'bg-gray-100'}`}>
-                      <Database size={24} className={gsisConfigured ? 'text-green-600' : 'text-gray-600'} />
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${gsisConfigured ? 'bg-success-100' : 'bg-slate-100'}`}>
+                      <Database size={24} className={gsisConfigured ? 'text-success-600' : 'text-slate-600'} />
                     </div>
                     <div>
-                      <p className="font-medium text-gray-900">Λήψη Στοιχείων με ΑΦΜ</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-medium text-slate-900">Λήψη Στοιχείων με ΑΦΜ</p>
+                      <p className="text-sm text-slate-500">
                         {gsisConfigured
                           ? `Ρυθμισμένο (${gsisUsername})`
                           : 'Ειδικοί κωδικοί λήψης στοιχείων ΑΑΔΕ'}
@@ -537,7 +535,7 @@ export default function Settings() {
                   <div className="flex items-center gap-3">
                     {gsisConfigured ? (
                       <>
-                        <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">Ρυθμισμένο</span>
+                        <span className="px-2 py-1 text-xs bg-success-100 text-success-700 rounded">Ρυθμισμένο</span>
                         <Button variant="secondary" size="sm" onClick={() => setShowGsisModal(true)}>Ρυθμίσεις</Button>
                       </>
                     ) : (
@@ -547,8 +545,8 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Άλλες Ενσωματώσεις</h3>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-6">Άλλες Ενσωματώσεις</h3>
 
                 <div className="space-y-4">
                 {[
@@ -577,20 +575,20 @@ export default function Settings() {
                     status: 'disconnected'
                   },
                 ].map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                  <div key={index} className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <item.icon size={24} className="text-gray-600" />
+                      <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
+                        <item.icon size={24} className="text-slate-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{item.name}</p>
-                        <p className="text-sm text-gray-500">{item.desc}</p>
+                        <p className="font-medium text-slate-900">{item.name}</p>
+                        <p className="text-sm text-slate-500">{item.desc}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       {item.status === 'connected' ? (
                         <>
-                          <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded">Συνδεδεμένο</span>
+                          <span className="px-2 py-1 text-xs bg-success-100 text-success-700 rounded">Συνδεδεμένο</span>
                           <Button variant="secondary" size="sm">Ρυθμίσεις</Button>
                         </>
                       ) : (
@@ -610,8 +608,8 @@ export default function Settings() {
       {showGsisModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-900">
                 Ρυθμίσεις GSIS - Λήψη Στοιχείων
               </h3>
               <button
@@ -619,60 +617,60 @@ export default function Settings() {
                   setShowGsisModal(false);
                   setGsisMessage(null);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150"
               >
                 <X size={20} />
               </button>
             </div>
 
             <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-600">
                 Εισάγετε τους "Ειδικούς Κωδικούς Λήψης Στοιχείων" που έχετε λάβει από την ΑΑΔΕ.
               </p>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   ΑΦΜ Λογιστή *
                 </label>
                 <input
                   type="text"
                   value={gsisAfm}
                   onChange={(e) => setGsisAfm(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   placeholder="123456789"
                   maxLength={9}
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-slate-500 mt-1">
                   Το ΑΦΜ σας (9 ψηφία) - χρησιμοποιείται ως afm_called_by
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Όνομα Χρήστη *
                 </label>
                 <input
                   type="text"
                   value={gsisUsername}
                   onChange={(e) => setGsisUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   placeholder="Εισάγετε username"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Κωδικός {!gsisConfigured && '*'}
                 </label>
                 <input
                   type="password"
                   value={gsisPassword}
                   onChange={(e) => setGsisPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                   placeholder={gsisConfigured ? 'Αφήστε κενό για να διατηρηθεί ο υπάρχων' : 'Εισάγετε password'}
                 />
                 {gsisConfigured && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Αφήστε κενό αν δεν θέλετε να αλλάξετε τον κωδικό
                   </p>
                 )}
@@ -681,8 +679,8 @@ export default function Settings() {
               {gsisMessage && (
                 <div className={`p-3 rounded-lg flex items-center gap-2 ${
                   gsisMessage.type === 'success'
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-red-50 text-red-700'
+                    ? 'bg-success-50 text-success-700'
+                    : 'bg-danger-50 text-danger-700'
                 }`}>
                   {gsisMessage.type === 'success' ? <Check size={18} /> : <X size={18} />}
                   {gsisMessage.text}
@@ -690,7 +688,7 @@ export default function Settings() {
               )}
             </div>
 
-            <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50 rounded-b-lg">
+            <div className="flex items-center justify-between p-4 border-t border-slate-200 bg-slate-50 rounded-b-lg">
               <Button
                 variant="secondary"
                 onClick={handleTestGsisConnection}

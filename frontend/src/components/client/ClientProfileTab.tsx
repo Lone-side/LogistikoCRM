@@ -174,8 +174,8 @@ export default function ClientProfileTab({
   if (isLoading) {
     return (
       <div className="text-center py-8">
-        <RefreshCw className="w-6 h-6 animate-spin mx-auto text-gray-400" />
-        <p className="text-gray-500 mt-2">Φόρτωση προφίλ υποχρεώσεων...</p>
+        <RefreshCw className="w-6 h-6 animate-spin mx-auto text-slate-400" />
+        <p className="text-slate-500 mt-2">Φόρτωση προφίλ υποχρεώσεων...</p>
       </div>
     );
   }
@@ -185,14 +185,14 @@ export default function ClientProfileTab({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">Προφίλ Υποχρεώσεων</h3>
-          <p className="text-sm text-gray-500 mt-1">
+          <h3 className="text-lg font-semibold text-slate-900">Προφίλ Υποχρεώσεων</h3>
+          <p className="text-sm text-slate-500 mt-1">
             Επιλέξτε τις υποχρεώσεις που ισχύουν για αυτόν τον πελάτη
           </p>
         </div>
         <div className="flex items-center gap-3">
           {saveSuccess && (
-            <span className="flex items-center text-green-600 text-sm">
+            <span className="flex items-center text-success-600 text-sm">
               <CheckCircle className="w-4 h-4 mr-1" />
               Αποθηκεύτηκε
             </span>
@@ -224,43 +224,43 @@ export default function ClientProfileTab({
 
       {/* Profiles Section */}
       {profiles && profiles.length > 0 && (
-        <div className="border border-blue-200 rounded-lg overflow-hidden bg-blue-50/30">
-          <div className="flex items-center justify-between bg-blue-100 px-4 py-3 border-b border-blue-200">
+        <div className="border border-brand-200 rounded-lg overflow-hidden bg-brand-50/30">
+          <div className="flex items-center justify-between bg-brand-100 px-4 py-3 border-b border-brand-200">
             <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-blue-600" />
-              <h4 className="font-medium text-blue-900">Profiles Υποχρεώσεων</h4>
-              <span className="px-2 py-0.5 text-xs bg-blue-200 text-blue-700 rounded">
+              <Layers className="w-4 h-4 text-brand-600" />
+              <h4 className="font-medium text-brand-800">Profiles Υποχρεώσεων</h4>
+              <span className="px-2 py-0.5 text-xs bg-brand-200 text-brand-700 rounded">
                 {selectedProfileIds.size} επιλεγμένα
               </span>
             </div>
           </div>
-          <div className="divide-y divide-blue-100">
+          <div className="divide-y divide-brand-100">
             {profiles.map((profile) => (
               <label
                 key={profile.id}
-                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-blue-50"
+                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-brand-50"
               >
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     checked={selectedProfileIds.has(profile.id)}
                     onChange={() => toggleProfile(profile.id)}
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="h-4 w-4 text-brand-600 border-slate-300 rounded focus:ring-brand-500"
                   />
                   <div>
-                    <span className="text-sm font-medium text-gray-900">{profile.name}</span>
+                    <span className="text-sm font-medium text-slate-900">{profile.name}</span>
                     {profile.description && (
-                      <span className="text-xs text-gray-500 ml-2">- {profile.description}</span>
+                      <span className="text-xs text-slate-500 ml-2">- {profile.description}</span>
                     )}
                   </div>
                 </div>
-                <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded">
+                <span className="px-2 py-1 text-xs bg-brand-100 text-brand-700 rounded">
                   {profile.obligation_types_count} τύποι
                 </span>
               </label>
             ))}
           </div>
-          <div className="px-4 py-2 bg-blue-50 text-xs text-blue-700 border-t border-blue-200">
+          <div className="px-4 py-2 bg-brand-50 text-xs text-brand-700 border-t border-brand-200">
             Τα profiles περιλαμβάνουν προκαθορισμένες ομάδες υποχρεώσεων
           </div>
         </div>
@@ -276,7 +276,7 @@ export default function ClientProfileTab({
 
       {/* Groups */}
       {groupedTypes.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-slate-500">
           Δεν υπάρχουν διαθέσιμοι τύποι υποχρεώσεων.
         </div>
       ) : (
@@ -284,11 +284,11 @@ export default function ClientProfileTab({
           {groupedTypes.map((group) => {
             const isExclusionGroup = group.group_id !== null;
             return (
-              <div key={group.group_id || 'ungrouped'} className="border border-gray-200 rounded-lg overflow-hidden">
+              <div key={group.group_id || 'ungrouped'} className="border border-slate-200 rounded-lg overflow-hidden">
                 {/* Group Header */}
-                <div className="flex items-center justify-between bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div className="flex items-center justify-between bg-slate-50 px-4 py-3 border-b border-slate-200">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-medium text-gray-900">{group.group_name}</h4>
+                    <h4 className="font-medium text-slate-900">{group.group_name}</h4>
                     {isExclusionGroup && (
                       <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded">
                         Αλληλοαποκλειόμενες
@@ -301,14 +301,14 @@ export default function ClientProfileTab({
                         ? deselectAllInGroup(group)
                         : selectAllInGroup(group)
                     }
-                    className="text-sm text-blue-600 hover:text-blue-800"
+                    className="text-sm text-brand-600 hover:text-brand-800"
                   >
                     {isAllSelectedInGroup(group) ? 'Αποεπιλογή όλων' : isExclusionGroup ? 'Επιλογή' : 'Επιλογή όλων'}
                   </button>
                 </div>
 
                 {/* Types List */}
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-slate-100">
                   {group.types.map((type) => {
                     const isSelected = selectedTypeIds.has(type.id);
                     const isDisabledByExclusion = isExclusionGroup &&
@@ -320,8 +320,8 @@ export default function ClientProfileTab({
                         key={type.id}
                         className={`flex items-center justify-between px-4 py-3 cursor-pointer ${
                           isDisabledByExclusion
-                            ? 'bg-gray-50 opacity-60'
-                            : 'hover:bg-gray-50'
+                            ? 'bg-slate-50 opacity-60'
+                            : 'hover:bg-slate-50'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -330,24 +330,24 @@ export default function ClientProfileTab({
                             name={isExclusionGroup ? `exclusion-group-${group.group_id}` : undefined}
                             checked={isSelected}
                             onChange={() => toggleType(type.id)}
-                            className={`h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500 ${
+                            className={`h-4 w-4 text-brand-600 border-slate-300 focus:ring-brand-500 ${
                               isExclusionGroup ? '' : 'rounded'
                             }`}
                           />
                           <div>
-                            <span className="text-sm font-medium text-gray-900">{type.name}</span>
-                            <span className="text-xs text-gray-500 ml-2">({type.code})</span>
+                            <span className="text-sm font-medium text-slate-900">{type.name}</span>
+                            <span className="text-xs text-slate-500 ml-2">({type.code})</span>
                           </div>
                         </div>
                         <span
                           className={`px-2 py-1 text-xs font-medium rounded ${
                             type.frequency === 'monthly'
-                              ? 'bg-blue-100 text-blue-800'
+                              ? 'bg-brand-100 text-brand-800'
                               : type.frequency === 'quarterly'
                               ? 'bg-purple-100 text-purple-800'
                               : type.frequency === 'annual'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-success-100 text-success-700'
+                              : 'bg-slate-100 text-slate-800'
                           }`}
                         >
                           {FREQUENCY_LABELS[type.frequency] || type.frequency}
@@ -363,12 +363,12 @@ export default function ClientProfileTab({
       )}
 
       {/* Summary */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <p className="text-sm text-gray-600">
-          <span className="font-medium text-gray-900">{selectedTypeIds.size}</span> υποχρεώσεις επιλεγμένες
+      <div className="bg-slate-50 rounded-lg p-4">
+        <p className="text-sm text-slate-600">
+          <span className="font-medium text-slate-900">{selectedTypeIds.size}</span> υποχρεώσεις επιλεγμένες
           {selectedProfileIds.size > 0 && (
             <span className="ml-2">
-              + <span className="font-medium text-blue-600">{selectedProfileIds.size}</span> profiles
+              + <span className="font-medium text-brand-600">{selectedProfileIds.size}</span> profiles
             </span>
           )}
         </p>
@@ -378,7 +378,7 @@ export default function ClientProfileTab({
       <div className="text-center">
         <Link
           to="/settings/obligations"
-          className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+          className="text-sm text-brand-600 hover:text-brand-800 hover:underline"
         >
           Διαχείριση τύπων υποχρεώσεων
           <ExternalLink className="w-3 h-3 inline ml-1" />

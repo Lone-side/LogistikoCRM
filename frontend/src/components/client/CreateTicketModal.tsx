@@ -33,21 +33,21 @@ export default function CreateTicketModal({
       <div className="bg-white rounded-lg max-w-md w-full">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="text-lg font-semibold">Νέο Ticket</h3>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded">
             <X className="w-5 h-5" />
           </button>
         </div>
         <div className="p-4 space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Τίτλος *
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg"
               placeholder="Π.χ. Επικοινωνία για ΦΠΑ"
               autoFocus
             />
@@ -55,27 +55,27 @@ export default function CreateTicketModal({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Περιγραφή
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg resize-none"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg resize-none"
               placeholder="Λεπτομέρειες..."
             />
           </div>
 
           {/* Priority */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Προτεραιότητα
             </label>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg"
             >
               <option value="low">Χαμηλή</option>
               <option value="medium">Μεσαία</option>
@@ -84,7 +84,7 @@ export default function CreateTicketModal({
             </select>
           </div>
         </div>
-        <div className="flex justify-end gap-3 p-4 border-t bg-gray-50">
+        <div className="flex justify-end gap-3 p-4 border-t bg-slate-50">
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
             Ακύρωση
           </Button>
