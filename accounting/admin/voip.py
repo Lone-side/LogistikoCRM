@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 @admin.register(VoIPCall)
 class VoIPCallAdmin(admin.ModelAdmin):
+    list_select_related = ('client',)
+
     """Complete VoIP Admin"""
 
     list_display = [
@@ -323,6 +325,8 @@ class VoIPCallLogAdmin(admin.ModelAdmin):
 
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
+    list_select_related = ('client', 'call', 'assigned_to')
+
     """Professional Ticket Admin"""
 
     list_display = [

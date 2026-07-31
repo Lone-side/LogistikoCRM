@@ -375,12 +375,16 @@ class InvoiceAdmin(admin.ModelAdmin):
 
 @admin.register(ProductCategory)
 class ProductCategoryAdmin(admin.ModelAdmin):
+    list_select_related = ('parent',)
+
     list_display = ['name', 'parent', 'created_at']
     search_fields = ['name']
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    list_select_related = ('category',)
+
     list_display = ['code', 'name', 'category', 'current_stock', 'unit', 'purchase_price', 'sale_price', 'active']
     list_filter = ['active', 'category', 'unit']
     search_fields = ['code', 'name']
@@ -403,6 +407,8 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(StockMovement)
 class StockMovementAdmin(admin.ModelAdmin):
+    list_select_related = ('product', 'counterpart', 'invoice')
+
     list_display = ['product', 'movement_type', 'quantity', 'date', 'counterpart', 'invoice']
     list_filter = ['movement_type', 'date']
     search_fields = ['product__code', 'product__name']
@@ -411,6 +417,8 @@ class StockMovementAdmin(admin.ModelAdmin):
 
 @admin.register(InvoiceItem)
 class InvoiceItemAdmin(admin.ModelAdmin):
+    list_select_related = ('invoice',)
+
     list_display = ['invoice', 'line_number', 'description', 'quantity', 'unit_price', 'net_value']
     list_filter = ['invoice__issue_date']
     search_fields = ['description', 'invoice__number']

@@ -66,14 +66,17 @@ class ObligationGroupAdmin(admin.ModelAdmin):
 
         messages.success(request, f'✅ Ομάδα "{obj.name}" ενημερώθηκε με {len(selected_types)} υποχρεώσεις!')
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('obligationtype_set')
+
     def get_obligations_count(self, obj):
-        return obj.obligationtype_set.count()
+        return len(obj.obligationtype_set.all())
     get_obligations_count.short_description = 'Πλήθος'
 
     def get_obligations_list(self, obj):
-        obligations = obj.obligationtype_set.all()[:3]
-        names = [o.name for o in obligations]
-        if obj.obligationtype_set.count() > 3:
+        obligations = list(obj.obligationtype_set.all())
+        names = [o.name for o in obligations[:3]]
+        if len(obligations) > 3:
             names.append('...')
         return ', '.join(names) if names else '—'
     get_obligations_list.short_description = 'Υποχρεώσεις'
@@ -108,14 +111,17 @@ class ObligationProfileAdmin(admin.ModelAdmin):
 
         messages.success(request, f'✅ Profile "{obj.name}" ενημερώθηκε με {len(selected_types)} υποχρεώσεις!')
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('obligation_types')
+
     def get_obligation_count(self, obj):
-        return obj.obligation_types.count()
+        return len(obj.obligation_types.all())
     get_obligation_count.short_description = 'Πλήθος'
 
     def get_obligations_list(self, obj):
-        obligations = obj.obligation_types.all()[:3]
-        names = [o.name for o in obligations]
-        if obj.obligation_types.count() > 3:
+        obligations = list(obj.obligation_types.all())
+        names = [o.name for o in obligations[:3]]
+        if len(obligations) > 3:
             names.append('...')
         return ', '.join(names) if names else '—'
     get_obligations_list.short_description = 'Υποχρεώσεις'
@@ -125,6 +131,9 @@ class ObligationProfileAdmin(admin.ModelAdmin):
 class ObligationTypeAdmin(admin.ModelAdmin):
     list_display = ['name', 'code', 'frequency', 'deadline_type', 'get_profiles', 'exclusion_group', 'is_active', 'priority']
     list_filter = ['frequency', 'is_active', 'profiles', 'exclusion_group']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('exclusion_group').prefetch_related('profiles')
 
     def get_profiles(self, obj):
         return ', '.join([p.name for p in obj.profiles.all()]) or '—'

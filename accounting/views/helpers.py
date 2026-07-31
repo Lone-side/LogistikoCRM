@@ -87,20 +87,41 @@ def _calculate_monthly_stats(obligations, now):
     greek_months = ['Ιανουάριος', 'Φεβρουάριος', 'Μάρτιος', 'Απρίλιος',
                     'Μάιος', 'Ιούνιος', 'Ιούλιος', 'Αύγουστος',
                     'Σεπτέμβριος', 'Οκτώβριος', 'Νοέμβριος', 'Δεκέμβριος']
-    stats = []
+    from django.db.models import Count, Q
+
+    # Οι 6 μήνες σε μία λίστα (πιο πρόσφατος πρώτα)
+    periods = []
     year, month = now.year, now.month
     for _ in range(6):
-        month_obligations = obligations.filter(year=year, month=month)
-        stats.append({
-            'month': f"{greek_months[month - 1]} {year}",
-            'total': month_obligations.count(),
-            'completed': month_obligations.filter(status='completed').count(),
-            'pending': month_obligations.filter(status='pending').count(),
-            'overdue': month_obligations.filter(status='overdue').count(),
-        })
+        periods.append((year, month))
         month -= 1
         if month == 0:
             month, year = 12, year - 1
+
+    # Ένα aggregate query αντί για 4 COUNT ανά μήνα (24 συνολικά)
+    period_q = Q()
+    for y, m in periods:
+        period_q |= Q(year=y, month=m)
+    counts = {
+        (row['year'], row['month']): row
+        for row in obligations.filter(period_q).values('year', 'month').annotate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status='completed')),
+            pending=Count('id', filter=Q(status='pending')),
+            overdue=Count('id', filter=Q(status='overdue')),
+        )
+    }
+
+    stats = []
+    for y, m in periods:
+        row = counts.get((y, m), {})
+        stats.append({
+            'month': f"{greek_months[m - 1]} {y}",
+            'total': row.get('total', 0),
+            'completed': row.get('completed', 0),
+            'pending': row.get('pending', 0),
+            'overdue': row.get('overdue', 0),
+        })
     return stats
 
 

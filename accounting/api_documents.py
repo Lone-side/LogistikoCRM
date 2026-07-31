@@ -100,6 +100,9 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     def get_file_size(self, obj):
         """Return file size in bytes"""
+        # Το αποθηκευμένο πεδίο αποφεύγει ένα stat() στο storage ανά έγγραφο
+        if obj.file_size:
+            return obj.file_size
         if obj.file:
             try:
                 return obj.file.size

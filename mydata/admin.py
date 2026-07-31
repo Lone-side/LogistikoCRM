@@ -18,6 +18,8 @@ from .models import MyDataCredentials, VATRecord, VATSyncLog
 
 @admin.register(MyDataCredentials)
 class MyDataCredentialsAdmin(admin.ModelAdmin):
+    list_select_related = ('client',)
+
     """Admin για myDATA Credentials."""
 
     list_display = [
@@ -149,6 +151,8 @@ class MyDataCredentialsAdmin(admin.ModelAdmin):
 
 @admin.register(VATRecord)
 class VATRecordAdmin(admin.ModelAdmin):
+    list_select_related = ('client',)
+
     """Admin για VAT Records."""
 
     list_display = [
@@ -242,6 +246,8 @@ class VATRecordAdmin(admin.ModelAdmin):
 
 @admin.register(VATSyncLog)
 class VATSyncLogAdmin(admin.ModelAdmin):
+    list_select_related = ('client',)
+
     """Admin για VAT Sync Logs."""
 
     list_display = [

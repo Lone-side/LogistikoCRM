@@ -82,6 +82,17 @@ class ClientProfileAdmin(admin.ModelAdmin):
         'pdf_report_link',
     ]
 
+    def get_queryset(self, request):
+        # Χωρίς αυτά το changelist κάνει 4-6 queries ανά πελάτη
+        # (obligation_settings, τύποι ανά profile, documents count)
+        from django.db.models import Count
+        return super().get_queryset(request).select_related(
+            'obligation_settings'
+        ).prefetch_related(
+            'obligation_settings__obligation_types',
+            'obligation_settings__obligation_profiles__obligation_types',
+        ).annotate(_documents_count=Count('documents', distinct=True))
+
     @admin.display(description='Υποχρεώσεις')
     def obligations_status(self, obj):
         """Εμφάνιση κατάστασης υποχρεώσεων πελάτη"""
@@ -135,7 +146,9 @@ class ClientProfileAdmin(admin.ModelAdmin):
     @admin.display(description='Έγγραφα')
     def documents_count(self, obj):
         """Count of client documents"""
-        count = obj.documents.count()
+        count = getattr(obj, '_documents_count', None)
+        if count is None:
+            count = obj.documents.count()
         if count > 0:
             return format_html('<span style="color: #28a745; font-weight: bold;">{}</span>', count)
         return '-'
