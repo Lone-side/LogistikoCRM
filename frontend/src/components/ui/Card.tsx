@@ -9,7 +9,7 @@ export function Card({ padded = true, hoverable = false, className = '', childre
   return (
     <div
       className={`bg-white rounded-xl border border-slate-200 shadow-sm ${
-        hoverable ? 'transition-shadow duration-200 hover:shadow-md' : ''
+        hoverable ? 'card-lift' : ''
       } ${padded ? 'p-5' : ''} ${className}`}
       {...props}
     >

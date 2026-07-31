@@ -18,7 +18,7 @@ export function StatCard({ icon: Icon, label, value, color = '#2b6fe3', hint, on
     <Tag
       onClick={onClick}
       className={`relative overflow-hidden bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-left w-full ${
-        onClick ? 'cursor-pointer transition-shadow duration-200 hover:shadow-md focus-visible:shadow-md' : ''
+        onClick ? 'cursor-pointer card-lift focus-visible:shadow-md' : ''
       } ${className}`}
     >
       <span className="absolute inset-y-0 left-0 w-1 rounded-r" style={{ backgroundColor: color }} aria-hidden="true" />
