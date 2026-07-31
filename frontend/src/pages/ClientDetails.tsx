@@ -15,7 +15,7 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { Button } from '../components';
-import { Badge } from '../components/ui';
+import { Badge, StatCard } from '../components/ui';
 import {
   useClientFull,
   useClientDocuments,
@@ -163,8 +163,13 @@ export default function ClientDetails() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      {/* Header — mini bento */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Identity card */}
+      <div
+        className="sm:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm p-6 animate-rise"
+        style={{ '--rise-delay': '0ms' } as React.CSSProperties}
+      >
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           {/* Back button and client info */}
           <div className="flex items-center gap-4">
@@ -175,21 +180,40 @@ export default function ClientDetails() {
               <ChevronLeft className="w-5 h-5 text-slate-600" />
             </button>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-brand-100 rounded-full flex items-center justify-center">
-                <span className="text-2xl font-bold text-brand-600">
+              <div className="w-16 h-16 bg-gradient-to-br from-brand-600 to-brand-700 rounded-2xl shadow-sm flex items-center justify-center">
+                <span className="text-2xl font-bold text-white">
                   {client.eponimia.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">{client.eponimia}</h1>
-                <div className="flex items-center gap-3 mt-1">
+                <div className="flex flex-wrap items-center gap-3 mt-1">
                   <span className="font-mono text-sm bg-slate-100 px-2 py-0.5 rounded">
                     ΑΦΜ: {client.afm}
                   </span>
+                  {client.doy && (
+                    <span className="text-sm text-slate-500">ΔΟΥ: {client.doy}</span>
+                  )}
                   <Badge variant={client.is_active ? 'success' : 'neutral'}>
                     {client.is_active ? 'Ενεργός' : 'Ανενεργός'}
                   </Badge>
                 </div>
+                {(client.email || client.kinito_tilefono) && (
+                  <div className="flex flex-wrap items-center gap-4 mt-1.5 text-sm text-slate-500">
+                    {client.email && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-400" />
+                        {client.email}
+                      </span>
+                    )}
+                    {client.kinito_tilefono && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        {client.kinito_tilefono}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -234,27 +258,37 @@ export default function ClientDetails() {
           </div>
         </div>
 
-        {/* Stats cards */}
-        {client.counts && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-200">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-brand-600">{client.counts.obligations}</p>
-              <p className="text-sm text-slate-500">Υποχρεώσεις</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-warning-600">{client.counts.pending_obligations}</p>
-              <p className="text-sm text-slate-500">Εκκρεμείς</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-success-600">{client.counts.documents}</p>
-              <p className="text-sm text-slate-500">Έγγραφα</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{client.counts.open_tickets}</p>
-              <p className="text-sm text-slate-500">Ανοιχτά Tickets</p>
-            </div>
-          </div>
-        )}
+      </div>
+
+      {/* Stat tiles */}
+      {client.counts && (
+        <>
+          <StatCard
+            icon={FileText}
+            label="Εκκρεμείς"
+            value={client.counts.pending_obligations}
+            color="#d97706"
+            className="animate-rise"
+            style={{ '--rise-delay': '60ms' } as React.CSSProperties}
+          />
+          <StatCard
+            icon={FolderOpen}
+            label="Έγγραφα"
+            value={client.counts.documents}
+            color="#16a34a"
+            className="animate-rise"
+            style={{ '--rise-delay': '120ms' } as React.CSSProperties}
+          />
+          <StatCard
+            icon={Ticket}
+            label="Ανοιχτά Tickets"
+            value={client.counts.open_tickets}
+            color="#2b6fe3"
+            className="animate-rise"
+            style={{ '--rise-delay': '180ms' } as React.CSSProperties}
+          />
+        </>
+      )}
       </div>
 
       {/* Tabs */}

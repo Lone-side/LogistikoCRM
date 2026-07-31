@@ -29,18 +29,38 @@ interface NavItem {
   label: string;
 }
 
-const navItems: NavItem[] = [
-  { to: '/', icon: <LayoutDashboard size={20} />, label: 'Πίνακας Ελέγχου' },
-  { to: '/clients', icon: <Users size={20} />, label: 'Πελάτες' },
-  { to: '/obligations', icon: <ClipboardList size={20} />, label: 'Υποχρεώσεις' },
-  { to: '/calendar', icon: <Calendar size={20} />, label: 'Ημερολόγιο' },
-  { to: '/file-manager', icon: <FolderOpen size={20} />, label: 'Αρχεία' },
-  { to: '/calls', icon: <Phone size={20} />, label: 'Κλήσεις' },
-  { to: '/tickets', icon: <Ticket size={20} />, label: 'Αιτήματα' },
-  { to: '/emails', icon: <Mail size={20} />, label: 'Αλληλογραφία' },
-  { to: '/mydata', icon: <FileText size={20} />, label: 'myDATA ΦΠΑ' },
-  { to: '/reports', icon: <BarChart3 size={20} />, label: 'Αναφορές' },
-  { to: '/settings', icon: <Settings size={20} />, label: 'Ρυθμίσεις' },
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const navGroups: NavGroup[] = [
+  {
+    label: 'ΕΡΓΑΣΙΑ',
+    items: [
+      { to: '/', icon: <LayoutDashboard size={20} />, label: 'Πίνακας Ελέγχου' },
+      { to: '/clients', icon: <Users size={20} />, label: 'Πελάτες' },
+      { to: '/obligations', icon: <ClipboardList size={20} />, label: 'Υποχρεώσεις' },
+      { to: '/calendar', icon: <Calendar size={20} />, label: 'Ημερολόγιο' },
+      { to: '/file-manager', icon: <FolderOpen size={20} />, label: 'Αρχεία' },
+    ],
+  },
+  {
+    label: 'ΕΠΙΚΟΙΝΩΝΙΑ',
+    items: [
+      { to: '/calls', icon: <Phone size={20} />, label: 'Κλήσεις' },
+      { to: '/tickets', icon: <Ticket size={20} />, label: 'Αιτήματα' },
+      { to: '/emails', icon: <Mail size={20} />, label: 'Αλληλογραφία' },
+    ],
+  },
+  {
+    label: 'ΣΥΣΤΗΜΑ',
+    items: [
+      { to: '/mydata', icon: <FileText size={20} />, label: 'myDATA ΦΠΑ' },
+      { to: '/reports', icon: <BarChart3 size={20} />, label: 'Αναφορές' },
+      { to: '/settings', icon: <Settings size={20} />, label: 'Ρυθμίσεις' },
+    ],
+  },
 ];
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarProps) {
@@ -58,7 +78,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside
         className={`
           fixed top-0 left-0 z-40 h-full flex flex-col
-          bg-slate-900 text-slate-300
+          bg-gradient-to-b from-slate-950 to-brand-950 text-slate-300
           transform transition-all duration-300 ease-in-out
           lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -66,7 +86,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         `}
       >
         {/* Logo/Brand */}
-        <div className={`flex items-center h-16 px-3 border-b border-slate-700/60 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
+        <div className={`flex items-center h-16 px-3 border-b border-white/10 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-950/40">
@@ -87,7 +107,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           {!isCollapsed && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              className="lg:hidden p-2 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
               aria-label="Κλείσιμο μενού"
             >
               <X size={20} className="text-slate-400" />
@@ -96,10 +116,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         </div>
 
         {/* Collapse toggle button - desktop only */}
-        <div className={`hidden lg:flex px-3 py-2 border-b border-slate-700/60 ${isCollapsed ? 'justify-center' : 'justify-end'}`}>
+        <div className={`hidden lg:flex px-3 py-2 border-b border-white/10 ${isCollapsed ? 'justify-center' : 'justify-end'}`}>
           <button
             onClick={onToggleCollapse}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
             aria-label={isCollapsed ? 'Επέκταση μενού' : 'Σύμπτυξη μενού'}
             title={isCollapsed ? 'Επέκταση μενού' : 'Σύμπτυξη μενού'}
           >
@@ -112,40 +132,51 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={onClose}
-              title={isCollapsed ? item.label : undefined}
-              className={({ isActive }) =>
-                `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-                  isActive
-                    ? 'bg-brand-600/20 text-white'
-                    : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
-                } ${isCollapsed ? 'justify-center' : ''}`
-              }
-              end={item.to === '/'}
-            >
-              {({ isActive }) => (
-                <>
-                  {/* Active indicator bar */}
-                  {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-brand-500 rounded-r-full" />
-                  )}
-                  <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
-                    {item.icon}
-                  </span>
-                  {!isCollapsed && <span className="truncate">{item.label}</span>}
-                </>
+        <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
+          {navGroups.map((group) => (
+            <div key={group.label} className="space-y-0.5">
+              {!isCollapsed ? (
+                <p className="px-3 pb-1 text-[10px] font-semibold tracking-[0.14em] uppercase text-slate-500 select-none">
+                  {group.label}
+                </p>
+              ) : (
+                <div className="mx-3 mb-1 border-t border-white/10" aria-hidden="true" />
               )}
-            </NavLink>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={onClose}
+                  title={isCollapsed ? item.label : undefined}
+                  className={({ isActive }) =>
+                    `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                      isActive
+                        ? 'bg-white/10 text-white shadow-lg shadow-brand-500/20'
+                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-100'
+                    } ${isCollapsed ? 'justify-center' : ''}`
+                  }
+                  end={item.to === '/'}
+                >
+                  {({ isActive }) => (
+                    <>
+                      {/* Active indicator bar */}
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-brand-500 rounded-r-full" />
+                      )}
+                      <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                        {item.icon}
+                      </span>
+                      {!isCollapsed && <span className="truncate">{item.label}</span>}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
         {/* Footer */}
-        <div className={`p-3 border-t border-slate-700/60 ${isCollapsed ? 'text-center' : ''}`}>
+        <div className={`p-3 border-t border-white/10 ${isCollapsed ? 'text-center' : ''}`}>
           <div className="text-xs text-slate-500 text-center truncate">
             {isCollapsed ? 'v1.0' : 'LogistikoCRM v1.0'}
           </div>
