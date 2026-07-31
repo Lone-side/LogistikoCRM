@@ -1,14 +1,15 @@
 from django.http import HttpResponse
 from django.template import RequestContext
 from django.template import Template
+from django.shortcuts import get_object_or_404
 
 from massmail.models import EmlMessage
 from settings.models import MassmailSettings
 
 
 def message_preview(request, message_id):
-    
-    message = EmlMessage.objects.get(id=message_id)
+
+    message = get_object_or_404(EmlMessage, id=message_id)
     signature = message.signature
     signature_content = signature.content if signature else ''
     content = f"""

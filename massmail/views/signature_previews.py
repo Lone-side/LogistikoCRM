@@ -1,5 +1,6 @@
 from django.core.handlers.wsgi import WSGIRequest
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest
+from django.shortcuts import get_object_or_404
 from django.template import RequestContext
 from django.template import Template
 
@@ -28,7 +29,9 @@ def get_template(signature: Signature) -> Template:
 def signature_preview(request: WSGIRequest) -> HttpResponse:
     signature_id = request.GET.get('signature')
     if signature_id:
-        signature = Signature.objects.get(id=signature_id)
+        if not signature_id.isdigit():
+            return HttpResponseBadRequest('Invalid signature id.')
+        signature = get_object_or_404(Signature, id=signature_id)
         template = get_template(signature)
         context = RequestContext(
             request,

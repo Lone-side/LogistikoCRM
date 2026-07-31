@@ -4,7 +4,9 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.sites.models import Site
+from django.http import HttpResponseBadRequest
 from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 from django.urls import reverse
 from massmail.models import EmailAccount
@@ -17,7 +19,7 @@ def get_redirect_uri(ea: EmailAccount) -> str:
 
 
 def request_authorization_code(request, email_account_id):
-    ea = EmailAccount.objects.get(id=email_account_id)
+    ea = get_object_or_404(EmailAccount, id=email_account_id)
     data = settings.OAUTH2_DATA.get(ea.email_host, None)
     if data:
         redirect_uri = get_redirect_uri(ea)
@@ -43,7 +45,10 @@ def request_authorization_code(request, email_account_id):
 def get_refresh_token(request):
     authorization_code = request.GET.get('code')
     email_host_user = request.GET.get('user')
-    ea = EmailAccount.objects.get(email_host_user=email_host_user)
+    try:
+        ea = EmailAccount.objects.get(email_host_user=email_host_user)
+    except EmailAccount.DoesNotExist:
+        return HttpResponseBadRequest('Unknown email account.')
     redirect_uri = get_redirect_uri(ea)
     data = settings.OAUTH2_DATA[ea.email_host]
     if authorization_code:

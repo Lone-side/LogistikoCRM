@@ -1306,7 +1306,11 @@ class RecentDocumentsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        limit = min(int(request.query_params.get('limit', 20)), 50)
+        try:
+            limit = int(request.query_params.get('limit', 20))
+        except (ValueError, TypeError):
+            limit = 20
+        limit = min(max(limit, 1), 50)
 
         recent = ClientDocument.objects.filter(is_current=True).select_related(
             'client', 'obligation', 'uploaded_by'
@@ -1331,6 +1335,22 @@ class BrowseFoldersView(APIView):
         client_id = request.query_params.get('client_id')
         year = request.query_params.get('year')
         month = request.query_params.get('month')
+
+        if client_id and not client_id.isdigit():
+            return Response(
+                {'error': 'Μη έγκυρο ID πελάτη.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if year and not year.isdigit():
+            return Response(
+                {'error': 'Μη έγκυρο έτος.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if month and not month.isdigit():
+            return Response(
+                {'error': 'Μη έγκυρος μήνας.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if client_id:
             # Get years for specific client

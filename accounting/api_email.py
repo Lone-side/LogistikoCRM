@@ -1016,9 +1016,17 @@ def email_history(request):
     if email_status:
         queryset = queryset.filter(status=email_status)
 
-    # Pagination
-    page = int(request.query_params.get('page', 1))
-    page_size = int(request.query_params.get('page_size', 20))
+    # Pagination (άκυρες τιμές → defaults, με clamp)
+    try:
+        page = int(request.query_params.get('page', 1))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        page_size = int(request.query_params.get('page_size', 20))
+    except (ValueError, TypeError):
+        page_size = 20
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
     start = (page - 1) * page_size
     end = start + page_size
 

@@ -47,7 +47,19 @@ class BackupSettingsAPIView(APIView):
         if 'include_media' in request.data:
             settings_obj.include_media = request.data['include_media']
         if 'max_backups' in request.data:
-            settings_obj.max_backups = request.data['max_backups']
+            try:
+                max_backups = int(request.data['max_backups'])
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'Μη έγκυρη τιμή για max_backups (απαιτείται ακέραιος)'},
+                    status=400
+                )
+            if not 1 <= max_backups <= 100:
+                return Response(
+                    {'error': 'Το max_backups πρέπει να είναι μεταξύ 1 και 100'},
+                    status=400
+                )
+            settings_obj.max_backups = max_backups
 
         settings_obj.save()
         return Response({'status': 'updated'})

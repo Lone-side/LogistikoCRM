@@ -7,7 +7,9 @@ from django.contrib.admin.views.main import PAGE_VAR
 from django.core.handlers.wsgi import WSGIRequest
 from django.core.mail import mail_admins
 from django.http.response import HttpResponse
+from django.http.response import HttpResponseBadRequest
 from django.http.response import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.template.response import TemplateResponse
 from django.db.models import Q
 from django.db.models.query import QuerySet
@@ -29,10 +31,16 @@ from massmail.models import EmailAccount
 def select_emails_import(request: WSGIRequest):
     if request.method == 'POST':
         data = request.POST.copy()
-        ea_id = int(data.pop('ea_id')[0])
-        ea = EmailAccount.objects.get(id=ea_id)
+        try:
+            ea_id = int(data.pop('ea_id')[0])
+        except (KeyError, ValueError):
+            return HttpResponseBadRequest('Invalid "ea_id" parameter.')
+        ea = get_object_or_404(EmailAccount, id=ea_id)
         data.pop('csrfmiddlewaretoken', None)
-        action = data.pop('action')[0]
+        action_list = data.pop('action', None)
+        if not action_list:
+            return HttpResponseBadRequest('The "action" parameter is required.')
+        action = action_list[0]
         if action == 'import':
             return emails_import(data, request, ea)
 
@@ -61,7 +69,9 @@ def select_emails_import(request: WSGIRequest):
         request_id = request.GET.get('request_id')
         ticket = request.GET.get('ticket')
         ea_id = request.GET.get('ea')
-        ea = EmailAccount.objects.get(id=ea_id) if ea_id else None
+        if ea_id and not ea_id.isdigit():
+            return HttpResponseBadRequest('Invalid "ea" parameter.')
+        ea = get_object_or_404(EmailAccount, id=ea_id) if ea_id else None
         if not ea:
             q_params = Q(owner=request.user) | Q(co_owner=request.user)
             q_params = q_params & Q(do_import=True)
@@ -78,13 +88,17 @@ def select_emails_import(request: WSGIRequest):
 
         if ea:
             if deal_id:
-                deal = Deal.objects.get(id=deal_id)
+                if not deal_id.isdigit():
+                    return HttpResponseBadRequest('Invalid "deal_id" parameter.')
+                deal = get_object_or_404(Deal, id=deal_id)
                 deal_name = deal.name
                 deal_url = deal.get_absolute_url()
                 opts = Deal._meta  # NOQA
 
             elif request_id:
-                inquiry = Request.objects.get(id=request_id)
+                if not request_id.isdigit():
+                    return HttpResponseBadRequest('Invalid "request_id" parameter.')
+                inquiry = get_object_or_404(Request, id=request_id)
                 inquiry_name = inquiry.request_for
                 inquiry_url = inquiry.get_absolute_url()
                 opts = Request._meta  # NOQA
@@ -99,7 +113,10 @@ def select_emails_import(request: WSGIRequest):
                 object_url=deal_url or inquiry_url,
                 post_name=post_name
             )
-            page_num = int(request.GET.get(PAGE_VAR, 0))
+            try:
+                page_num = int(request.GET.get(PAGE_VAR, 0))
+            except ValueError:
+                return HttpResponseBadRequest('Invalid page number.')
             page, err = get_email_headers_page(ea, page_num)
             # if page and not err:
             if not err:

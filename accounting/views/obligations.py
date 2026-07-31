@@ -116,6 +116,11 @@ def quick_complete_obligation(request, obligation_id):
             {'success': False, 'message': 'Ypoxreosi den vrethike'},
             status=404
         )
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {'success': False, 'message': 'Μη έγκυρα δεδομένα JSON'},
+            status=400
+        )
     except Exception as e:
         logger.error(f"Error in quick_complete: {str(e)}", exc_info=True)
         return JsonResponse(
@@ -135,8 +140,22 @@ def bulk_complete_view(request):
     Simple bulk complete - all obligations get same treatment
     """
     try:
-        obligation_ids = json.loads(request.POST.get('obligation_ids', '[]'))
+        try:
+            obligation_ids = json.loads(request.POST.get('obligation_ids', '[]'))
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'success': False,
+                'message': 'Μη έγκυρα δεδομένα JSON (obligation_ids)'
+            }, status=400)
         time_spent = request.POST.get('time_spent', '0')
+        if time_spent:
+            try:
+                float(time_spent)
+            except (ValueError, TypeError):
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Μη έγκυρη τιμή για time_spent'
+                }, status=400)
         notes = request.POST.get('notes', '')
         attachments = request.FILES.getlist('attachments')
 
@@ -393,6 +412,17 @@ def check_obligation_duplicate(request):
 
     if not all([client_id, type_id, year, month]):
         return JsonResponse({'exists': False})
+
+    try:
+        client_id = int(client_id)
+        type_id = int(type_id)
+        year = int(year)
+        month = int(month)
+    except (ValueError, TypeError):
+        return JsonResponse({
+            'exists': False,
+            'error': 'Μη έγκυρες παράμετροι'
+        }, status=400)
 
     exists = MonthlyObligation.objects.filter(
         client_id=client_id,
