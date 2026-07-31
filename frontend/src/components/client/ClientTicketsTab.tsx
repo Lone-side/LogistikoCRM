@@ -72,7 +72,7 @@ export default function ClientTicketsTab({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h3 className="text-sm font-medium text-gray-700">
+        <h3 className="text-sm font-medium text-slate-700">
           {data ? `${data.tickets.length} tickets` : 'Tickets'}
         </h3>
         <Button onClick={onCreate}>
@@ -84,50 +84,50 @@ export default function ClientTicketsTab({
       {/* Loading */}
       {isLoading && (
         <div className="text-center py-8">
-          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+          <RefreshCw className="w-6 h-6 animate-spin mx-auto text-slate-400" />
         </div>
       )}
 
       {/* Table */}
       {!isLoading && data && (
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Τίτλος
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Κατάσταση
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Προτεραιότητα
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Ανατέθηκε
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">
                   Δημιουργία
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">
                   Ενέργειες
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-slate-200">
               {data.tickets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                     Δεν υπάρχουν tickets
                   </td>
                 </tr>
               ) : (
                 data.tickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50">
+                  <tr key={ticket.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-gray-900">{ticket.title}</p>
+                      <p className="text-sm font-medium text-slate-900">{ticket.title}</p>
                       {ticket.description && (
-                        <p className="text-xs text-gray-500 truncate max-w-xs">
+                        <p className="text-xs text-slate-500 truncate max-w-xs">
                           {ticket.description}
                         </p>
                       )}
@@ -138,7 +138,7 @@ export default function ClientTicketsTab({
                           value={ticket.status}
                           onChange={(e) => handleStatusChange(ticket.id, e.target.value)}
                           disabled={isUpdating}
-                          className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                          className="text-xs border border-slate-200 rounded px-2 py-1 focus:ring-2 focus:ring-brand-500"
                         >
                           {TICKET_STATUS_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -150,8 +150,8 @@ export default function ClientTicketsTab({
                         <span
                           className={`px-2 py-1 text-xs font-medium rounded ${
                             ticket.is_open
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-brand-100 text-brand-800'
+                              : 'bg-slate-100 text-slate-800'
                           }`}
                         >
                           {ticket.status_display || ticket.status}
@@ -164,7 +164,7 @@ export default function ClientTicketsTab({
                           value={ticket.priority}
                           onChange={(e) => handlePriorityChange(ticket.id, e.target.value)}
                           disabled={isUpdating}
-                          className="text-xs border border-gray-200 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500"
+                          className="text-xs border border-slate-200 rounded px-2 py-1 focus:ring-2 focus:ring-brand-500"
                         >
                           {TICKET_PRIORITY_OPTIONS.map((opt) => (
                             <option key={opt.value} value={opt.value}>
@@ -175,36 +175,36 @@ export default function ClientTicketsTab({
                       ) : (
                         <span
                           className={`px-2 py-1 text-xs font-medium rounded ${
-                            PRIORITY_COLORS[ticket.priority] || 'bg-gray-100'
+                            PRIORITY_COLORS[ticket.priority] || 'bg-slate-100'
                           }`}
                         >
                           {ticket.priority_display || ticket.priority}
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-slate-600">
                       {ticket.assigned_to_name || '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
+                    <td className="px-4 py-3 text-sm text-slate-600">
                       {new Date(ticket.created_at).toLocaleDateString('el-GR')}
-                      <span className="text-xs text-gray-400 ml-1">
+                      <span className="text-xs text-slate-400 ml-1">
                         ({ticket.days_since_created} μέρες)
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       {confirmDeleteId === ticket.id ? (
                         <div className="flex items-center justify-end gap-2">
-                          <span className="text-xs text-red-600">Διαγραφή;</span>
+                          <span className="text-xs text-danger-600">Διαγραφή;</span>
                           <button
                             onClick={() => handleDeleteConfirm(ticket.id)}
                             disabled={isDeleting}
-                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                            className="px-2 py-1 text-xs bg-danger-600 text-white rounded hover:bg-danger-700 disabled:opacity-50"
                           >
                             Ναι
                           </button>
                           <button
                             onClick={() => setConfirmDeleteId(null)}
-                            className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                            className="px-2 py-1 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
                           >
                             Όχι
                           </button>
@@ -214,7 +214,7 @@ export default function ClientTicketsTab({
                           {editingTicketId === ticket.id ? (
                             <button
                               onClick={() => setEditingTicketId(null)}
-                              className="p-1 text-green-600 hover:bg-green-50 rounded"
+                              className="p-1 text-success-600 hover:bg-success-50 rounded"
                               title="Κλείσιμο"
                               aria-label="Κλείσιμο"
                             >
@@ -223,7 +223,7 @@ export default function ClientTicketsTab({
                           ) : (
                             <button
                               onClick={() => setEditingTicketId(ticket.id)}
-                              className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                              className="p-1 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded"
                               title="Επεξεργασία"
                               aria-label="Επεξεργασία"
                             >
@@ -232,7 +232,7 @@ export default function ClientTicketsTab({
                           )}
                           <button
                             onClick={() => setConfirmDeleteId(ticket.id)}
-                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            className="p-1 text-slate-400 hover:text-danger-600 hover:bg-danger-50 rounded"
                             title="Διαγραφή"
                             aria-label="Διαγραφή"
                           >

@@ -7,6 +7,7 @@ import { Modal, ConfirmDialog, ClientForm, Button, TableSkeleton } from '../comp
 import { useToast } from '../components/Toast';
 import { Users, Search, AlertCircle, RefreshCw, Plus, Edit2, Trash2, Eye, Download, Upload, FileDown, FileUp } from 'lucide-react';
 import type { Client, ClientFormData } from '../types';
+import { PageHeader, EmptyState, Badge } from '../components/ui';
 import { downloadClientsCSV, downloadClientsTemplate, useImportClients } from '../hooks/useExportImport';
 
 export default function Clients() {
@@ -144,17 +145,19 @@ export default function Clients() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Users className="w-6 h-6 text-blue-600" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Πελάτες</h1>
-            <p className="text-sm text-gray-500">{totalCount} συνολικά</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        className="mb-0"
+        title={
+          <span className="flex items-center gap-3">
+            <span className="p-2 bg-brand-50 rounded-lg">
+              <Users className="w-6 h-6 text-brand-600" />
+            </span>
+            Πελάτες
+          </span>
+        }
+        subtitle={`${totalCount} συνολικά`}
+        actions={
+          <>
           {/* Export/Import Dropdown */}
           <div className="relative" ref={exportMenuRef}>
             <Button
@@ -165,7 +168,7 @@ export default function Clients() {
               Εξαγωγή/Εισαγωγή
             </Button>
             {showExportMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50">
                 <button
                   onClick={async () => {
                     try {
@@ -176,7 +179,7 @@ export default function Clients() {
                     }
                     setShowExportMenu(false);
                   }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
                   <FileDown className="w-4 h-4" />
                   Εξαγωγή πελατών (Excel)
@@ -191,18 +194,18 @@ export default function Clients() {
                     }
                     setShowExportMenu(false);
                   }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
                   <FileDown className="w-4 h-4" />
                   Λήψη template Excel
                 </button>
-                <div className="border-t border-gray-100 my-1" />
+                <div className="border-t border-slate-100 my-1" />
                 <button
                   onClick={() => {
                     setIsImportModalOpen(true);
                     setShowExportMenu(false);
                   }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
                   <FileUp className="w-4 h-4" />
                   Εισαγωγή πελατών (Excel)
@@ -214,31 +217,32 @@ export default function Clients() {
             <Plus className="w-4 h-4 mr-2" />
             Νέος Πελάτης
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* Search Box */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
           <input
             type="text"
             placeholder="Αναζήτηση με επωνυμία ή ΑΦΜ..."
             aria-label="Αναζήτηση με επωνυμία ή ΑΦΜ"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg transition-colors duration-150 focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           />
         </div>
       </div>
 
       {/* Error Banner */}
       {isError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-danger-50 border border-danger-100 rounded-xl p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
-              <span className="text-red-700">
+              <AlertCircle className="w-5 h-5 text-danger-600 mr-2" />
+              <span className="text-danger-700">
                 Σφάλμα φόρτωσης: {error instanceof Error ? error.message : 'Άγνωστο σφάλμα'}
               </span>
             </div>
@@ -257,85 +261,86 @@ export default function Clients() {
 
       {/* Clients Table */}
       {!isLoading && !isError && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <p className="text-sm text-gray-600">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+            <p className="text-sm text-slate-600">
               {filteredClients.length} από {totalCount} πελάτες
               {searchTerm && ` (φίλτρο: "${searchTerm}")`}
             </p>
           </div>
 
           {filteredClients.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">
-              {searchTerm
-                ? 'Δεν βρέθηκαν πελάτες με αυτά τα κριτήρια αναζήτησης.'
-                : 'Δεν υπάρχουν πελάτες.'}
-            </div>
+            <EmptyState
+              icon={Users}
+              title={
+                searchTerm
+                  ? 'Δεν βρέθηκαν πελάτες με αυτά τα κριτήρια αναζήτησης.'
+                  : 'Δεν υπάρχουν πελάτες.'
+              }
+            />
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                         Επωνυμία
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                         ΑΦΜ
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                         Τηλέφωνο
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">
                         Email
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wide">
                         Ενέργειες
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="bg-white divide-y divide-slate-100">
                     {filteredClients.map((client) => (
-                      <tr key={client.id} className="hover:bg-gray-50 transition-colors">
+                      <tr key={client.id} className="hover:bg-slate-50 transition-colors duration-150">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Link to={`/clients/${client.id}`} className="flex items-center group">
-                            <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                              <span className="text-blue-600 font-medium text-sm">
+                          <Link to={`/clients/${client.id}`} className="flex items-center group cursor-pointer">
+                            <div className="flex-shrink-0 h-10 w-10 bg-brand-50 rounded-full flex items-center justify-center group-hover:bg-brand-100 transition-colors duration-150">
+                              <span className="text-brand-600 font-medium text-sm">
                                 {(client.eponimia || 'Π').charAt(0).toUpperCase()}
                               </span>
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                              <div className="text-sm font-medium text-slate-900 group-hover:text-brand-600 transition-colors duration-150">
                                 {client.eponimia}
                               </div>
                               {client.is_active === false && (
-                                <span className="inline-flex px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded">
-                                  Ανενεργός
-                                </span>
+                                <Badge variant="neutral">Ανενεργός</Badge>
                               )}
                             </div>
                           </Link>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="font-mono text-sm text-gray-900">{client.afm}</span>
+                          <span className="font-mono text-sm text-slate-900">{client.afm}</span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                           {client.kinito_tilefono || '-'}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                           {client.email || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <Link
                             to={`/clients/${client.id}`}
-                            className="text-gray-600 hover:text-gray-900 mr-3 p-1.5 hover:bg-gray-50 rounded-lg transition-colors inline-block"
+                            className="text-slate-600 hover:text-slate-900 mr-3 p-1.5 hover:bg-slate-50 rounded-lg transition-colors duration-150 inline-block cursor-pointer"
                             title="Προβολή"
                           >
                             <Eye className="w-4 h-4" />
                           </Link>
                           <button
                             onClick={() => handleEdit(client)}
-                            className="text-blue-600 hover:text-blue-900 mr-3 p-1.5 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="text-brand-600 hover:text-brand-800 mr-3 p-1.5 hover:bg-brand-50 rounded-lg transition-colors duration-150 cursor-pointer"
                             title="Επεξεργασία"
                             aria-label="Επεξεργασία"
                           >
@@ -343,7 +348,7 @@ export default function Clients() {
                           </button>
                           <button
                             onClick={() => handleDeleteClick(client)}
-                            className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                            className="text-danger-600 hover:text-danger-700 p-1.5 hover:bg-danger-50 rounded-lg transition-colors duration-150 cursor-pointer"
                             title="Διαγραφή"
                             aria-label="Διαγραφή"
                           >
@@ -358,7 +363,7 @@ export default function Clients() {
 
               {/* Load More */}
               {hasMore && !searchTerm && (
-                <div className="px-6 py-4 border-t border-gray-200 text-center">
+                <div className="px-6 py-4 border-t border-slate-200 text-center">
                   <Button variant="secondary" onClick={handleLoadMore}>
                     Φόρτωση περισσότερων ({loadedCount} από {totalCount})
                   </Button>
@@ -503,9 +508,9 @@ function ImportClientsModal({
 
         <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Upload className="w-5 h-5 text-blue-600" />
+          <div className="px-6 py-4 border-b border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Upload className="w-5 h-5 text-brand-600" />
               Εισαγωγή Πελατών
             </h3>
           </div>
@@ -514,7 +519,7 @@ function ImportClientsModal({
           <div className="px-6 py-4 space-y-4">
             {/* File Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
                 Αρχείο Excel (.xlsx)
               </label>
               <input
@@ -522,10 +527,10 @@ function ImportClientsModal({
                 type="file"
                 accept=".xlsx,.xls"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100"
               />
               {file && (
-                <p className="mt-2 text-sm text-gray-500">
+                <p className="mt-2 text-sm text-slate-500">
                   Επιλεγμένο: {file.name}
                 </p>
               )}
@@ -533,7 +538,7 @@ function ImportClientsModal({
 
             {/* Mode Selection */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
                 Τρόπος εισαγωγής
               </label>
               <div className="space-y-2">
@@ -544,9 +549,9 @@ function ImportClientsModal({
                     value="skip"
                     checked={mode === 'skip'}
                     onChange={() => setMode('skip')}
-                    className="w-4 h-4 text-blue-600"
+                    className="w-4 h-4 text-brand-600"
                   />
-                  <span className="text-sm text-gray-700">
+                  <span className="text-sm text-slate-700">
                     Παράλειψη υπαρχόντων (μόνο νέοι πελάτες)
                   </span>
                 </label>
@@ -557,9 +562,9 @@ function ImportClientsModal({
                     value="update"
                     checked={mode === 'update'}
                     onChange={() => setMode('update')}
-                    className="w-4 h-4 text-blue-600"
+                    className="w-4 h-4 text-brand-600"
                   />
-                  <span className="text-sm text-gray-700">
+                  <span className="text-sm text-slate-700">
                     Ενημέρωση υπαρχόντων (αντικατάσταση δεδομένων)
                   </span>
                 </label>
@@ -568,9 +573,9 @@ function ImportClientsModal({
 
             {/* Result */}
             {result && (
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">Αποτελέσματα:</h4>
-                <ul className="text-sm text-gray-600 space-y-1">
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <h4 className="font-medium text-slate-900 mb-2">Αποτελέσματα:</h4>
+                <ul className="text-sm text-slate-600 space-y-1">
                   <li>Δημιουργήθηκαν: {result.created_count}</li>
                   <li>Ενημερώθηκαν: {result.updated_count}</li>
                   {result.skipped_count !== undefined && (
@@ -579,8 +584,8 @@ function ImportClientsModal({
                 </ul>
                 {result.errors.length > 0 && (
                   <div className="mt-3">
-                    <h5 className="text-sm font-medium text-red-600">Σφάλματα:</h5>
-                    <ul className="text-xs text-red-500 mt-1 max-h-32 overflow-y-auto">
+                    <h5 className="text-sm font-medium text-danger-600">Σφάλματα:</h5>
+                    <ul className="text-xs text-danger-600 mt-1 max-h-32 overflow-y-auto">
                       {result.errors.map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
@@ -592,7 +597,7 @@ function ImportClientsModal({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+          <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
             <Button variant="secondary" onClick={handleClose}>
               Κλείσιμο
             </Button>
