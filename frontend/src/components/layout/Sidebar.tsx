@@ -69,7 +69,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <div className={`flex items-center h-16 px-3 border-b border-slate-700/60 ${isCollapsed ? 'justify-center' : 'justify-between px-4'}`}>
           {!isCollapsed && (
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-900/40">
+              <div className="w-9 h-9 bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-950/40">
                 <span className="text-white font-bold text-sm">LC</span>
               </div>
               <div className="min-w-0">
@@ -79,7 +79,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             </div>
           )}
           {isCollapsed && (
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/40">
+            <div className="w-9 h-9 bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl flex items-center justify-center shadow-lg shadow-brand-950/40">
               <span className="text-white font-bold text-sm">LC</span>
             </div>
           )}
@@ -87,7 +87,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
           {!isCollapsed && (
             <button
               onClick={onClose}
-              className="lg:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors"
+              className="lg:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
               aria-label="Κλείσιμο μενού"
             >
               <X size={20} className="text-slate-400" />
@@ -99,7 +99,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         <div className={`hidden lg:flex px-3 py-2 border-b border-slate-700/60 ${isCollapsed ? 'justify-center' : 'justify-end'}`}>
           <button
             onClick={onToggleCollapse}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
             aria-label={isCollapsed ? 'Επέκταση μενού' : 'Σύμπτυξη μενού'}
             title={isCollapsed ? 'Επέκταση μενού' : 'Σύμπτυξη μενού'}
           >
@@ -122,7 +122,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
               className={({ isActive }) =>
                 `group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
                   isActive
-                    ? 'bg-blue-600/15 text-white'
+                    ? 'bg-brand-600/20 text-white'
                     : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
                 } ${isCollapsed ? 'justify-center' : ''}`
               }
@@ -132,9 +132,9 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
                 <>
                   {/* Active indicator bar */}
                   {isActive && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r-full" />
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-brand-500 rounded-r-full" />
                   )}
-                  <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+                  <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
                     {item.icon}
                   </span>
                   {!isCollapsed && <span className="truncate">{item.label}</span>}
