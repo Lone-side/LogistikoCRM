@@ -110,6 +110,33 @@ export const clientsApi = {
   },
 };
 
+// Client credentials API (κωδικοί Taxisnet/ΕΦΚΑ/ΓΕΜΗ — πάντα masked)
+export const clientCredentialsApi = {
+  list: async (clientId: number) => {
+    const response = await apiClient.get(`api/v1/clients/${clientId}/credentials/`);
+    return response.data;
+  },
+
+  create: async (clientId: number, data: { service: string; label?: string; username?: string; secret?: string }) => {
+    const response = await apiClient.post(`api/v1/clients/${clientId}/credentials/`, data);
+    return response.data;
+  },
+
+  update: async (clientId: number, id: number, data: { service?: string; label?: string; username?: string; secret?: string }) => {
+    const response = await apiClient.patch(`api/v1/clients/${clientId}/credentials/${id}/`, data);
+    return response.data;
+  },
+
+  remove: async (clientId: number, id: number) => {
+    await apiClient.delete(`api/v1/clients/${clientId}/credentials/${id}/`);
+  },
+
+  reveal: async (clientId: number, id: number): Promise<{ secret: string }> => {
+    const response = await apiClient.post(`api/v1/clients/${clientId}/credentials/${id}/reveal/`);
+    return response.data;
+  },
+};
+
 // Obligations API functions
 export const obligationsApi = {
   getAll: async (params?: { search?: string; page?: number; page_size?: number; status?: string }) => {

@@ -15,6 +15,8 @@ from django.db.models import Count, Q
 
 from .models import ClientProfile, MonthlyObligation, ClientDocument
 from .serializers import ClientDocumentSerializer
+from .mixins import ClientScopedQuerysetMixin
+from .permissions import CanAccessClient
 
 
 class ClientPagination(PageNumberPagination):
@@ -100,10 +102,7 @@ class ClientDetailSerializer(serializers.ModelSerializer):
             # Tax info
             'eidos_ipoxreou', 'katigoria_vivlion', 'nomiki_morfi',
             'agrotis', 'imerominia_enarksis',
-            # Credentials
-            'onoma_xristi_taxisnet', 'kodikos_taxisnet',
-            'onoma_xristi_ika_ergodoti', 'kodikos_ika_ergodoti',
-            'onoma_xristi_gemi', 'kodikos_gemi',
+            # Τα credentials σερβίρονται μόνο από το /clients/<id>/credentials/
             # Related
             'afm_sizigou', 'afm_foreas', 'am_klidi',
             # Meta
@@ -158,10 +157,7 @@ class ClientCreateUpdateSerializer(serializers.ModelSerializer):
             # Tax info
             'eidos_ipoxreou', 'katigoria_vivlion', 'nomiki_morfi',
             'agrotis', 'imerominia_enarksis',
-            # Credentials
-            'onoma_xristi_taxisnet', 'kodikos_taxisnet',
-            'onoma_xristi_ika_ergodoti', 'kodikos_ika_ergodoti',
-            'onoma_xristi_gemi', 'kodikos_gemi',
+            # Τα credentials γράφονται μόνο μέσω /clients/<id>/credentials/
             # Related
             'afm_sizigou', 'afm_foreas', 'am_klidi',
             # Status
@@ -212,7 +208,7 @@ class ClientObligationNestedSerializer(serializers.ModelSerializer):
 # CLIENT VIEWSET
 # ============================================
 
-class ClientViewSet(viewsets.ModelViewSet):
+class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     REST API ViewSet for ClientProfile
 
@@ -226,8 +222,32 @@ class ClientViewSet(viewsets.ModelViewSet):
     - GET /api/clients/{id}/documents/ - Get client's documents
     """
     queryset = ClientProfile.objects.all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAccessClient]
+    client_field = 'assigned_users'
     pagination_class = ClientPagination
+
+    # Πεδία PII των οποίων οι αλλαγές καταγράφονται στο AuditLog
+    AUDITED_PII_FIELDS = [
+        'afm', 'amka', 'arithmos_taftotitas', 'prosopikos_arithmos', 'iban',
+        'diefthinsi_katoikias', 'diefthinsi_epixeirisis', 'email',
+        'kinito_tilefono', 'tilefono_oikias_1', 'tilefono_epixeirisis_1',
+    ]
+
+    def perform_update(self, serializer):
+        old = {f: getattr(serializer.instance, f, None) for f in self.AUDITED_PII_FIELDS}
+        instance = serializer.save()
+        changes = {}
+        for field in self.AUDITED_PII_FIELDS:
+            new_value = getattr(instance, field, None)
+            if old[field] != new_value:
+                changes[field] = {'old': old[field], 'new': new_value}
+        if changes:
+            from common.models import AuditLog
+            AuditLog.log(
+                user=self.request.user, action='update', obj=instance,
+                changes=changes, description='Αλλαγή προσωπικών δεδομένων πελάτη',
+                severity='medium', request=self.request,
+            )
 
     def get_permissions(self):
         # Διαγραφή πελάτη (και όλου του ιστορικού του) μόνο από admins

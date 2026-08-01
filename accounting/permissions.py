@@ -110,3 +110,22 @@ class IsLocalRequest(BasePermission):
 
         logger.info(f"IsLocalRequest: ❌ DENIED - IP '{client_ip}' not in allowed list: {self.ALLOWED_IPS}")
         return False
+
+
+class CanAccessClient(BasePermission):
+    """
+    Object-level permission: πρόσβαση μόνο σε ανατεθειμένους πελάτες.
+
+    Ενεργό μόνο όταν settings.ENFORCE_CLIENT_ASSIGNMENT=True. Superusers
+    και χρήστες με accounting.view_all_clients περνούν πάντα.
+    Το object μπορεί να είναι ClientProfile ή οποιοδήποτε μοντέλο με .client.
+    """
+
+    def has_object_permission(self, request, view, obj):
+        from accounting.mixins import user_sees_all_clients
+        if user_sees_all_clients(request.user):
+            return True
+        client = obj if hasattr(obj, 'assigned_users') else getattr(obj, 'client', None)
+        if client is None:
+            return True
+        return client.assigned_users.filter(pk=request.user.pk).exists()

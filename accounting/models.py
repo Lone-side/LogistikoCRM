@@ -76,16 +76,19 @@ class ClientProfile(models.Model):
     agrotis = models.BooleanField('Αγρότης', default=False)
     imerominia_enarksis = models.DateField('Ημ/νία Έναρξης Εργασιών', null=True, blank=True)
     
-    onoma_xristi_taxisnet = models.CharField('Όνομα Χρήστη Taxis Net', max_length=100, blank=True, null=True, default='')
-    kodikos_taxisnet = models.CharField('Κωδικός Taxis Net', max_length=100, blank=True, null=True, default='')
-    onoma_xristi_ika_ergodoti = models.CharField('Όνομα Χρήστη Ι.Κ.Α. Εργοδότη', max_length=100, blank=True, null=True, default='')
-    kodikos_ika_ergodoti = models.CharField('Κωδικός Ι.Κ.Α. Εργοδότη', max_length=100, blank=True, null=True, default='')
-    onoma_xristi_gemi = models.CharField('Όνομα Χρήστη Γ.Ε.ΜΗ.', max_length=100, blank=True, null=True, default='')
-    kodikos_gemi = models.CharField('Κωδικός Γ.Ε.ΜΗ.', max_length=100, blank=True, null=True, default='')
-    
+    # Οι κωδικοί Taxisnet/ΕΦΚΑ/ΓΕΜΗ μεταφέρθηκαν στο ClientCredential
+    # (κρυπτογραφημένοι) — βλ. migrations 10015-10017.
+
     afm_sizigou = models.CharField('Α.Φ.Μ Συζύγου', max_length=20, blank=True, null=True, default='')
     afm_foreas = models.CharField('Α.Φ.Μ. Φορέας', max_length=20, blank=True, null=True, default='')
     am_klidi = models.CharField('ΑΜ ΚΛΕΙΔΙ', max_length=50, blank=True, null=True, default='')
+
+    # RBAC: χρήστες (λογιστές) στους οποίους έχει ανατεθεί ο πελάτης.
+    # Ενεργό μόνο όταν settings.ENFORCE_CLIENT_ASSIGNMENT=True.
+    assigned_users = models.ManyToManyField(
+        User, blank=True, related_name='assigned_clients',
+        verbose_name='Ανατεθειμένοι Χρήστες',
+    )
 
     # PERFORMANCE: Add index for frequently filtered fields
     is_active = models.BooleanField('Ενεργός', default=True, db_index=True)
@@ -100,9 +103,84 @@ class ClientProfile(models.Model):
             models.Index(fields=['is_active', 'eponimia'], name='client_active_name_idx'),
             models.Index(fields=['company'], name='client_company_idx'),
         ]
+        permissions = [
+            ('view_all_clients', 'Πρόσβαση σε όλους τους πελάτες ανεξαρτήτως ανάθεσης'),
+        ]
 
     def __str__(self):
         return f"{self.afm} - {self.eponimia}"
+
+
+class ClientCredential(models.Model):
+    """
+    Κωδικοί πρόσβασης πελάτη σε εξωτερικές υπηρεσίες (Taxisnet, ΕΦΚΑ, ΓΕΜΗ).
+
+    Το secret αποθηκεύεται ΠΑΝΤΑ κρυπτογραφημένο (Fernet, mydata/encryption.py)
+    και δεν επιστρέφεται ποτέ από το API παρά μόνο μέσω του reveal action,
+    το οποίο απαιτεί το permission view_client_credential_secret και
+    καταγράφεται στο AuditLog.
+    """
+
+    class Service(models.TextChoices):
+        TAXISNET = 'TAXISNET', 'Taxisnet'
+        EFKA = 'EFKA', 'ΕΦΚΑ / ΙΚΑ Εργοδότη'
+        GEMI = 'GEMI', 'Γ.Ε.ΜΗ.'
+        OTHER = 'OTHER', 'Άλλο'
+
+    client = models.ForeignKey(
+        ClientProfile, on_delete=models.CASCADE,
+        related_name='credentials', verbose_name='Πελάτης',
+    )
+    service = models.CharField(
+        'Υπηρεσία', max_length=20, choices=Service.choices,
+    )
+    label = models.CharField(
+        'Ετικέτα', max_length=100, blank=True, default='',
+        help_text='Περιγραφή για υπηρεσίες τύπου «Άλλο» ή πολλαπλούς λογαριασμούς',
+    )
+    username = models.CharField('Όνομα Χρήστη', max_length=100, blank=True, default='')
+    _secret_encrypted = models.TextField(
+        'Κρυπτογραφημένος Κωδικός', blank=True, default='',
+        help_text='Fernet-encrypted — μην επεξεργάζεστε απευθείας',
+    )
+    created_at = models.DateTimeField('Δημιουργήθηκε', auto_now_add=True)
+    updated_at = models.DateTimeField('Ενημερώθηκε', auto_now=True)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Τελευταία αλλαγή από',
+    )
+
+    class Meta:
+        verbose_name = 'Κωδικός Πελάτη'
+        verbose_name_plural = 'Κωδικοί Πελατών'
+        unique_together = [('client', 'service', 'label')]
+        permissions = [
+            ('view_client_credential_secret', 'Αποκάλυψη κωδικών πελατών'),
+        ]
+
+    def __str__(self):
+        suffix = f" ({self.label})" if self.label else ""
+        return f"{self.client.afm} - {self.get_service_display()}{suffix}"
+
+    @property
+    def secret(self):
+        """Αποκρυπτογραφημένο secret (ή None)."""
+        if not self._secret_encrypted:
+            return None
+        from mydata.encryption import safe_decrypt
+        return safe_decrypt(self._secret_encrypted)
+
+    @secret.setter
+    def secret(self, value):
+        if value:
+            from mydata.encryption import encrypt_value
+            self._secret_encrypted = encrypt_value(value)
+        else:
+            self._secret_encrypted = ''
+
+    @property
+    def has_secret(self):
+        return bool(self._secret_encrypted)
 
 
 class ObligationGroup(models.Model):

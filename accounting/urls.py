@@ -13,6 +13,7 @@ from rest_framework.routers import DefaultRouter
 from . import views_main as views
 from . import api_auth
 from .api_clients import ClientViewSet
+from .api_credentials import ClientCredentialViewSet
 from .api_obligations import ObligationViewSet, ObligationTypeViewSet
 from .api_dashboard import (
     dashboard_stats,
@@ -307,6 +308,26 @@ urlpatterns = [
     # Πριν το router ώστε να μην το «πιάνει» το detail route documents/<pk>/
     path("api/documents/suggest/", suggest_document_metadata, name="api_suggest_document_metadata_legacy"),
     path("api/v1/documents/suggest/", suggest_document_metadata, name="api_suggest_document_metadata"),
+
+    # CLIENT CREDENTIALS (κρυπτογραφημένοι κωδικοί — masked API + reveal)
+    path(
+        "api/v1/clients/<int:client_pk>/credentials/",
+        ClientCredentialViewSet.as_view({'get': 'list', 'post': 'create'}),
+        name="client_credentials_list",
+    ),
+    path(
+        "api/v1/clients/<int:client_pk>/credentials/<int:pk>/",
+        ClientCredentialViewSet.as_view({
+            'get': 'retrieve', 'put': 'update',
+            'patch': 'partial_update', 'delete': 'destroy',
+        }),
+        name="client_credentials_detail",
+    ),
+    path(
+        "api/v1/clients/<int:client_pk>/credentials/<int:pk>/reveal/",
+        ClientCredentialViewSet.as_view({'post': 'reveal'}),
+        name="client_credentials_reveal",
+    ),
 
     # REST ROUTER
     path("api/", include(router.urls)),

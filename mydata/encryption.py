@@ -1,14 +1,19 @@
 # mydata/encryption.py
 """
-Encryption utilities για myDATA credentials.
+Encryption utilities για ευαίσθητα δεδομένα (myDATA, SMTP, κωδικοί πελατών).
 
 Χρησιμοποιεί Fernet (symmetric encryption) από το cryptography package.
-Το encryption key αποθηκεύεται στο Django SECRET_KEY.
 
-SECURITY NOTES:
-- Τα credentials κρυπτογραφούνται πριν αποθηκευτούν στη βάση
-- Το SECRET_KEY ΠΡΕΠΕΙ να είναι ασφαλές και να μην αλλάζει
-- Αν αλλάξει το SECRET_KEY, τα encrypted credentials θα χαθούν
+Κλειδιά (με σειρά προτεραιότητας):
+- DATA_ENCRYPTION_KEY_CURRENT: το ενεργό κλειδί (Fernet key). Νέες
+  κρυπτογραφήσεις γίνονται ΠΑΝΤΑ με αυτό.
+- DATA_ENCRYPTION_KEY_PREVIOUS: προηγούμενο κλειδί, μόνο για αποκρυπτογράφηση
+  κατά τη διάρκεια rotation.
+- Legacy: SHA-256(SECRET_KEY) — μόνο για αποκρυπτογράφηση παλιών δεδομένων.
+  Αν δεν έχει οριστεί DATA_ENCRYPTION_KEY_CURRENT, χρησιμοποιείται και για
+  κρυπτογράφηση (με warning).
+
+Rotation: python manage.py rotate_encryption_key
 """
 
 import base64
@@ -16,29 +21,59 @@ import hashlib
 import logging
 from typing import Optional
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+_warned_legacy = False
 
-def _get_fernet_key() -> bytes:
+
+def _legacy_fernet_key() -> bytes:
     """
-    Δημιουργεί ένα valid Fernet key από το Django SECRET_KEY.
+    Παλιό (legacy) Fernet key παραγόμενο από το Django SECRET_KEY.
 
-    Fernet απαιτεί 32-byte URL-safe base64-encoded key.
-    Χρησιμοποιούμε SHA-256 hash του SECRET_KEY για consistency.
+    Διατηρείται ΜΟΝΟ για αποκρυπτογράφηση δεδομένων που γράφτηκαν πριν
+    την εισαγωγή του DATA_ENCRYPTION_KEY_CURRENT.
     """
     secret = settings.SECRET_KEY.encode('utf-8')
-    # SHA-256 produces 32 bytes
     key_hash = hashlib.sha256(secret).digest()
-    # Fernet needs URL-safe base64
     return base64.urlsafe_b64encode(key_hash)
 
 
-def _get_fernet() -> Fernet:
-    """Get Fernet instance με το derived key."""
-    return Fernet(_get_fernet_key())
+def _configured_key(name: str) -> Optional[bytes]:
+    """Διαβάζει και επικυρώνει ένα Fernet key από τα settings."""
+    value = getattr(settings, name, None) or None
+    if not value:
+        return None
+    key = value.encode('utf-8') if isinstance(value, str) else value
+    Fernet(key)  # validation — ρίχνει ValueError σε άκυρο κλειδί
+    return key
+
+
+def _get_fernet() -> MultiFernet:
+    """
+    MultiFernet: κρυπτογράφηση με το πρώτο key (CURRENT ή legacy fallback),
+    αποκρυπτογράφηση με όλα (CURRENT → PREVIOUS → legacy).
+    """
+    global _warned_legacy
+    keys = []
+    current = _configured_key('DATA_ENCRYPTION_KEY_CURRENT')
+    if current:
+        keys.append(current)
+    else:
+        if not _warned_legacy:
+            logger.warning(
+                "DATA_ENCRYPTION_KEY_CURRENT δεν έχει οριστεί — χρήση legacy "
+                "κλειδιού από SECRET_KEY. Όρισε ανεξάρτητο κλειδί "
+                "(manage.py rotate_encryption_key --generate)."
+            )
+            _warned_legacy = True
+    previous = _configured_key('DATA_ENCRYPTION_KEY_PREVIOUS')
+    if previous:
+        keys.append(previous)
+    keys.append(_legacy_fernet_key())
+    return MultiFernet([Fernet(k) for k in keys])
 
 
 def encrypt_value(plain_text: str) -> str:

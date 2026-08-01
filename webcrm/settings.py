@@ -34,6 +34,29 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # print(get_random_secret_key())
 SECRET_KEY = os.getenv('SECRET_KEY', 'default-key-for-development')
 
+# Ανεξάρτητο κλειδί κρυπτογράφησης δεδομένων (Fernet) — δείτε mydata/encryption.py.
+# Δημιουργία: python manage.py rotate_encryption_key --generate
+DATA_ENCRYPTION_KEY_CURRENT = os.getenv('DATA_ENCRYPTION_KEY_CURRENT', '')
+DATA_ENCRYPTION_KEY_PREVIOUS = os.getenv('DATA_ENCRYPTION_KEY_PREVIOUS', '')
+DATA_ENCRYPTION_KEY_ID = os.getenv('DATA_ENCRYPTION_KEY_ID', '')
+
+for _key_name in ('DATA_ENCRYPTION_KEY_CURRENT', 'DATA_ENCRYPTION_KEY_PREVIOUS'):
+    _key_value = locals()[_key_name]
+    if _key_value:
+        try:
+            from cryptography.fernet import Fernet as _Fernet
+            _Fernet(_key_value.encode('utf-8'))
+        except Exception as _exc:
+            from django.core.exceptions import ImproperlyConfigured
+            raise ImproperlyConfigured(
+                f"Το {_key_name} δεν είναι έγκυρο Fernet key: {_exc}"
+            )
+
+# RBAC: όταν True, οι χρήστες βλέπουν μόνο πελάτες στους οποίους είναι
+# ανατεθειμένοι (assigned_users), εκτός από superusers και όσους έχουν
+# το permission accounting.view_all_clients.
+ENFORCE_CLIENT_ASSIGNMENT = os.getenv('ENFORCE_CLIENT_ASSIGNMENT', 'False').lower() in ('true', '1', 'yes')
+
 # Add your hosts to the list (configured below)
 
 # Database - SECURITY FIX: Use environment variables

@@ -84,12 +84,7 @@ def export_clients_to_excel(queryset=None):
         ('nomiki_morfi', 'Νομική Μορφή'),
         ('agrotis', 'Αγρότης'),
         ('imerominia_enarksis', 'Ημ/νία Έναρξης Εργασιών'),
-        ('onoma_xristi_taxisnet', 'Όνομα Χρήστη Taxis Net'),
-        ('kodikos_taxisnet', 'Κωδικός Taxis Net'),
-        ('onoma_xristi_ika_ergodoti', 'Όνομα Χρήστη Ι.Κ.Α. Εργοδότη'),
-        ('kodikos_ika_ergodoti', 'Κωδικός Ι.Κ.Α. Εργοδότη'),
-        ('onoma_xristi_gemi', 'Όνομα Χρήστη Γ.Ε.ΜΗ.'),
-        ('kodikos_gemi', 'Κωδικός Γ.Ε.ΜΗ.'),
+        # Οι κωδικοί Taxisnet/ΕΦΚΑ/ΓΕΜΗ δεν εξάγονται πλέον (ClientCredential)
         ('afm_sizigou', 'Α.Φ.Μ Συζύγου'),
         ('afm_foreas', 'Α.Φ.Μ. Φορέας'),
         ('am_klidi', 'ΑΜ ΚΛΕΙΔΙ'),

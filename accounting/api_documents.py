@@ -174,7 +174,11 @@ class DocumentUploadSerializer(serializers.Serializer):
 # DOCUMENT VIEWSET
 # ============================================
 
-class DocumentViewSet(viewsets.ModelViewSet):
+from .mixins import ClientScopedQuerysetMixin
+from .permissions import CanAccessClient
+
+
+class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     REST API ViewSet for ClientDocument
 
@@ -186,7 +190,8 @@ class DocumentViewSet(viewsets.ModelViewSet):
     """
     queryset = ClientDocument.objects.all()
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAccessClient]
+    client_field = 'client__assigned_users'
     pagination_class = DocumentPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = DocumentFilter

@@ -20,6 +20,8 @@ export type { ClientCallsTabProps, CallItem } from './ClientCallsTab';
 export { default as ClientTicketsTab } from './ClientTicketsTab';
 export type { ClientTicketsTabProps, TicketUpdateData } from './ClientTicketsTab';
 
+export { default as ClientCredentialsTab } from './ClientCredentialsTab';
+
 export { default as ClientNotesTab } from './ClientNotesTab';
 export type { ClientNotesTabProps } from './ClientNotesTab';
 
