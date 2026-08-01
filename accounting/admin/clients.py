@@ -66,6 +66,7 @@ from .mixins import VoIPCallInline, TicketInline, ClientProfileDocumentInline
 
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
+    filter_horizontal = ('assigned_users',)
     # VoIP Call History, Tickets & Documents Inline
     inlines = [VoIPCallInline, TicketInline, ClientProfileDocumentInline]
 
@@ -216,10 +217,8 @@ class ClientProfileAdmin(admin.ModelAdmin):
             'fields': ('eidos_ipoxreou', 'katigoria_vivlion', 'nomiki_morfi',
                       'agrotis', 'imerominia_enarksis')
         }),
-        ('Διαπιστευτήρια', {
-            'fields': ('onoma_xristi_taxisnet', 'kodikos_taxisnet',
-                      'onoma_xristi_ika_ergodoti', 'kodikos_ika_ergodoti',
-                      'onoma_xristi_gemi', 'kodikos_gemi'),
+        ('Ανάθεση (RBAC)', {
+            'fields': ('assigned_users',),
             'classes': ('collapse',)
         }),
         ('Λοιπά', {
@@ -722,3 +721,26 @@ class DocumentRequestAdmin(admin.ModelAdmin):
     inlines = [DocumentRequestItemInline]
     readonly_fields = ['last_reminder_sent_at', 'reminder_count',
                        'completed_at', 'created_at']
+
+
+# ============================================
+# CLIENT CREDENTIALS (κρυπτογραφημένοι κωδικοί)
+# ============================================
+
+from ..models import ClientCredential  # noqa: E402
+
+
+@admin.register(ClientCredential)
+class ClientCredentialAdmin(admin.ModelAdmin):
+    """Admin κωδικών πελατών — το secret δεν εμφανίζεται ποτέ."""
+    list_display = ['client', 'service', 'label', 'username',
+                    'has_secret_display', 'updated_at', 'updated_by']
+    list_filter = ['service']
+    search_fields = ['client__eponimia', 'client__afm', 'username']
+    autocomplete_fields = ['client']
+    exclude = ['_secret_encrypted']
+    readonly_fields = ['created_at', 'updated_at', 'updated_by']
+
+    @admin.display(description='Έχει κωδικό', boolean=True)
+    def has_secret_display(self, obj):
+        return obj.has_secret

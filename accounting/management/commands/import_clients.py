@@ -156,6 +156,12 @@ class Command(BaseCommand):
                 # Real import with transaction
                 with transaction.atomic():
                     afm = row_data.pop('afm')
+
+                    # Τα credential πεδία πάνε στο ClientCredential (κρυπτογραφημένα)
+                    from accounting.services.credentials import (
+                        extract_legacy_credentials, store_client_credentials,
+                    )
+                    credentials = extract_legacy_credentials(row_data)
                     
                     # Check if exists
                     exists = ClientProfile.objects.filter(afm=afm).exists()
@@ -178,7 +184,11 @@ class Command(BaseCommand):
                         afm=afm,
                         defaults=row_data
                     )
-                    
+
+                    if credentials:
+                        store_client_credentials(client, credentials)
+
+
                     if created:
                         stats['created'] += 1
                         self.stdout.write(

@@ -13,6 +13,7 @@ import {
   RefreshCw,
   ClipboardList,
   FolderOpen,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '../components';
 import { Badge, StatCard } from '../components/ui';
@@ -47,6 +48,7 @@ import {
   ClientCallsTab,
   ClientTicketsTab,
   ClientNotesTab,
+  ClientCredentialsTab,
   UploadModal,
   CreateTicketModal,
   ClientPortalLinkModal,
@@ -54,7 +56,7 @@ import {
 } from '../components/client';
 
 // Tab type
-type TabType = 'info' | 'obligations' | 'profile' | 'documents' | 'emails' | 'calls' | 'tickets' | 'notes';
+type TabType = 'info' | 'obligations' | 'profile' | 'documents' | 'emails' | 'calls' | 'tickets' | 'notes' | 'credentials';
 
 // Tab configuration
 const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
@@ -66,6 +68,7 @@ const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
   { id: 'calls', label: 'Κλήσεις', icon: Phone },
   { id: 'tickets', label: 'Tickets', icon: Ticket },
   { id: 'notes', label: 'Σημειώσεις', icon: StickyNote },
+  { id: 'credentials', label: 'Κωδικοί', icon: KeyRound },
 ];
 
 export default function ClientDetails() {
@@ -402,6 +405,11 @@ export default function ClientDetails() {
               isEditing={isEditing}
               onFieldChange={handleFieldChange}
             />
+          )}
+
+          {/* CREDENTIALS TAB */}
+          {activeTab === 'credentials' && (
+            <ClientCredentialsTab clientId={clientId} />
           )}
         </div>
       </div>

@@ -9,7 +9,6 @@ import {
   Building2,
   MapPin,
   CreditCard,
-  Key,
   RefreshCw,
   ExternalLink,
   Save,
@@ -263,28 +262,6 @@ export default function ClientInfoTab({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FieldRow label="Τράπεζα">{renderField('trapeza')}</FieldRow>
           <FieldRow label="IBAN">{renderField('iban')}</FieldRow>
-        </div>
-      </section>
-
-      {/* Credentials Section */}
-      <section>
-        <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-900 mb-4">
-          <Key className="w-5 h-5 text-danger-600" />
-          Διαπιστευτήρια (TAXISnet, ΙΚΑ, ΓΕΜΗ)
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <FieldRow label="TAXISnet Χρήστης">{renderField('onoma_xristi_taxisnet')}</FieldRow>
-          <FieldRow label="TAXISnet Κωδικός">
-            {isEditing ? renderField('kodikos_taxisnet') : '••••••••'}
-          </FieldRow>
-          <FieldRow label="ΙΚΑ Χρήστης">{renderField('onoma_xristi_ika_ergodoti')}</FieldRow>
-          <FieldRow label="ΙΚΑ Κωδικός">
-            {isEditing ? renderField('kodikos_ika_ergodoti') : '••••••••'}
-          </FieldRow>
-          <FieldRow label="ΓΕΜΗ Χρήστης">{renderField('onoma_xristi_gemi')}</FieldRow>
-          <FieldRow label="ΓΕΜΗ Κωδικός">
-            {isEditing ? renderField('kodikos_gemi') : '••••••••'}
-          </FieldRow>
         </div>
       </section>
 

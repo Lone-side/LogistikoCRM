@@ -242,13 +242,7 @@ export interface ClientFull {
   nomiki_morfi?: string | null;
   agrotis?: boolean;
   imerominia_enarksis?: string | null;
-  // Credentials
-  onoma_xristi_taxisnet?: string | null;
-  kodikos_taxisnet?: string | null;
-  onoma_xristi_ika_ergodoti?: string | null;
-  kodikos_ika_ergodoti?: string | null;
-  onoma_xristi_gemi?: string | null;
-  kodikos_gemi?: string | null;
+  // Τα credentials σερβίρονται μόνο από το /clients/:id/credentials/ (ClientCredential)
   // Related
   afm_sizigou?: string | null;
   afm_foreas?: string | null;
@@ -831,4 +825,27 @@ export const DEADLINE_TYPE_OPTIONS = [
   { value: 'specific_day', label: 'Συγκεκριμένη ημέρα' },
   { value: 'last_day_prev', label: 'Τέλος προηγ. μήνα' },
   { value: 'last_day_next', label: 'Τέλος επόμ. μήνα' },
+];
+
+// ===== Client Credentials (κωδικοί Taxisnet/ΕΦΚΑ/ΓΕΜΗ) =====
+export type CredentialService = 'TAXISNET' | 'EFKA' | 'GEMI' | 'OTHER';
+
+export interface ClientCredential {
+  id: number;
+  service: CredentialService;
+  service_display: string;
+  label: string;
+  username: string;
+  secret_masked: string;
+  has_secret: boolean;
+  created_at: string;
+  updated_at: string;
+  updated_by_name: string | null;
+}
+
+export const CREDENTIAL_SERVICE_OPTIONS: { value: CredentialService; label: string }[] = [
+  { value: 'TAXISNET', label: 'Taxisnet' },
+  { value: 'EFKA', label: 'ΕΦΚΑ / ΙΚΑ Εργοδότη' },
+  { value: 'GEMI', label: 'Γ.Ε.ΜΗ.' },
+  { value: 'OTHER', label: 'Άλλο' },
 ];

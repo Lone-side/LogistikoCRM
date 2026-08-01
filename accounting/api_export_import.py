@@ -351,6 +351,12 @@ def import_clients_csv(request):
                 if 'eidos_ipoxreou' not in row_data or not row_data['eidos_ipoxreou']:
                     row_data['eidos_ipoxreou'] = 'professional'
 
+                # Τα credential πεδία πάνε στο ClientCredential (κρυπτογραφημένα)
+                from accounting.services.credentials import (
+                    extract_legacy_credentials, store_client_credentials,
+                )
+                credentials = extract_legacy_credentials(row_data)
+
                 # Check if client exists
                 existing = ClientProfile.objects.filter(afm=afm).first()
 
@@ -361,13 +367,17 @@ def import_clients_csv(request):
                             if field != 'afm' and value:
                                 setattr(existing, field, value)
                         existing.save()
+                        if credentials:
+                            store_client_credentials(existing, credentials, updated_by=request.user)
                         updated_count += 1
                     else:
                         skipped_count += 1
                 else:
                     # Create new client
                     row_data['is_active'] = True
-                    ClientProfile.objects.create(**row_data)
+                    new_client = ClientProfile.objects.create(**row_data)
+                    if credentials:
+                        store_client_credentials(new_client, credentials, updated_by=request.user)
                     created_count += 1
 
         return Response({

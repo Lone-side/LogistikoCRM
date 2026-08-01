@@ -223,7 +223,11 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
 # OBLIGATION VIEWSET
 # ============================================
 
-class ObligationViewSet(viewsets.ModelViewSet):
+from .mixins import ClientScopedQuerysetMixin
+from .permissions import CanAccessClient
+
+
+class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     REST API ViewSet for MonthlyObligation
 
@@ -236,7 +240,8 @@ class ObligationViewSet(viewsets.ModelViewSet):
     - DELETE /api/obligations/{id}/ - Delete
     """
     queryset = MonthlyObligation.objects.all()
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAccessClient]
+    client_field = 'client__assigned_users'
     pagination_class = ObligationPagination
 
     def get_permissions(self):

@@ -2,7 +2,13 @@
 
 ## 📋 Επισκόπηση Project
 
-**LogistikoCRM** είναι ένα production-ready Django CRM σύστημα ειδικά σχεδιασμένο για ελληνικά λογιστικά γραφεία. Βασίζεται στο open-source Django-CRM με εξειδικευμένες λειτουργίες για λογιστική και φορολογική συμμόρφωση.
+**LogistikoCRM** είναι ένα Django CRM σύστημα ειδικά σχεδιασμένο για ελληνικά λογιστικά γραφεία. Βασίζεται στο open-source Django-CRM με εξειδικευμένες λειτουργίες για λογιστική και φορολογική συμμόρφωση. Έχει production υποδομή (Docker, nginx, backups), αλλά **δεν θεωρείται πλήρως production-ready πριν ολοκληρωθεί το security hardening** (credentials, RBAC — βλ. skills).
+
+> ⚠️ **Φορολογική γνώση**: Ό,τι φορολογικό αναφέρεται σε αυτό το αρχείο
+> (προθεσμίες, τύποι υποχρεώσεων) είναι ενδεικτικό για κατανόηση του domain,
+> ΟΧΙ authoritative. Πριν από κάθε αλλαγή φορολογικής λογικής διάβασε το skill
+> `.claude/skills/greek-tax-domain/`. Για secrets/κωδικούς: `credentials-and-secrets`.
+> Για κάθε νέο endpoint: `django-security`.
 
 **Βασικά χαρακτηριστικά:**
 - Enterprise-grade CRM με ενσωμάτωση myDATA (ΑΑΔΕ)
@@ -70,7 +76,7 @@
 - **Search:** PostgreSQL full-text search με SearchVector
 
 ### Frontend
-- **React:** 19.2 με Create React App
+- **React:** 19.2 με Vite 7 + TypeScript
 - **Styling:** Tailwind CSS 4.x
 - **Charts:** Recharts
 - **HTTP Client:** Axios
@@ -162,7 +168,10 @@ def validate_afm(afm):
 | ΕΝΦΙΑ | Ενιαίος Φόρος Ιδιοκτησίας | Ετήσια | Σεπτέμβριος |
 | Ε1 | Δήλωση Φορολογίας Εισοδήματος | Ετήσια | Ιούλιος |
 | Ε3 | Κατάσταση Οικονομικών Στοιχείων | Ετήσια | Ιούλιος |
-| ΜΥΦ | Συγκεντρωτικές Καταστάσεις | Μηνιαία | 20η μήνα |
+| ~~ΜΥΦ~~ | Συγκεντρωτικές Καταστάσεις — **παρωχημένο, αντικαταστάθηκε από myDATA· μην προστίθεται νέα λογική** | — | — |
+
+> Οι παραπάνω προθεσμίες είναι ενδεικτικές — η αλήθεια ζει στα μοντέλα
+> `ObligationType`/`ClientObligation` και στις πηγές του skill `greek-tax-domain`.
 
 ### Δομή Αρχειοθέτησης
 ```
