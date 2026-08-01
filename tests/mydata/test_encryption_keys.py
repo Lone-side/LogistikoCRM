@@ -15,7 +15,13 @@ KEY_A = Fernet.generate_key().decode()
 KEY_B = Fernet.generate_key().decode()
 
 
+# Το CI (και πιθανόν το περιβάλλον του developer) ορίζει DATA_ENCRYPTION_KEY_CURRENT.
+# Τα «legacy» σενάρια πρέπει να καρφώνουν ρητά την απουσία κλειδιών.
+NO_KEYS = dict(DATA_ENCRYPTION_KEY_CURRENT=None, DATA_ENCRYPTION_KEY_PREVIOUS=None)
+
+
 class EncryptionKeyTest(TestCase):
+    @override_settings(**NO_KEYS)
     def test_legacy_roundtrip_without_current_key(self):
         encrypted = encryption.encrypt_value('δοκιμή')
         self.assertTrue(encryption.is_encrypted(encrypted))
@@ -27,7 +33,8 @@ class EncryptionKeyTest(TestCase):
         self.assertEqual(encryption.decrypt_value(encrypted), 'secret')
 
     def test_legacy_data_still_decrypts_after_current_key_set(self):
-        legacy_encrypted = encryption.encrypt_value('παλιό-secret')
+        with override_settings(**NO_KEYS):
+            legacy_encrypted = encryption.encrypt_value('παλιό-secret')
         with override_settings(DATA_ENCRYPTION_KEY_CURRENT=KEY_A):
             self.assertEqual(encryption.decrypt_value(legacy_encrypted), 'παλιό-secret')
 
@@ -47,7 +54,8 @@ class RotateCommandTest(TestCase):
             afm='123456789', eponimia='ΔΟΚΙΜΗ', eidos_ipoxreou='company',
         )
         cred = ClientCredential(client=client, service='TAXISNET', username='u')
-        cred.secret = 'rotate-me'
+        with override_settings(**NO_KEYS):  # κρυπτογράφηση με legacy κλειδί
+            cred.secret = 'rotate-me'
         cred.save()
         return cred
 
@@ -57,6 +65,7 @@ class RotateCommandTest(TestCase):
         key_line = out.getvalue().strip().splitlines()[0]
         Fernet(key_line.encode())  # έγκυρο Fernet key
 
+    @override_settings(**NO_KEYS)
     def test_requires_current_key(self):
         from django.core.management.base import CommandError
         with self.assertRaises(CommandError):
