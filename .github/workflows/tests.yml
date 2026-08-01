@@ -39,6 +39,10 @@ jobs:
       DEBUG: 'False'
       SECRET_KEY: 'test-secret-key-for-ci-only'
       FRITZ_API_TOKEN: 'test-fritz-token-for-ci-only'
+      # CI-only Fernet key (το production hard-fail απαιτεί έγκυρο κλειδί
+      # και ρητή απόφαση για το RBAC ακόμη και στο migrate step)
+      DATA_ENCRYPTION_KEY_CURRENT: 'jhgAUo9ScsDy8CjlAM8XO5cFANKz_Nb2i01amVUla0c='
+      ALLOW_UNSCOPED_CLIENT_ACCESS: 'True'
       DB_ENGINE: 'django.db.backends.postgresql'
       DB_NAME: 'test_db'
       DB_USER: 'test_user'
