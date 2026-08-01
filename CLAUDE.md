@@ -10,6 +10,21 @@
 > `.claude/skills/greek-tax-domain/`. Για secrets/κωδικούς: `credentials-and-secrets`.
 > Για κάθε νέο endpoint: `django-security`.
 
+### 📚 Project Skills (`.claude/skills/`)
+| Skill | Πότε |
+|-------|------|
+| `logistiko-architecture` | Αρχή session / άγνωστη περιοχή codebase |
+| `django-security` | Κάθε νέο/αλλαγμένο endpoint, serializer, permission |
+| `credentials-and-secrets` | Ό,τι αγγίζει κωδικούς, secrets, encryption |
+| `greek-tax-domain` | Κάθε φορολογική λογική/προθεσμία |
+| `obligation-engine` | Αλλαγές στον μηχανισμό υποχρεώσεων |
+| `mydata-integration` | Αλλαγές στο mydata/ app ή ροή τιμολογίων |
+| `django-migrations` | Κάθε αλλαγή σε models/migrations |
+| `testing-and-release` | Κάθε PR, bugfix, push |
+
+Backlog skills (θα γραφτούν όταν αγγίξουμε τα αντίστοιχα κομμάτια):
+`client-data-model`, `document-filing`, `api-contracts`, `react-design-system`, `gdpr-audit`.
+
 **Βασικά χαρακτηριστικά:**
 - Enterprise-grade CRM με ενσωμάτωση myDATA (ΑΑΔΕ)
 - Django 5.x backend με επιλογή React.js frontend
