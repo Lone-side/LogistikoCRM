@@ -142,3 +142,24 @@ def _set_form_initial_value(form, data: dict, key:str, value) -> None:
         data[f"{form.prefix}-{key}"] = value
     else:
         data[key] = value
+
+
+def grant_accounting_model_perms(user):
+    """Δίνει στον χρήστη τα CRUD model permissions του accounting app.
+
+    Χρήση σε API tests μετά το ClientModelPermissions — οι απλοί
+    authenticated users χρειάζονται πλέον view/add/change/delete perms.
+    """
+    from django.contrib.auth.models import Permission, User
+
+    perms = Permission.objects.filter(
+        content_type__app_label='accounting',
+        codename__regex=r'^(view|add|change|delete)_',
+    ).exclude(
+        # Τα custom perms (see-all, reveal) ΔΕΝ δίνονται αυτόματα —
+        # τα tests που τα χρειάζονται τα προσθέτουν ρητά
+        codename__in=['view_all_clients', 'view_client_credential_secret'],
+    )
+    user.user_permissions.add(*perms)
+    # Καθάρισμα permission cache
+    return User.objects.get(pk=user.pk)

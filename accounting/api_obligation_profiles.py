@@ -71,6 +71,7 @@ class ClientObligationProfileSerializer(serializers.Serializer):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def clients_obligation_status(request):
+    from accounting.services.access import accessible_clients
     """
     GET /api/v1/clients/obligation-status/
     Returns all clients with their obligation profile status
@@ -95,7 +96,7 @@ def clients_obligation_status(request):
     active_only = request.query_params.get('active_only', 'true').lower() == 'true'
 
     # Get clients
-    clients_qs = ClientProfile.objects.all()
+    clients_qs = accessible_clients(request.user)
     if active_only:
         clients_qs = clients_qs.filter(is_active=True)
 
@@ -177,7 +178,8 @@ def client_obligation_profile(request, client_id):
     Updates the client's obligation profile
     Body: { obligation_type_ids: [1,2,3], obligation_profile_ids: [1] }
     """
-    client = get_object_or_404(ClientProfile, pk=client_id)
+    from accounting.services.access import get_accessible_client_or_404
+    client = get_accessible_client_or_404(request.user, client_id, request=request)
 
     # Get or create the ClientObligation record
     client_obligation, created = ClientObligation.objects.get_or_create(
@@ -313,6 +315,7 @@ def obligation_profiles_list(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_month_obligations(request):
+    from accounting.services.access import accessible_clients
     """
     POST /api/v1/obligations/generate-month/
     Generate monthly obligations for clients based on their obligation profiles
@@ -366,9 +369,9 @@ def generate_month_obligations(request):
 
     # Get clients
     if client_ids:
-        clients = ClientProfile.objects.filter(id__in=client_ids, is_active=True)
+        clients = accessible_clients(request.user).filter(id__in=client_ids, is_active=True)
     else:
-        clients = ClientProfile.objects.filter(is_active=True)
+        clients = accessible_clients(request.user).filter(is_active=True)
 
     if not clients.exists():
         return Response(
@@ -502,7 +505,8 @@ def bulk_assign_obligations(request):
         )
 
     # Get clients
-    clients = ClientProfile.objects.filter(id__in=client_ids)
+    from accounting.services.access import accessible_clients
+    clients = accessible_clients(request.user).filter(id__in=client_ids)
     if not clients.exists():
         return Response(
             {'error': 'Δεν βρέθηκαν οι επιλεγμένοι πελάτες.'},

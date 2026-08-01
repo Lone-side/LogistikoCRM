@@ -3,6 +3,7 @@ API Tests for Accounting app REST endpoints
 Tests for: ClientProfile API, ObligationType API, Health Check endpoints
 """
 from django.test import TestCase
+from tests.utils.helpers import grant_accounting_model_perms
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework.test import APITestCase, APIClient
@@ -20,6 +21,7 @@ class ClientAPITest(APITestCase):
             email='test@test.com',
             password='testpass123'
         )
+        self.user = grant_accounting_model_perms(self.user)
         self.admin = User.objects.create_superuser(
             username='admin',
             email='admin@test.com',
@@ -81,6 +83,7 @@ class ObligationAPITest(APITestCase):
             email='test@test.com',
             password='testpass123'
         )
+        self.user = grant_accounting_model_perms(self.user)
         self.client_api = APIClient()
 
         # Create test data
@@ -160,11 +163,11 @@ class DoorAccessLogAPITest(APITestCase):
             email='admin@test.com',
             password='adminpass123'
         )
-        self.regular_user = User.objects.create_user(
+        self.regular_user = grant_accounting_model_perms(User.objects.create_user(
             username='user',
             email='user@test.com',
             password='userpass123'
-        )
+        ))
 
     def test_door_status_requires_auth(self):
         """Test that door status requires authentication"""

@@ -58,8 +58,9 @@ def check_existing_document(request):
         }, status=400)
 
     try:
-        # Build query
-        qs = ClientDocument.objects.filter(
+        # Build query (μόνο έγγραφα ανατεθειμένων πελατών)
+        from accounting.services.access import accessible_documents
+        qs = accessible_documents(request.user).filter(
             client_id=client_id,
             is_current=True
         )
@@ -153,10 +154,15 @@ def upload_document_with_version(request):
     from .services import filing
 
     try:
-        client = get_object_or_404(ClientProfile, id=client_id)
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_obligation_or_404,
+        )
+        client = get_accessible_client_or_404(request.user, client_id, request=request)
         obligation = None
         if obligation_id:
-            obligation = get_object_or_404(MonthlyObligation, id=obligation_id)
+            obligation = get_accessible_obligation_or_404(
+                request.user, obligation_id, request=request
+            )
 
         # Determine year/month
         if not year or not month:
@@ -249,7 +255,8 @@ def document_preview(request, document_id):
     Returns:
         JSON με URL και metadata για preview
     """
-    document = get_object_or_404(ClientDocument, id=document_id)
+    from accounting.services.access import get_accessible_document_or_404
+    document = get_accessible_document_or_404(request.user, document_id, request=request)
 
     # Determine preview type
     preview_type = 'unknown'

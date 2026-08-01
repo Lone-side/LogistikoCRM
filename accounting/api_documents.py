@@ -175,7 +175,7 @@ class DocumentUploadSerializer(serializers.Serializer):
 # ============================================
 
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient
+from .permissions import CanAccessClient, ClientModelPermissions
 
 
 class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
@@ -190,7 +190,7 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     queryset = ClientDocument.objects.all()
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
     client_field = 'client__assigned_users'
     pagination_class = DocumentPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -223,13 +223,18 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         category = serializer.validated_data.get('document_category', 'general')
         description = serializer.validated_data.get('description', '')
 
-        # Get client
-        client = ClientProfile.objects.get(id=client_id)
+        # Get client — μόνο ανατεθειμένος στον χρήστη (RBAC)
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_obligation_or_404,
+        )
+        client = get_accessible_client_or_404(request.user, client_id, request=request)
 
         # Get obligation if provided
         obligation = None
         if obligation_id:
-            obligation = MonthlyObligation.objects.get(id=obligation_id)
+            obligation = get_accessible_obligation_or_404(
+                request.user, obligation_id, request=request
+            )
             if obligation.client_id != client.id:
                 return Response(
                     {'error': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη.'},
@@ -356,9 +361,15 @@ def attach_document_to_obligation(request, obligation_id):
     1. Attach existing: { "document_id": 123 }
     2. Upload new: multipart/form-data with 'file' and optional 'description'
     """
+    from django.http import Http404
+    from accounting.services.access import (
+        get_accessible_obligation_or_404, get_accessible_document_or_404,
+    )
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
-    except MonthlyObligation.DoesNotExist:
+        obligation = get_accessible_obligation_or_404(
+            request.user, obligation_id, request=request
+        )
+    except Http404:
         return Response(
             {'error': 'Η υποχρέωση δεν βρέθηκε.'},
             status=status.HTTP_404_NOT_FOUND
@@ -368,8 +379,10 @@ def attach_document_to_obligation(request, obligation_id):
     document_id = request.data.get('document_id')
     if document_id:
         try:
-            document = ClientDocument.objects.get(id=document_id)
-        except ClientDocument.DoesNotExist:
+            document = get_accessible_document_or_404(
+                request.user, document_id, request=request
+            )
+        except Http404:
             return Response(
                 {'error': 'Το έγγραφο δεν βρέθηκε.'},
                 status=status.HTTP_404_NOT_FOUND
@@ -452,9 +465,13 @@ def obligation_documents(request, obligation_id):
     GET /api/v1/obligations/{id}/documents/
     List all documents attached to an obligation
     """
+    from django.http import Http404
+    from accounting.services.access import get_accessible_obligation_or_404
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
-    except MonthlyObligation.DoesNotExist:
+        obligation = get_accessible_obligation_or_404(
+            request.user, obligation_id, request=request
+        )
+    except Http404:
         return Response(
             {'error': 'Η υποχρέωση δεν βρέθηκε.'},
             status=status.HTTP_404_NOT_FOUND

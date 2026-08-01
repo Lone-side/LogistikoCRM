@@ -5,6 +5,7 @@ Tests για τα κρίσιμα fixes του code review:
 - Atomic claim στα scheduled emails
 """
 from django.contrib.auth.models import User
+from tests.utils.helpers import grant_accounting_model_perms
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
@@ -18,7 +19,7 @@ class UploadCrossClientGuardTest(TestCase):
     """Το upload δεν πρέπει να δέχεται υποχρέωση άλλου πελάτη."""
 
     def setUp(self):
-        user = User.objects.create_user('tester', password='x', is_staff=True)
+        user = grant_accounting_model_perms(User.objects.create_user('tester', password='x', is_staff=True))
         self.client.force_login(user)
 
         self.client_a = ClientProfile.objects.create(

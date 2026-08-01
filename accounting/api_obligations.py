@@ -187,6 +187,15 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
             'assigned_to'
         ]
 
+    def validate_client(self, client):
+        """RBAC: ο χρήστης πρέπει να έχει πρόσβαση στον πελάτη της υποχρέωσης"""
+        request = self.context.get('request')
+        if client and request is not None:
+            from accounting.services.access import user_can_access_client
+            if not user_can_access_client(request.user, client):
+                raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
     def validate(self, data):
         """Validate unique together constraint"""
         client = data.get('client')
@@ -224,7 +233,7 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
 # ============================================
 
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient
+from .permissions import CanAccessClient, ClientModelPermissions
 
 
 class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
@@ -240,7 +249,7 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     - DELETE /api/obligations/{id}/ - Delete
     """
     queryset = MonthlyObligation.objects.all()
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
     client_field = 'client__assigned_users'
     pagination_class = ObligationPagination
 

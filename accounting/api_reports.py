@@ -26,6 +26,9 @@ from .utils.report_constants import (
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def reports_stats(request):
+    from accounting.services.access import accessible_clients, accessible_obligations
+    ClientQS = accessible_clients(request.user)
+    ObligationQS = accessible_obligations(request.user)
     """
     GET /api/reports/stats/
 
@@ -50,10 +53,10 @@ def reports_stats(request):
     start_date, end_date = get_date_range(period)
 
     # Total active clients
-    total_clients = ClientProfile.objects.filter(is_active=True).count()
+    total_clients = ClientQS.filter(is_active=True).count()
 
     # Base querysets
-    all_obligations = MonthlyObligation.objects.all()
+    all_obligations = ObligationQS.all()
 
     # Completed in period
     completed_qs = all_obligations.filter(status='completed')
@@ -144,7 +147,7 @@ def reports_stats(request):
     )
 
     # Comparison with previous period (for trend indicators)
-    comparison = calculate_comparison(period, start_date, end_date)
+    comparison = calculate_comparison(period, start_date, end_date, ClientQS=ClientQS, ObligationQS=ObligationQS)
 
     return Response({
         'period': period,
@@ -160,7 +163,7 @@ def reports_stats(request):
     })
 
 
-def calculate_comparison(period: str, current_start, current_end):
+def calculate_comparison(period: str, current_start, current_end, ClientQS=None, ObligationQS=None):
     """
     Calculate comparison with previous period for trend indicators.
     Uses centralized date range utilities.
@@ -172,14 +175,14 @@ def calculate_comparison(period: str, current_start, current_end):
         return {'clients_change': 0, 'completed_change': 0}
 
     # Previous period stats
-    prev_completed = MonthlyObligation.objects.filter(
+    prev_completed = ObligationQS.filter(
         status='completed',
         completed_date__gte=prev_start,
         completed_date__lte=prev_end
     ).count()
 
     # Current period stats (for comparison calculation)
-    curr_completed = MonthlyObligation.objects.filter(
+    curr_completed = ObligationQS.filter(
         status='completed',
         completed_date__gte=current_start,
         completed_date__lte=current_end
@@ -192,12 +195,12 @@ def calculate_comparison(period: str, current_start, current_end):
         return round((current - previous) / previous * 100, 1)
 
     # Client comparison - new clients in period
-    new_clients_current = ClientProfile.objects.filter(
+    new_clients_current = ClientQS.filter(
         created_at__date__gte=current_start,
         created_at__date__lte=current_end
     ).count() if current_start and current_end else 0
 
-    new_clients_prev = ClientProfile.objects.filter(
+    new_clients_prev = ClientQS.filter(
         created_at__date__gte=prev_start,
         created_at__date__lte=prev_end
     ).count()
@@ -250,6 +253,8 @@ def reports_export(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def reports_export_download(request):
+    from accounting.services.access import accessible_obligations
+    ObligationQS = accessible_obligations(request.user)
     """
     GET /api/reports/export/download/
 
@@ -291,7 +296,7 @@ def reports_export_download(request):
         ws.title = 'Υποχρεώσεις'
 
         # Build query
-        query = MonthlyObligation.objects.select_related('client', 'obligation_type')
+        query = ObligationQS.select_related('client', 'obligation_type')
         if start_date and end_date:
             query = query.filter(deadline__gte=start_date, deadline__lte=end_date)
 
@@ -323,7 +328,7 @@ def reports_export_download(request):
         # Financial report - hours and estimated revenue by client
         from django.db.models import Sum, Count
 
-        query = MonthlyObligation.objects.filter(status='completed')
+        query = ObligationQS.filter(status='completed')
         if start_date and end_date:
             query = query.filter(completed_date__gte=start_date, completed_date__lte=end_date)
 
@@ -368,7 +373,7 @@ def reports_export_download(request):
         # Performance report - completion rates by obligation type
         from django.db.models import Count, Avg
 
-        query = MonthlyObligation.objects.all()
+        query = ObligationQS.all()
         if start_date and end_date:
             query = query.filter(deadline__gte=start_date, deadline__lte=end_date)
 
@@ -433,6 +438,8 @@ def client_statement(request, client_id):
     Parameters:
     - format: xlsx, pdf (default: xlsx)
     """
+    from accounting.services.access import accessible_obligations, get_accessible_client_or_404
+    ObligationQS = accessible_obligations(request.user)
     from django.http import HttpResponse
     from django.shortcuts import get_object_or_404
     from io import BytesIO
@@ -447,7 +454,7 @@ def client_statement(request, client_id):
     )
 
     export_format = request.query_params.get('format', 'xlsx')
-    client = get_object_or_404(ClientProfile, id=client_id)
+    client = get_accessible_client_or_404(request.user, client_id, request=request)
 
     if export_format == 'pdf':
         # Redirect to existing PDF endpoint
@@ -494,7 +501,7 @@ def client_statement(request, client_id):
         cell.border = border
 
     # Obligations data
-    obligations = MonthlyObligation.objects.filter(
+    obligations = ObligationQS.filter(
         client=client
     ).select_related('obligation_type').order_by('-year', '-month', 'deadline')
 
@@ -547,6 +554,9 @@ def client_statement(request, client_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def vat_summary(request):
+    from accounting.services.access import accessible_obligations, accessible_clients
+    ObligationQS = accessible_obligations(request.user)
+    ClientQS = accessible_clients(request.user)
     """
     GET /api/reports/vat-summary/
 
@@ -656,7 +666,7 @@ def vat_summary(request):
         pass  # myDATA models might not be configured
 
     # Build summary from obligations data (as fallback or supplement)
-    vat_obligations = MonthlyObligation.objects.filter(
+    vat_obligations = ObligationQS.filter(
         year=year,
         month__in=months,
         obligation_type__code__icontains='ΦΠΑ'

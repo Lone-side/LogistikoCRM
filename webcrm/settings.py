@@ -484,6 +484,7 @@ REST_FRAMEWORK = {
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
         'shared_link_auth': '10/hour',    # Δοκιμές κωδικού σε προστατευμένα links (ανά IP)
+        'credential_reveal': '10/hour',   # Αποκαλύψεις κωδικών πελατών (ανά χρήστη)
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
@@ -763,6 +764,21 @@ if not DEBUG:
                 'Refusing to start with the default FRITZ_API_TOKEN and DEBUG=False. '
                 'Set the FRITZ_API_TOKEN environment variable to a long random value '
                 '(e.g. `openssl rand -hex 32`), even if the Fritz monitor is unused.'
+            )
+        if not DATA_ENCRYPTION_KEY_CURRENT:
+            raise ImproperlyConfigured(
+                'DATA_ENCRYPTION_KEY_CURRENT is required in production — '
+                'χωρίς αυτό τα credentials κρυπτογραφούνται με το legacy '
+                'κλειδί από το SECRET_KEY. Δημιουργία: '
+                '`python manage.py rotate_encryption_key --generate`.'
+            )
+        if not ENFORCE_CLIENT_ASSIGNMENT and os.getenv(
+            'ALLOW_UNSCOPED_CLIENT_ACCESS', 'False'
+        ).lower() not in ('true', '1', 'yes'):
+            raise ImproperlyConfigured(
+                'ENFORCE_CLIENT_ASSIGNMENT must be enabled in production. '
+                'Αν το CRM χρησιμοποιείται μόνο από superuser και θέλετε '
+                'συνειδητά RBAC off, ορίστε ALLOW_UNSCOPED_CLIENT_ACCESS=True.'
             )
 
     # HSTS (HTTP Strict Transport Security)

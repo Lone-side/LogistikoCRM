@@ -10,6 +10,7 @@ import json
 from datetime import date
 
 from django.contrib.auth.models import User
+from tests.utils.helpers import grant_accounting_model_perms
 from django.template.loader import render_to_string
 from django.test import TestCase, override_settings
 from django.utils.safestring import SafeString
@@ -79,9 +80,9 @@ class FritzWebhookTest(TestCase):
 
 class DestroyRequiresAdminTest(TestCase):
     def setUp(self):
-        self.staff = User.objects.create_user(
+        self.staff = grant_accounting_model_perms(User.objects.create_user(
             'plain-staff', 'staff@office.gr', 'pass12345', is_staff=False
-        )
+        ))
         self.admin = User.objects.create_user(
             'admin-staff', 'admin@office.gr', 'pass12345', is_staff=True
         )

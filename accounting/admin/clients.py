@@ -87,12 +87,37 @@ class ClientProfileAdmin(admin.ModelAdmin):
         # Χωρίς αυτά το changelist κάνει 4-6 queries ανά πελάτη
         # (obligation_settings, τύποι ανά profile, documents count)
         from django.db.models import Count
-        return super().get_queryset(request).select_related(
+        from accounting.mixins import user_sees_all_clients
+        qs = super().get_queryset(request)
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(assigned_users=request.user).distinct()
+        return qs.select_related(
             'obligation_settings'
         ).prefetch_related(
             'obligation_settings__obligation_types',
             'obligation_settings__obligation_profiles__obligation_types',
         ).annotate(_documents_count=Count('documents', distinct=True))
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        # Την ανάθεση πελατών την αλλάζουν μόνο διαχειριστές (see-all χρήστες)
+        from accounting.mixins import user_sees_all_clients
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not user_sees_all_clients(request.user) and 'assigned_users' not in readonly:
+            readonly.append('assigned_users')
+        return readonly
 
     @admin.display(description='Υποχρεώσεις')
     def obligations_status(self, obj):
@@ -740,6 +765,26 @@ class ClientCredentialAdmin(admin.ModelAdmin):
     autocomplete_fields = ['client']
     exclude = ['_secret_encrypted']
     readonly_fields = ['created_at', 'updated_at', 'updated_by']
+
+    def get_queryset(self, request):
+        from accounting.mixins import user_sees_all_clients
+        qs = super().get_queryset(request)
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(client__assigned_users=request.user).distinct()
+        return qs
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj.client)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
 
     @admin.display(description='Έχει κωδικό', boolean=True)
     def has_secret_display(self, obj):

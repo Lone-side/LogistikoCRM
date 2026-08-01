@@ -6,7 +6,7 @@ Description: Custom permissions for VoIP and internal services
 """
 import hmac
 import logging
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, DjangoModelPermissions
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -127,5 +127,28 @@ class CanAccessClient(BasePermission):
             return True
         client = obj if hasattr(obj, 'assigned_users') else getattr(obj, 'client', None)
         if client is None:
-            return True
+            # Fail closed: αντικείμενο χωρίς πελάτη είναι ορατό μόνο σε
+            # see-all χρήστες — αλλιώς scoped χρήστες θα έβλεπαν τα πάντα
+            # μέσω μοντέλων χωρίς .client.
+            return False
         return client.assigned_users.filter(pk=request.user.pk).exists()
+
+
+class ClientModelPermissions(DjangoModelPermissions):
+    """
+    DjangoModelPermissions με απαίτηση view_* και στα GET/HEAD.
+
+    Επιβάλλει τα Django model permissions των ρόλων (setup_roles):
+    ο «Βοηθός» (read-only group) παίρνει 403 σε POST/PUT/PATCH/DELETE.
+    Superusers περνούν πάντα (has_perm=True για όλα).
+    """
+
+    perms_map = {
+        'GET': ['%(app_label)s.view_%(model_name)s'],
+        'OPTIONS': [],
+        'HEAD': ['%(app_label)s.view_%(model_name)s'],
+        'POST': ['%(app_label)s.add_%(model_name)s'],
+        'PUT': ['%(app_label)s.change_%(model_name)s'],
+        'PATCH': ['%(app_label)s.change_%(model_name)s'],
+        'DELETE': ['%(app_label)s.delete_%(model_name)s'],
+    }

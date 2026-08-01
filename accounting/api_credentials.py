@@ -18,7 +18,7 @@ from common.models import AuditLog
 
 from .mixins import ClientScopedQuerysetMixin
 from .models import ClientCredential, ClientProfile
-from .permissions import CanAccessClient
+from .permissions import CanAccessClient, ClientModelPermissions
 
 
 class ClientCredentialSerializer(serializers.ModelSerializer):
@@ -76,7 +76,7 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
 
     serializer_class = ClientCredentialSerializer
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
     client_field = 'client__assigned_users'
     pagination_class = None
 
@@ -124,6 +124,14 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         )
         instance.delete()
 
+    def get_throttles(self):
+        # Ξεχωριστό, αυστηρό όριο μόνο για την αποκάλυψη κωδικών
+        if getattr(self, 'action', None) == 'reveal':
+            from rest_framework.throttling import ScopedRateThrottle
+            self.throttle_scope = 'credential_reveal'
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
+
     @action(detail=True, methods=['post'])
     def reveal(self, request, client_pk=None, pk=None):
         """Αποκάλυψη secret — απαιτεί ειδικό permission, πάντα με audit."""
@@ -139,11 +147,35 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             )
 
         credential = self.get_object()
-        # Το audit γράφεται ΠΡΙΝ επιστραφεί η τιμή
+
+        # Αποκρυπτογράφηση ΠΡΙΝ το success audit — αποτυχία δεν πρέπει να
+        # μοιάζει με «δεν υπάρχει κωδικός» ούτε να καταγράφεται ως επιτυχία
+        secret = credential.secret
+        if credential.has_secret and not secret:
+            AuditLog.log(
+                user=request.user, action='view', obj=credential,
+                description=f'ΑΠΟΤΥΧΙΑ αποκρυπτογράφησης κωδικού '
+                            f'{credential.get_service_display()} '
+                            f'για πελάτη {credential.client.afm} — έλεγξε τα '
+                            f'DATA_ENCRYPTION_KEY_* (λάθος/χαμένο κλειδί;)',
+                severity='high', request=request,
+            )
+            return Response(
+                {'detail': 'Αποτυχία αποκρυπτογράφησης κωδικού. '
+                           'Ειδοποιήστε τον διαχειριστή (encryption keys).'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        reason = str(request.data.get('reason', '') or '').strip()[:200]
         AuditLog.log(
             user=request.user, action='view', obj=credential,
             description=f'Αποκάλυψη κωδικού {credential.get_service_display()} '
-                        f'για πελάτη {credential.client.afm}',
+                        f'για πελάτη {credential.client.afm}'
+                        + (f' — αιτιολογία: {reason}' if reason else ''),
             severity='high', request=request,
         )
-        return Response({'secret': credential.secret or ''})
+        response = Response({'secret': secret or ''})
+        # Το secret δεν πρέπει να αποθηκευτεί σε caches/history
+        response['Cache-Control'] = 'no-store, private'
+        response['Pragma'] = 'no-cache'
+        return response

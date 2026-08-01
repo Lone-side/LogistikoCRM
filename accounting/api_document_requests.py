@@ -145,11 +145,14 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
+        from accounting.mixins import user_sees_all_clients
         qs = (
             DocumentRequest.objects
             .select_related('client', 'shared_link', 'created_by')
             .prefetch_related('items')
         )
+        if not user_sees_all_clients(self.request.user):
+            qs = qs.filter(client__assigned_users=self.request.user).distinct()
         client_id = self.request.query_params.get('client')
         if client_id and client_id.isdigit():
             qs = qs.filter(client_id=int(client_id))
@@ -163,7 +166,8 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        client = ClientProfile.objects.get(pk=data['client_id'])
+        from accounting.services.access import get_accessible_client_or_404
+        client = get_accessible_client_or_404(request.user, data['client_id'], request=request)
 
         with transaction.atomic():
             shared_link = SharedLink(

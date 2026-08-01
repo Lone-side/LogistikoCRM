@@ -9,6 +9,7 @@ PostgreSQL στο CI (SearchVector branch) — ίδια tests, δύο υλοπο
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from tests.utils.helpers import grant_accounting_model_perms
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
@@ -73,7 +74,7 @@ class DocumentSearchTest(TestCase):
         )
 
     def test_file_manager_endpoint_search(self):
-        user = User.objects.create_user('staff1', 's@test.com', 'pass12345')
+        user = grant_accounting_model_perms(User.objects.create_user('staff1', 's@test.com', 'pass12345'))
         self.client.force_login(user)
         resp = self.client.get(
             '/accounting/api/v1/file-manager/documents/', {'search': 'μισθοδοσίας'}

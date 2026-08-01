@@ -68,6 +68,8 @@ from .models import (
     DocumentTag, DocumentTagAssignment, SharedLink, SharedLinkAccess,
     DocumentFavorite, DocumentCollection, get_client_folder
 )
+from .mixins import ClientScopedQuerysetMixin
+from .permissions import CanAccessClient, ClientModelPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -346,13 +348,14 @@ class DocumentCollectionListSerializer(serializers.ModelSerializer):
 # DOCUMENT VIEWSET
 # ============================================
 
-class DocumentViewSet(viewsets.ModelViewSet):
+class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     Main ViewSet for document operations
     """
     queryset = ClientDocument.objects.filter(is_current=True)
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = DocumentFilter
@@ -384,17 +387,23 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if not client_id:
             return Response({'error': 'Απαιτείται client_id'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from django.http import Http404 as _Http404
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_obligation_or_404,
+        )
         try:
-            client = ClientProfile.objects.get(id=client_id)
-        except ClientProfile.DoesNotExist:
+            client = get_accessible_client_or_404(request.user, client_id, request=request)
+        except _Http404:
             return Response({'error': 'Ο πελάτης δεν βρέθηκε'}, status=status.HTTP_404_NOT_FOUND)
 
         obligation_id = request.data.get('obligation_id')
         obligation = None
         if obligation_id:
             try:
-                obligation = MonthlyObligation.objects.get(id=obligation_id)
-            except MonthlyObligation.DoesNotExist:
+                obligation = get_accessible_obligation_or_404(
+                    request.user, obligation_id, request=request
+                )
+            except _Http404:
                 return Response({'error': 'Η υποχρέωση δεν βρέθηκε'}, status=status.HTTP_404_NOT_FOUND)
 
         category = request.data.get('document_category', 'general')
@@ -441,10 +450,13 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if not doc_ids:
             return Response({'error': 'Δεν δόθηκαν document_ids'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from accounting.services.access import accessible_documents
+        allowed = accessible_documents(request.user)
         deleted_count = 0
         for doc_id in doc_ids:
             try:
-                doc = ClientDocument.objects.get(id=doc_id)
+                # Μόνο έγγραφα πελατών ανατεθειμένων στον χρήστη
+                doc = allowed.get(id=doc_id)
                 if doc.file:
                     doc.file.delete(save=False)
                 doc.delete()
@@ -591,12 +603,21 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
         data = serializer.validated_data
 
         # Get document or client
+        # RBAC: shared link μόνο για έγγραφα/πελάτες στους οποίους έχει
+        # πρόσβαση ο χρήστης — αλλιώς ένα link θα δημοσιοποιούσε ξένα αρχεία
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_document_or_404,
+        )
         document = None
         client = None
         if data.get('document_id'):
-            document = get_object_or_404(ClientDocument, id=data['document_id'])
+            document = get_accessible_document_or_404(
+                request.user, data['document_id'], request=request
+            )
         elif data.get('client_id'):
-            client = get_object_or_404(ClientProfile, id=data['client_id'])
+            client = get_accessible_client_or_404(
+                request.user, data['client_id'], request=request
+            )
 
         # Calculate expiration
         expires_at = None
@@ -1155,8 +1176,9 @@ class FavoriteViewSet(viewsets.ViewSet):
         if not document_id:
             return Response({'error': 'Απαιτείται document_id'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from accounting.services.access import accessible_documents
         try:
-            document = ClientDocument.objects.get(id=document_id)
+            document = accessible_documents(request.user).get(id=document_id)
         except ClientDocument.DoesNotExist:
             return Response({'error': 'Το έγγραφο δεν βρέθηκε'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1213,11 +1235,13 @@ class CollectionViewSet(viewsets.ModelViewSet):
         if collection.owner != request.user:
             return Response({'error': 'Δεν έχετε δικαίωμα επεξεργασίας'}, status=status.HTTP_403_FORBIDDEN)
 
+        from accounting.services.access import accessible_documents
+        allowed = accessible_documents(request.user)
         document_ids = request.data.get('document_ids', [])
         added = 0
         for doc_id in document_ids:
             try:
-                doc = ClientDocument.objects.get(id=doc_id)
+                doc = allowed.get(id=doc_id)
                 collection.documents.add(doc)
                 added += 1
             except ClientDocument.DoesNotExist:
@@ -1248,32 +1272,33 @@ class FileManagerStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from accounting.services.access import accessible_documents
+        scoped = accessible_documents(request.user).filter(is_current=True)
+
         # Total documents
-        total_docs = ClientDocument.objects.filter(is_current=True).count()
+        total_docs = scoped.count()
 
         # Size stats
-        total_size = ClientDocument.objects.filter(is_current=True).aggregate(
-            total=Sum('file_size'))['total'] or 0
+        total_size = scoped.aggregate(total=Sum('file_size'))['total'] or 0
 
         # By category
-        by_category = ClientDocument.objects.filter(is_current=True).values(
+        by_category = scoped.values(
             'document_category'
         ).annotate(count=Count('id')).order_by('-count')
 
         # By file type
-        by_type = ClientDocument.objects.filter(is_current=True).values(
+        by_type = scoped.values(
             'file_type'
         ).annotate(count=Count('id')).order_by('-count')[:10]
 
         # Recent uploads (last 7 days)
         week_ago = timezone.now() - timedelta(days=7)
-        recent_count = ClientDocument.objects.filter(
-            is_current=True,
-            uploaded_at__gte=week_ago
-        ).count()
+        recent_count = scoped.filter(uploaded_at__gte=week_ago).count()
 
-        # Shared links
-        active_links = SharedLink.objects.filter(is_active=True).count()
+        # Shared links (μόνο του χρήστη)
+        active_links = SharedLink.objects.filter(
+            is_active=True, created_by=request.user
+        ).count()
 
         # Favorites count for user
         favorites_count = DocumentFavorite.objects.filter(user=request.user).count()
@@ -1312,7 +1337,8 @@ class RecentDocumentsView(APIView):
             limit = 20
         limit = min(max(limit, 1), 50)
 
-        recent = ClientDocument.objects.filter(is_current=True).select_related(
+        from accounting.services.access import accessible_documents
+        recent = accessible_documents(request.user).filter(is_current=True).select_related(
             'client', 'obligation', 'uploaded_by'
         ).order_by('-uploaded_at')[:limit]
 
@@ -1325,8 +1351,11 @@ class BrowseFoldersView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Get distinct clients with documents
-        clients_with_docs = ClientProfile.objects.filter(
+        from accounting.services.access import (
+            accessible_clients, get_accessible_client_or_404,
+        )
+        # Get distinct clients with documents (μόνο ανατεθειμένοι)
+        clients_with_docs = accessible_clients(request.user).filter(
             documents__isnull=False
         ).distinct().annotate(
             doc_count=Count('documents', filter=Q(documents__is_current=True))
@@ -1354,7 +1383,7 @@ class BrowseFoldersView(APIView):
 
         if client_id:
             # Get years for specific client
-            client = get_object_or_404(ClientProfile, id=client_id)
+            client = get_accessible_client_or_404(request.user, client_id, request=request)
             docs = ClientDocument.objects.filter(client=client, is_current=True)
 
             if year:

@@ -16,7 +16,7 @@ from django.db.models import Count, Q
 from .models import ClientProfile, MonthlyObligation, ClientDocument
 from .serializers import ClientDocumentSerializer
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient
+from .permissions import CanAccessClient, ClientModelPermissions
 
 
 class ClientPagination(PageNumberPagination):
@@ -222,7 +222,7 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     - GET /api/clients/{id}/documents/ - Get client's documents
     """
     queryset = ClientProfile.objects.all()
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
     client_field = 'assigned_users'
     pagination_class = ClientPagination
 
@@ -233,14 +233,25 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         'kinito_tilefono', 'tilefono_oikias_1', 'tilefono_epixeirisis_1',
     ]
 
+    # Πεδία που καταγράφονται μόνο ως "changed" — καμία τιμή στο audit
+    AUDITED_NO_VALUE_FIELDS = {'diefthinsi_katoikias', 'diefthinsi_epixeirisis'}
+
     def perform_update(self, serializer):
+        from accounting.services.access import mask_pii_value
         old = {f: getattr(serializer.instance, f, None) for f in self.AUDITED_PII_FIELDS}
         instance = serializer.save()
         changes = {}
         for field in self.AUDITED_PII_FIELDS:
             new_value = getattr(instance, field, None)
             if old[field] != new_value:
-                changes[field] = {'old': old[field], 'new': new_value}
+                # Ποτέ πλήρεις τιμές PII στο audit log — μόνο masked
+                if field in self.AUDITED_NO_VALUE_FIELDS:
+                    changes[field] = {'changed': True}
+                else:
+                    changes[field] = {
+                        'old': mask_pii_value(old[field]),
+                        'new': mask_pii_value(new_value),
+                    }
         if changes:
             from common.models import AuditLog
             AuditLog.log(
@@ -321,9 +332,10 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         Returns all documents for a specific client
         """
         # Όχι self.get_object(): το ClientFilter θα εφάρμοζε το ?search=
-        # στον ίδιο τον πελάτη και θα γύριζε 404
-        from django.shortcuts import get_object_or_404
-        client = get_object_or_404(ClientProfile, pk=pk)
+        # στον ίδιο τον πελάτη και θα γύριζε 404 — αλλά το lookup πρέπει
+        # να περνά από το RBAC scoping
+        from accounting.services.access import get_accessible_client_or_404
+        client = get_accessible_client_or_404(request.user, pk, request=request)
         documents = client.documents.select_related(
             'obligation', 'obligation__obligation_type'
         ).order_by('-year', '-month', '-uploaded_at')
