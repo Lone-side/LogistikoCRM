@@ -281,6 +281,74 @@ class VoipTicketsRbacTest(SurfaceBase):
         )
         self.assertEqual(resp.status_code, 404)
 
+    def _make_call(self, client=None, call_id='call-test-1'):
+        from django.utils import timezone
+        from accounting.models import VoIPCall
+        return VoIPCall.objects.create(
+            call_id=call_id, phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(), client=client,
+        )
+
+    def test_ticket_create_foreign_call_404(self):
+        # Κλήση ξένου πελάτη δεν επιτρέπεται να δεθεί σε ticket
+        call = self._make_call(client=self.client_b)
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/tickets/', {'title': 'x', 'call': call.pk},
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(Ticket.objects.filter(call=call).exists())
+
+    def test_ticket_create_call_client_mismatch_400(self):
+        # Κλήση πελάτη Α + ticket πελάτη Β → validation error
+        both = make_role_user(
+            'logistis3', 'Λογιστής', [self.client_a, self.client_b], is_staff=True,
+        )
+        call = self._make_call(client=self.client_a)
+        resp = self.api(both).post(
+            '/accounting/api/v1/tickets/',
+            {'title': 'x', 'call': call.pk, 'client': self.client_b.pk},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_ticket_create_unassigned_call_allowed(self):
+        # Unassigned κλήση: κοινό triage queue — επιτρέπεται
+        call = self._make_call(client=None)
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/tickets/', {'title': 'triage', 'call': call.pk},
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+
+    def test_call_create_foreign_client_404(self):
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/calls/',
+            {
+                'phone_number': '2109999999', 'direction': 'incoming',
+                'status': 'missed', 'started_at': '2026-06-01T10:00:00Z',
+                'client_id': self.client_b.pk,
+            },
+        )
+        self.assertEqual(resp.status_code, 404)
+        from accounting.models import VoIPCall
+        self.assertFalse(VoIPCall.objects.filter(phone_number='2109999999').exists())
+
+    @override_settings(FRITZ_API_TOKEN='sufficiently-long-secure-token-123')
+    def test_service_call_create_ignores_client_id(self):
+        # Service caller (X-API-Key) δεν μπορεί να αντιστοιχίσει πελάτη
+        client = APIClient()
+        resp = client.post(
+            '/accounting/api/v1/calls/',
+            {
+                'phone_number': '2108888888', 'direction': 'incoming',
+                'status': 'missed', 'started_at': '2026-06-01T10:00:00Z',
+                'client_id': self.client_b.pk,
+            },
+            HTTP_X_API_KEY='sufficiently-long-secure-token-123',
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        from accounting.models import VoIPCall
+        call = VoIPCall.objects.get(phone_number='2108888888')
+        self.assertIsNone(call.client_id)
+
     def test_calls_stats_search_scoped(self):
         resp = self.api(self.accountant).get(
             '/accounting/api/v1/clients/search-for-match/', {'q': 'ΠΕΛΑΤΗΣ'},

@@ -208,12 +208,26 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         'create_ticket': ['accounting.add_ticket'],
     }
 
-    def perform_update(self, serializer):
+    def _validate_client_id(self, serializer):
         # Το client_id στο payload μόνο για προσβάσιμο πελάτη
         from accounting.services.access import get_accessible_client_or_404
         client_id = serializer.validated_data.get('client_id')
-        if client_id:
-            get_accessible_client_or_404(self.request.user, client_id, request=self.request)
+        if client_id is None:
+            return
+        if not getattr(self.request.user, 'is_authenticated', False):
+            # Service caller (Fritz monitor / localhost): δεν επιτρέπεται να
+            # αντιστοιχίσει πελάτη — η κλήση μένει unassigned και η
+            # αντιστοίχιση γίνεται από χρήστη ή από το auto-match.
+            serializer.validated_data.pop('client_id', None)
+            return
+        get_accessible_client_or_404(self.request.user, client_id, request=self.request)
+
+    def perform_create(self, serializer):
+        self._validate_client_id(serializer)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._validate_client_id(serializer)
         serializer.save()
 
     def get_queryset(self):
@@ -524,7 +538,40 @@ class TicketViewSet(viewsets.ModelViewSet):
             raise Http404('ClientProfile not found')
         client_id = serializer.validated_data.get('client_id')
         if client_id:
-            get_accessible_client_or_404(self.request.user, client_id, request=self.request)
+            client = get_accessible_client_or_404(
+                self.request.user, client_id, request=self.request
+            )
+        if (
+            client is None
+            and 'client_id' not in serializer.validated_data
+            and serializer.instance is not None
+        ):
+            # Update χωρίς αλλαγή πελάτη: έλεγχος συνέπειας κλήσης με τον
+            # υπάρχοντα πελάτη του ticket
+            client = serializer.instance.client
+        self._check_call(serializer, client)
+
+    def _check_call(self, serializer, client):
+        # Η κλήση στο payload πρέπει να είναι προσβάσιμη και να συμφωνεί
+        # με τον πελάτη του ticket. Unassigned κλήση επιτρέπεται (triage).
+        from django.http import Http404
+        from accounting.services.access import user_can_access_client
+        from rest_framework.exceptions import ValidationError
+        call = serializer.validated_data.get('call')
+        if call is None:
+            call_id = serializer.validated_data.get('call_id')
+            if call_id:
+                call = VoIPCall.objects.filter(pk=call_id).first()
+                if call is None:
+                    raise Http404('VoIPCall not found')
+        if call is None:
+            return
+        if call.client_id and not user_can_access_client(self.request.user, call.client):
+            raise Http404('VoIPCall not found')
+        if client is not None and call.client_id and call.client_id != client.pk:
+            raise ValidationError(
+                {'call': 'Η κλήση ανήκει σε διαφορετικό πελάτη από το ticket.'}
+            )
 
     def perform_create(self, serializer):
         """Auto-set status to open on create (μόνο για προσβάσιμο πελάτη)"""
