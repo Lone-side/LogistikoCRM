@@ -373,7 +373,16 @@ class DocumentCollectionSerializer(serializers.ModelSerializer):
 
 class DocumentCollectionListSerializer(serializers.ModelSerializer):
     """Lightweight for list views"""
-    document_count = serializers.IntegerField(source='documents.count', read_only=True)
+    document_count = serializers.SerializerMethodField()
+
+    def get_document_count(self, obj):
+        # RBAC: μέτρα μόνο τα προσβάσιμα έγγραφα της συλλογής
+        from accounting.services.access import accessible_documents
+        request = self.context.get('request')
+        qs = obj.documents.all()
+        if request is not None:
+            qs = qs.filter(pk__in=accessible_documents(request.user))
+        return qs.count()
 
     class Meta:
         model = DocumentCollection
@@ -612,7 +621,8 @@ class TagViewSet(viewsets.ModelViewSet):
     """ViewSet for document tags"""
     queryset = DocumentTag.objects.all()
     serializer_class = DocumentTagSerializer
-    permission_classes = [IsAuthenticated]
+    # Global tags: ο read-only ρόλος δεν τα δημιουργεί/αλλάζει/σβήνει
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering = ['name']
@@ -632,6 +642,10 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
     # ClientModelPermissions: ο read-only ρόλος (Βοηθός) δεν δημιουργεί
     # δημόσια shared links — απαιτείται add/change/delete_sharedlink
     permission_classes = [IsAuthenticated, ClientModelPermissions]
+    # POST regenerate-token αλλάζει υπάρχον link → change, όχι add
+    action_perms = {
+        'regenerate_token': ['accounting.change_sharedlink'],
+    }
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     ordering = ['-created_at']
@@ -1205,8 +1219,12 @@ class FavoriteViewSet(viewsets.ViewSet):
 
     def list(self, request):
         """List user's favorite documents"""
+        from accounting.services.access import accessible_documents
+        # RBAC: favorites μόνο για έγγραφα που ο χρήστης έχει ΑΚΟΜΗ πρόσβαση
+        # (η ανάθεση πελάτη μπορεί να έχει αφαιρεθεί στο μεταξύ)
         favorites = DocumentFavorite.objects.filter(
-            user=request.user
+            user=request.user,
+            document__in=accessible_documents(request.user),
         ).select_related('document', 'document__client')
 
         serializer = DocumentFavoriteSerializer(favorites, many=True, context={'request': request})

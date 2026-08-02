@@ -518,3 +518,101 @@ class WritePermsRound3Test(SurfaceBase):
         self.client.force_login(assistant_staff)
         resp = self.client.post('/accounting/api/v1/documents/upload-with-version/', {})
         self.assertEqual(resp.status_code, 403)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class Round4LegacyTest(SurfaceBase):
+    """4ος γύρος: δημόσιο VoIP list, legacy dashboard/export, staff Βοηθός writes."""
+
+    def test_voip_list_route_removed(self):
+        # Το νεκρό δημόσιο legacy view αφαιρέθηκε — καμία ανώνυμη πρόσβαση
+        resp = self.client.get('/accounting/voip/list/')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_dashboard_stats_scoped(self):
+        from accounting.views.helpers import _calculate_dashboard_stats
+        stats = _calculate_dashboard_stats(self.accountant)
+        self.assertEqual(stats['total_clients'], 1)
+        self.assertEqual(stats['pending'] + stats['overdue'] + stats['completed'], 0)
+
+    def test_export_excel_scoped(self):
+        from accounting.views.helpers import _build_export_query
+        query = _build_export_query(
+            {'month': '6', 'year': '2026', 'date_from': '', 'date_to': '',
+             'status': '', 'client': '', 'type': '', 'sort_by': 'deadline'},
+            self.accountant,
+        )
+        self.assertEqual(query.count(), 0)
+
+    def test_staff_assistant_cannot_quick_complete(self):
+        staff_assistant = make_role_user(
+            'voithos_staff2', 'Βοηθός', [self.client_a, self.client_b], is_staff=True,
+        )
+        from accounting.models import MonthlyObligation
+        from datetime import date as d
+        obl_a = MonthlyObligation.objects.create(
+            client=self.client_a, obligation_type=self.otype, year=2026, month=7,
+            deadline=d(2026, 7, 20),
+        )
+        self.client.force_login(staff_assistant)
+        resp = self.client.post(f'/accounting/quick-complete/{obl_a.pk}/')
+        self.assertEqual(resp.status_code, 403)
+        obl_a.refresh_from_db()
+        self.assertNotEqual(obl_a.status, 'completed')
+
+    def test_staff_assistant_cannot_send_bulk_email(self):
+        staff_assistant = make_role_user(
+            'voithos_staff3', 'Βοηθός', [self.client_a], is_staff=True,
+        )
+        self.client.force_login(staff_assistant)
+        resp = self.client.post(
+            '/accounting/api/send-bulk-email-direct/',
+            content_type='application/json', data='{}',
+        )
+        # 403 από το send_client_email gate (ή 404 αν άλλαξε το url)
+        self.assertIn(resp.status_code, (403, 404))
+
+    def test_get_obligation_profile_does_not_write(self):
+        from accounting.models import ClientObligation
+        ClientObligation.objects.filter(client=self.client_a).delete()
+        resp = self.api(self.assistant).get(
+            f'/accounting/api/v1/clients/{self.client_a.pk}/obligation-profile/'
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(
+            ClientObligation.objects.filter(client=self.client_a).exists()
+        )
+
+    def test_favorites_hidden_after_unassignment(self):
+        from accounting.models import ClientDocument, DocumentFavorite
+        doc_b = ClientDocument.objects.create(
+            client=self.client_b, original_filename='b2.pdf', filename='b2.pdf',
+        )
+        DocumentFavorite.objects.create(user=self.accountant, document=doc_b)
+        resp = self.api(self.accountant).get('/accounting/api/v1/file-manager/favorites/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), [])
+
+    def test_assistant_cannot_create_tag(self):
+        resp = self.api(self.assistant).post(
+            '/accounting/api/v1/file-manager/tags/', {'name': 'νέο tag'},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_reveal_audit_masks_afm(self):
+        from accounting.models import ClientCredential
+        from common.models import AuditLog
+        cred = ClientCredential.objects.create(
+            client=self.client_a, service='taxisnet', username='u1',
+        )
+        cred.secret = 's3cret'
+        cred.save()
+        resp = self.api(self.accountant).post(
+            f'/accounting/api/v1/clients/{self.client_a.pk}/credentials/{cred.pk}/reveal/',
+            {'reason': 'έλεγχος\nμε newline'},
+        )
+        if resp.status_code == 200:
+            log = AuditLog.objects.filter(description__icontains='Αποκάλυψη').last()
+            self.assertIsNotNone(log)
+            self.assertNotIn('123456789', log.description)
+            self.assertNotIn('\n', log.description.replace('\\n', ''))

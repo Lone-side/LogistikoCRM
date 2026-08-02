@@ -102,12 +102,8 @@ class SendEmailSerializer(serializers.Serializer):
     )
 
     def validate_client_id(self, value):
-        try:
-            client = ClientProfile.objects.get(id=value)
-            if not client.email:
-                raise serializers.ValidationError('Ο πελάτης δεν έχει email.')
-        except ClientProfile.DoesNotExist:
-            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        # Χωρίς global lookup εδώ — θα αποκάλυπτε την ύπαρξη ξένου πελάτη.
+        # Το scoped fetch + έλεγχος email γίνεται στο view (404 αν εκτός ανάθεσης).
         return value
 
     def validate_template_id(self, value):
@@ -135,12 +131,7 @@ class SendObligationNoticeSerializer(serializers.Serializer):
     )
 
     def validate_obligation_id(self, value):
-        try:
-            obligation = MonthlyObligation.objects.get(id=value)
-            if not obligation.client.email:
-                raise serializers.ValidationError('Ο πελάτης δεν έχει email.')
-        except MonthlyObligation.DoesNotExist:
-            raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
+        # Χωρίς global lookup — scoped έλεγχος στο view (404 αν εκτός ανάθεσης)
         return value
 
 
@@ -343,6 +334,8 @@ def send_email(request):
     client = accessible_clients(request.user).filter(id=client_id).first()
     if client is None:
         return Response({'error': 'Ο πελάτης δεν βρέθηκε.'}, status=status.HTTP_404_NOT_FOUND)
+    if not client.email:
+        return Response({'error': 'Ο πελάτης δεν έχει email.'}, status=status.HTTP_400_BAD_REQUEST)
     template = None
     if template_id:
         template = EmailTemplate.objects.get(id=template_id)
@@ -414,6 +407,8 @@ def send_obligation_notice(request):
     if obligation is None:
         return Response({'error': 'Η υποχρέωση δεν βρέθηκε.'}, status=status.HTTP_404_NOT_FOUND)
     client = obligation.client
+    if not client.email:
+        return Response({'error': 'Ο πελάτης δεν έχει email.'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Get template
     if template_id:

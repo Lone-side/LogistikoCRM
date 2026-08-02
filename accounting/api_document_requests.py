@@ -147,6 +147,9 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
     queryset = DocumentRequest.objects.all()
     # Custom actions: αποστολή email θέλει send_client_email, το mark-item change
     action_perms = {
+        # Το create φτιάχνει και SharedLink + στέλνει αρχικό email
+        'create': ['accounting.add_documentrequest', 'accounting.add_sharedlink',
+                   'accounting.send_client_email'],
         'send_reminder': ['accounting.change_documentrequest', 'accounting.send_client_email'],
         'mark_item': ['accounting.change_documentrequest'],
     }

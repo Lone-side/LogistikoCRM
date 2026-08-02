@@ -37,6 +37,7 @@ ROLES = {
             'view_emaillog', 'send_client_email',
             # Shared links / αιτήματα εγγράφων / tickets / VoIP
             'add_sharedlink', 'change_sharedlink', 'view_sharedlink', 'delete_sharedlink',
+            'add_documenttag', 'change_documenttag', 'view_documenttag', 'delete_documenttag',
             'add_documentrequest', 'change_documentrequest', 'view_documentrequest',
             'delete_documentrequest',
             'add_ticket', 'change_ticket', 'view_ticket', 'delete_ticket',
@@ -55,7 +56,7 @@ ROLES = {
             'view_obligationprofile', 'view_obligationtype', 'view_obligationgroup',
             'view_clientobligation',
             'view_emailtemplate', 'view_emaillog',
-            'view_sharedlink', 'view_documentrequest',
+            'view_sharedlink', 'view_documentrequest', 'view_documenttag',
             'view_ticket', 'view_voipcall', 'view_voipcalllog',
             'view_mydatacredentials', 'view_vatrecord', 'view_vatsynclog',
             'view_vatperiodresult',

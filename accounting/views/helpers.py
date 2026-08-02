@@ -39,17 +39,19 @@ def _safe_int(value):
 # DASHBOARD HELPERS
 # ============================================
 
-def _calculate_dashboard_stats():
+def _calculate_dashboard_stats(user):
+    from accounting.services.access import accessible_clients, accessible_obligations
     """Calculate unfiltered dashboard statistics"""
     return {
-        'total_clients': ClientProfile.objects.count(),
-        'pending': MonthlyObligation.objects.filter(status='pending').count(),
-        'completed': MonthlyObligation.objects.filter(status='completed').count(),
-        'overdue': MonthlyObligation.objects.filter(status='overdue').count(),
+        'total_clients': accessible_clients(user).count(),
+        'pending': accessible_obligations(user).filter(status='pending').count(),
+        'completed': accessible_obligations(user).filter(status='completed').count(),
+        'overdue': accessible_obligations(user).filter(status='overdue').count(),
     }
 
 
-def _build_filtered_query(filter_params, client_id, type_id, now):
+def _build_filtered_query(filter_params, client_id, type_id, now, user):
+    from accounting.services.access import accessible_obligations
     """Build filtered query for obligations"""
     # Date range (άκυρες ημερομηνίες αγνοούνται — parse_date επιστρέφει None)
     def _parse(value):
@@ -61,7 +63,7 @@ def _build_filtered_query(filter_params, client_id, type_id, now):
     date_from = _parse(filter_params['date_from'])
     date_to = _parse(filter_params['date_to'])
     if date_from and date_to:
-        query = MonthlyObligation.objects.filter(
+        query = accessible_obligations(user).filter(
             deadline__gte=date_from,
             deadline__lte=date_to
         )
@@ -69,7 +71,7 @@ def _build_filtered_query(filter_params, client_id, type_id, now):
         # Default: past 3 to next 3 months
         past_3_months = now.date() - timedelta(days=90)
         next_3_months = now.date() + timedelta(days=90)
-        query = MonthlyObligation.objects.filter(
+        query = accessible_obligations(user).filter(
             deadline__range=[past_3_months, next_3_months]
         )
 
@@ -146,7 +148,7 @@ def _process_individual_obligations(obligation_ids, files, notes, user):
 
     for i, obl_id in enumerate(obligation_ids):
         try:
-            obligation = MonthlyObligation.objects.get(id=obl_id)
+            obligation = accessible_obligations(user).get(id=obl_id)
             obligation.status = 'completed'
             obligation.completed_date = timezone.now().date()
             obligation.completed_by = user
@@ -188,7 +190,7 @@ def _process_grouped_obligations(obligation_ids, files, notes, group_num, user):
 
     for obl_id in obligation_ids:
         try:
-            obligation = MonthlyObligation.objects.get(id=obl_id)
+            obligation = accessible_obligations(user).get(id=obl_id)
             obligation.status = 'completed'
             obligation.completed_date = timezone.now().date()
             obligation.completed_by = user
@@ -376,19 +378,20 @@ def _get_filters_from_request(request):
     }
 
 
-def _build_export_query(filters):
+def _build_export_query(filters, user):
+    from accounting.services.access import accessible_obligations
     """Build query for export"""
     now = timezone.now()
 
     # Base query
     if filters['date_from'] and filters['date_to']:
-        query = MonthlyObligation.objects.filter(
+        query = accessible_obligations(user).filter(
             deadline__gte=filters['date_from'],
             deadline__lte=filters['date_to']
         )
     else:
         next_month = now.date() + timedelta(days=30)
-        query = MonthlyObligation.objects.filter(
+        query = accessible_obligations(user).filter(
             deadline__range=[now.date(), next_month]
         )
 
@@ -480,9 +483,10 @@ def _auto_adjust_excel_columns(ws):
 # ANALYTICS HELPERS
 # ============================================
 
-def _calculate_monthly_completion_stats(start_date):
+def _calculate_monthly_completion_stats(start_date, user):
+    from accounting.services.access import accessible_obligations
     """Calculate monthly completion statistics"""
-    return MonthlyObligation.objects.filter(
+    return accessible_obligations(user).filter(
         deadline__gte=start_date
     ).annotate(
         month_label=TruncMonth('deadline')
@@ -494,9 +498,10 @@ def _calculate_monthly_completion_stats(start_date):
     ).order_by('month_label')
 
 
-def _calculate_client_performance(start_date):
+def _calculate_client_performance(start_date, user):
+    from accounting.services.access import accessible_obligations
     """Calculate client performance metrics"""
-    return MonthlyObligation.objects.filter(
+    return accessible_obligations(user).filter(
         deadline__gte=start_date
     ).values(
         'client__id',
@@ -508,9 +513,10 @@ def _calculate_client_performance(start_date):
     ).order_by('-total')[:10]
 
 
-def _calculate_time_stats(start_date):
+def _calculate_time_stats(start_date, user):
+    from accounting.services.access import accessible_obligations
     """Calculate time tracking statistics"""
-    return MonthlyObligation.objects.filter(
+    return accessible_obligations(user).filter(
         status='completed',
         completed_date__gte=start_date,
         time_spent__isnull=False
@@ -521,9 +527,10 @@ def _calculate_time_stats(start_date):
     )
 
 
-def _calculate_revenue(start_date):
+def _calculate_revenue(start_date, user):
+    from accounting.services.access import accessible_obligations
     """Calculate revenue data"""
-    obligations = MonthlyObligation.objects.filter(
+    obligations = accessible_obligations(user).filter(
         status='completed',
         completed_date__gte=start_date,
         time_spent__isnull=False

@@ -199,7 +199,7 @@ urlpatterns = [
 
     # VOIP MANAGEMENT
     path("voip/dashboard/", views.voip_dashboard, name="voip_dashboard"),
-    path("voip/list/", views.VoIPCallsListView.as_view(), name="voip_list"),
+    # voip/list/ αφαιρέθηκε: νεκρό legacy view (χωρίς template) — χρήση /api/v1/calls/
 
     # Fritz!Box Webhook (Token authenticated, no session required)
     path("api/fritz-webhook/", views.fritz_webhook, name="fritz_webhook"),

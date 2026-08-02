@@ -63,7 +63,6 @@ from .views import (
     voip_bulk_action,
     voip_export_csv,
     VoIPCallViewSet,
-    VoIPCallsListView,
     VoIPCallLogViewSet,
     # Dashboard views
     dashboard_view,

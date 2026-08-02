@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from common.models import AuditLog
+from accounting.services.access import mask_pii_value
 
 from .mixins import ClientScopedQuerysetMixin
 from .models import ClientCredential, ClientProfile
@@ -161,7 +162,8 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 user=request.user, action='view', obj=credential,
                 description=f'ΑΠΟΤΥΧΙΑ αποκρυπτογράφησης κωδικού '
                             f'{credential.get_service_display()} '
-                            f'για πελάτη {credential.client.afm} — έλεγξε τα '
+                            f'για πελάτη id={credential.client_id} '
+                            f'/ ΑΦΜ {mask_pii_value(credential.client.afm)} — έλεγξε τα '
                             f'DATA_ENCRYPTION_KEY_* (λάθος/χαμένο κλειδί;)',
                 severity='high', request=request,
             )
@@ -171,11 +173,14 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        reason = str(request.data.get('reason', '') or '').strip()[:200]
+        # Sanitize: χωρίς newlines/control chars στο audit, μασκαρισμένο ΑΦΜ
+        reason = str(request.data.get('reason', '') or '')
+        reason = ''.join(ch for ch in reason if ch.isprintable()).strip()[:200]
         AuditLog.log(
             user=request.user, action='view', obj=credential,
             description=f'Αποκάλυψη κωδικού {credential.get_service_display()} '
-                        f'για πελάτη {credential.client.afm}'
+                        f'για πελάτη id={credential.client_id} '
+                        f'/ ΑΦΜ {mask_pii_value(credential.client.afm)}'
                         + (f' — αιτιολογία: {reason}' if reason else ''),
             severity='high', request=request,
         )

@@ -48,6 +48,13 @@ def quick_complete_obligation(request, obligation_id):
     """
     Quick complete single obligation with optional file attachment
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         obligation = accessible_obligations(request.user).get(id=obligation_id)
 
@@ -142,6 +149,13 @@ def bulk_complete_view(request):
     """
     Simple bulk complete - all obligations get same treatment
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         try:
             obligation_ids = json.loads(request.POST.get('obligation_ids', '[]'))
@@ -232,6 +246,13 @@ def bulk_complete_view(request):
 @staff_member_required
 def advanced_bulk_complete(request):
     """Advanced bulk complete with full debugging"""
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
 
     logger.info("="*50)
     logger.info("ADVANCED BULK COMPLETE - START")
@@ -448,6 +469,13 @@ def complete_with_file(request, obligation_id):
     Complete obligation WITH file upload
     Handles multipart/form-data for file upload + completion
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         obligation = accessible_obligations(request.user).get(id=obligation_id)
 
@@ -550,6 +578,13 @@ def bulk_complete_obligations(request):
     Bulk complete multiple obligations with optional file upload
     Handles mass completion with optional file
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         # Get obligation IDs
         obligation_ids_str = request.POST.get('obligation_ids')
@@ -844,6 +879,13 @@ def wizard_bulk_process(request):
     Process wizard submission for bulk obligation completion.
     Each obligation can have its own file.
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         # Parse results JSON
         results_str = request.POST.get('results', '{}')

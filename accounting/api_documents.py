@@ -388,8 +388,13 @@ def attach_document_to_obligation(request, obligation_id):
         get_accessible_obligation_or_404, get_accessible_document_or_404,
         check_model_perms,
     )
-    # Σύνδεση/upload εγγράφου = write: ο read-only ρόλος παίρνει 403
-    if not check_model_perms(request, 'accounting.change_clientdocument'):
+    # Σύνδεση υπάρχοντος = change, upload νέου αρχείου = add
+    required_perm = (
+        'accounting.change_clientdocument'
+        if request.data.get('document_id')
+        else 'accounting.add_clientdocument'
+    )
+    if not check_model_perms(request, required_perm):
         return Response(
             {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=status.HTTP_403_FORBIDDEN,

@@ -33,7 +33,7 @@ def export_filtered_excel(request):
         filters = _get_filters_from_request(request)
 
         # Build query
-        query = _build_export_query(filters)
+        query = _build_export_query(filters, request.user)
 
         # Create Excel workbook
         wb = openpyxl.Workbook()

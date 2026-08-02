@@ -181,13 +181,17 @@ def client_obligation_profile(request, client_id):
     from accounting.services.access import get_accessible_client_or_404
     client = get_accessible_client_or_404(request.user, client_id, request=request)
 
-    # Get or create the ClientObligation record
-    client_obligation, created = ClientObligation.objects.get_or_create(
-        client=client,
-        defaults={'is_active': True}
-    )
-
     if request.method == 'GET':
+        # Το GET δεν γράφει στη βάση — αν δεν υπάρχει εγγραφή, κενές λίστες
+        client_obligation = ClientObligation.objects.filter(client=client).first()
+        if client_obligation is None:
+            return Response({
+                'client_id': client_id,
+                'obligation_type_ids': [],
+                'obligation_types': [],
+                'obligation_profile_ids': [],
+                'obligation_profiles': [],
+            })
         # Get individual obligation types
         obligation_types = list(client_obligation.obligation_types.filter(is_active=True))
         obligation_type_ids = [ot.id for ot in obligation_types]
@@ -217,6 +221,12 @@ def client_obligation_profile(request, client_id):
             )
         obligation_type_ids = request.data.get('obligation_type_ids', [])
         obligation_profile_ids = request.data.get('obligation_profile_ids', [])
+
+        # Το get_or_create μόνο στο PUT, αφού πέρασε το permission check
+        client_obligation, _created = ClientObligation.objects.get_or_create(
+            client=client,
+            defaults={'is_active': True}
+        )
 
         # Update obligation types
         if obligation_type_ids is not None:

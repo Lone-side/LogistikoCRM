@@ -69,6 +69,13 @@ def api_send_bulk_email(request):
     """
     Schedule bulk emails for obligations
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         data = json.loads(request.body)
         obligation_ids = data.get('obligation_ids', [])
@@ -168,6 +175,13 @@ def api_send_bulk_email_direct(request):
     Otherwise:
         - Sends emails immediately to each recipient
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     from accounting.services.email_service import EmailService
 
     try:
@@ -396,6 +410,13 @@ def api_send_bulk_email_direct(request):
 @require_POST
 def send_ticket_email(request):
     """Send email about ticket"""
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
         try:
             data = json.loads(request.body)
@@ -415,7 +436,8 @@ def send_ticket_email(request):
             }, status=400)
 
         # Get ticket
-        ticket = Ticket.objects.get(id=ticket_id)
+        from accounting.api_voip import _scope_by_client
+        ticket = _scope_by_client(Ticket.objects.all(), request.user).get(id=ticket_id)
 
         # Get template
         template = EmailTemplate.objects.get(id=template_id, is_active=True)

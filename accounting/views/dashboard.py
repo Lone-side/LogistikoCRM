@@ -67,12 +67,11 @@ def dashboard_view(request):
     logger.info(f"Dashboard accessed by {request.user.username} with filters: {filter_params}")
 
     # ========== STATISTICS (UNFILTERED) ==========
-    stats = _calculate_dashboard_stats()
+    stats = _calculate_dashboard_stats(request.user)
 
     # ========== BUILD FILTERED QUERY ==========
     upcoming_query = _build_filtered_query(
-        filter_params, filter_client_id, filter_type_id, now
-    )
+        filter_params, filter_client_id, filter_type_id, now, request.user)
 
     # ========== APPLY SORTING ==========
     sort_mapping = {
@@ -156,16 +155,16 @@ def reports_view(request):
     start_date = (now - timedelta(days=30*months_back)).date()
 
     # Monthly completion statistics
-    monthly_stats = _calculate_monthly_completion_stats(start_date)
+    monthly_stats = _calculate_monthly_completion_stats(start_date, request.user)
 
     # Client performance metrics
-    client_stats = _calculate_client_performance(start_date)
+    client_stats = _calculate_client_performance(start_date, request.user)
 
     # Time tracking summary
-    time_stats = _calculate_time_stats(start_date)
+    time_stats = _calculate_time_stats(start_date, request.user)
 
     # Revenue calculations
-    revenue_data = _calculate_revenue(start_date)
+    revenue_data = _calculate_revenue(start_date, request.user)
 
     # Obligation type statistics
     type_stats = _calculate_type_stats(start_date)
