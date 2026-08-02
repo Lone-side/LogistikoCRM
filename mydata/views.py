@@ -1243,6 +1243,13 @@ class VATPeriodCalculatorView(APIView):
 # INVOICE SUBMISSION (Αποστολή τιμολογίων στο myDATA)
 # =============================================================================
 
+class _CanSubmitInvoices(permissions.BasePermission):
+    """Απαιτεί inventory.change_invoice για υποβολή/ακύρωση στην ΑΑΔΕ."""
+
+    def has_permission(self, request, view):
+        return request.user.has_perm('inventory.change_invoice')
+
+
 class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Τιμολόγια (inventory.Invoice) με actions αποστολής/ακύρωσης στο myDATA.
@@ -1254,16 +1261,21 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
-        # Υποβολή/ακύρωση φορολογικών παραστατικών στην ΑΑΔΕ: μόνο staff
+        # Υποβολή/ακύρωση φορολογικών παραστατικών στην ΑΑΔΕ: staff ΚΑΙ
+        # ρητό model permission (όχι απλώς is_staff)
         if self.action in ('send', 'cancel'):
-            return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
+            return [permissions.IsAuthenticated(), permissions.IsAdminUser(),
+                    _CanSubmitInvoices()]
         return super().get_permissions()
 
     def get_queryset(self):
         from inventory.models import Invoice
         from .serializers import InvoiceListSerializer  # noqa: F401 (import check)
 
-        qs = Invoice.objects.select_related('counterpart').prefetch_related('items')
+        # RBAC: μόνο τιμολόγια αντισυμβαλλομένων στους οποίους έχει πρόσβαση
+        qs = Invoice.objects.select_related('counterpart').prefetch_related('items').filter(
+            counterpart__in=accessible_clients(self.request.user)
+        )
 
         direction = self.request.query_params.get('direction', 'outgoing')
         if direction == 'outgoing':

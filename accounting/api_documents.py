@@ -117,6 +117,24 @@ class DocumentSerializer(serializers.ModelSerializer):
         return None
 
 
+    def validate_client(self, client):
+        """RBAC: το client FK δεν μπορεί να δείξει σε πελάτη εκτός ανάθεσης."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and client is not None and \
+                not user_can_access_client(request.user, client):
+            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
+    def validate_obligation(self, obligation):
+        """RBAC: το obligation FK μόνο σε προσβάσιμη υποχρέωση."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and obligation is not None and \
+                not user_can_access_client(request.user, obligation.client):
+            raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
+        return obligation
+
 class DocumentUploadSerializer(serializers.Serializer):
     """Serializer for document upload"""
     file = serializers.FileField()

@@ -25,6 +25,9 @@ from .helpers import (
     _calculate_send_time,
     _create_bulk_emails,
 )
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ def api_send_bulk_email(request):
             })
 
         # Get obligations
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client')
 
@@ -190,7 +193,7 @@ def api_send_bulk_email_direct(request):
             })
 
         # Get obligations
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
 

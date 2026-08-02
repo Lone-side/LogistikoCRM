@@ -284,6 +284,24 @@ class SharedLinkSerializer(serializers.ModelSerializer):
         return f'/share/{obj.token}/'
 
 
+    def validate_client(self, client):
+        """RBAC: το client FK δεν μπορεί να δείξει σε πελάτη εκτός ανάθεσης."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and client is not None and \
+                not user_can_access_client(request.user, client):
+            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
+    def validate_document(self, document):
+        """RBAC: το document FK μόνο σε προσβάσιμο έγγραφο."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and document is not None and \
+                not user_can_access_client(request.user, document.client):
+            raise serializers.ValidationError('Το έγγραφο δεν βρέθηκε.')
+        return document
+
 class SharedLinkCreateSerializer(serializers.Serializer):
     """Serializer for creating shared links"""
     document_id = serializers.IntegerField(required=False, allow_null=True)
@@ -320,9 +338,27 @@ class DocumentFavoriteSerializer(serializers.ModelSerializer):
 
 
 class DocumentCollectionSerializer(serializers.ModelSerializer):
-    document_count = serializers.IntegerField(source='documents.count', read_only=True)
+    document_count = serializers.SerializerMethodField()
     owner_name = serializers.CharField(source='owner.username', read_only=True)
-    documents = DocumentListSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()
+
+    def _accessible_docs(self, obj):
+        # RBAC: shared collection μπορεί να περιέχει έγγραφα ξένων πελατών —
+        # ο καλών βλέπει ΜΟΝΟ όσα έγγραφα της συλλογής του είναι προσβάσιμα
+        from accounting.services.access import accessible_documents
+        request = self.context.get('request')
+        qs = obj.documents.all()
+        if request is not None:
+            qs = qs.filter(pk__in=accessible_documents(request.user))
+        return qs
+
+    def get_documents(self, obj):
+        return DocumentListSerializer(
+            self._accessible_docs(obj), many=True, context=self.context
+        ).data
+
+    def get_document_count(self, obj):
+        return self._accessible_docs(obj).count()
 
     class Meta:
         model = DocumentCollection

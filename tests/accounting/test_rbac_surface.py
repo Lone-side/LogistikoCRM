@@ -327,3 +327,194 @@ class AdminBypassTest(SurfaceBase):
         url = reverse('admin:accounting_clientprofile_import')
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 403)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class LegacyViewsRbacTest(SurfaceBase):
+    """Τα παλιά Django views κάτω από accounting/views/* είναι πλέον scoped."""
+
+    def test_quick_complete_foreign_obligation_404(self):
+        self.client.force_login(self.accountant)
+        resp = self.client.post(f'/accounting/quick-complete/{self.obl_b.pk}/')
+        self.assertIn(resp.status_code, (404, 400))
+        self.obl_b.refresh_from_db()
+        self.assertNotEqual(self.obl_b.status, 'completed')
+
+    def test_legacy_search_excludes_foreign(self):
+        self.client.force_login(self.accountant)
+        resp = self.client.get('/accounting/api/search/', {'q': 'ΠΕΛΑΤΗΣ'})
+        if resp.status_code == 200:
+            self.assertNotIn('987654321', resp.content.decode())
+
+    def test_client_report_pdf_foreign_404(self):
+        self.client.force_login(self.accountant)
+        resp = self.client.get(f'/accounting/reports/client/{self.client_b.pk}/pdf/')
+        self.assertEqual(resp.status_code, 404)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class BulkForeignIdsTest(SurfaceBase):
+    """Bulk actions με ξένα IDs δεν αγγίζουν ξένες εγγραφές."""
+
+    def test_bulk_update_ignores_foreign_ids(self):
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/obligations/bulk_update/',
+            {'obligation_ids': [self.obl_b.pk], 'status': 'completed'},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['updated_count'], 0)
+        self.obl_b.refresh_from_db()
+        self.assertNotEqual(self.obl_b.status, 'completed')
+
+    def test_bulk_delete_ignores_foreign_ids(self):
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/obligations/bulk_delete/',
+            {'obligation_ids': [self.obl_b.pk]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['deleted_count'], 0)
+
+    def test_bulk_create_ignores_foreign_clients(self):
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/obligations/bulk_create/',
+            {'client_ids': [self.client_b.pk], 'obligation_type_id': self.otype.pk,
+             'year': 2026, 'month': 7},
+            format='json',
+        )
+        # Ξένος πελάτης → είτε 400 (κανένας ενεργός πελάτης) είτε 0 δημιουργίες
+        if resp.status_code == 200:
+            self.assertEqual(resp.json().get('created_count', 0), 0)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class OwnershipPatchTest(SurfaceBase):
+    """PATCH που αλλάζει client/document σε ξένο target απορρίπτεται."""
+
+    def test_credential_patch_to_foreign_client_rejected(self):
+        from mydata.models import MyDataCredentials
+        creds_a = MyDataCredentials.objects.create(client=self.client_a)
+        resp = self.api(self.accountant).patch(
+            f'/accounting/api/mydata/credentials/{creds_a.pk}/',
+            {'client': self.client_b.pk},
+        )
+        self.assertIn(resp.status_code, (400, 404))
+        creds_a.refresh_from_db()
+        self.assertEqual(creds_a.client_id, self.client_a.pk)
+
+    def test_document_patch_to_foreign_client_rejected(self):
+        from accounting.models import ClientDocument
+        doc_a = ClientDocument.objects.create(
+            client=self.client_a, original_filename='a.pdf', filename='a.pdf',
+        )
+        resp = self.api(self.accountant).patch(
+            f'/accounting/api/v1/documents/{doc_a.pk}/',
+            {'client': self.client_b.pk},
+        )
+        self.assertIn(resp.status_code, (400, 404))
+        doc_a.refresh_from_db()
+        self.assertEqual(doc_a.client_id, self.client_a.pk)
+
+    def test_shared_link_patch_to_foreign_client_rejected(self):
+        from accounting.models import SharedLink
+        link = SharedLink.objects.create(
+            client=self.client_a, name='δικό μου', created_by=self.accountant,
+        )
+        resp = self.api(self.accountant).patch(
+            f'/accounting/api/v1/file-manager/shared-links/{link.pk}/',
+            {'client': self.client_b.pk},
+        )
+        self.assertIn(resp.status_code, (400, 404))
+        link.refresh_from_db()
+        self.assertEqual(link.client_id, self.client_a.pk)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class SharedCollectionLeakTest(SurfaceBase):
+    def test_shared_collection_filters_foreign_documents(self):
+        from accounting.models import ClientDocument, DocumentCollection
+        doc_b = ClientDocument.objects.create(
+            client=self.client_b, original_filename='b.pdf', filename='b.pdf',
+        )
+        other = User.objects.create_user('owner2', password='x')
+        coll = DocumentCollection.objects.create(
+            name='Κοινή', owner=other, is_shared=True,
+        )
+        coll.documents.add(doc_b)
+        resp = self.api(self.accountant).get(
+            f'/accounting/api/v1/file-manager/collections/{coll.pk}/'
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['documents'], [])
+        self.assertEqual(data['document_count'], 0)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class InvoiceRbacTest(SurfaceBase):
+    def test_invoices_scoped_to_accessible_counterpart(self):
+        from inventory.models import Invoice
+        inv = Invoice.objects.create(
+            counterpart=self.client_b, counterpart_vat=self.client_b.afm,
+            counterpart_name=self.client_b.eponimia, is_outgoing=True,
+        )
+        resp = self.api(self.accountant).get('/accounting/api/mydata/invoices/')
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn('987654321', resp.content.decode())
+        detail = self.api(self.accountant).get(f'/accounting/api/mydata/invoices/{inv.pk}/')
+        self.assertEqual(detail.status_code, 404)
+
+    def test_send_requires_invoice_permission(self):
+        from inventory.models import Invoice
+        staff = User.objects.create_user('plainstaff', password='x', is_staff=True)
+        inv = Invoice.objects.create(
+            counterpart=self.client_a, counterpart_vat=self.client_a.afm,
+            counterpart_name=self.client_a.eponimia, is_outgoing=True,
+        )
+        api = APIClient()
+        api.force_authenticate(staff)
+        resp = api.post(f'/accounting/api/mydata/invoices/{inv.pk}/send/')
+        self.assertEqual(resp.status_code, 403)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class WritePermsRound3Test(SurfaceBase):
+    def test_assistant_cannot_create_ticket(self):
+        resp = self.api(self.assistant).post(
+            '/accounting/api/v1/tickets/', {'title': 'x'},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_assistant_cannot_change_obligation_type_settings(self):
+        resp = self.api(self.assistant).post(
+            '/accounting/api/v1/settings/obligation-types/',
+            {'code': 'ΝΕΟ', 'name': 'Νέος τύπος'},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_assistant_cannot_match_call(self):
+        from accounting.models import VoIPCall
+        from django.utils import timezone
+        call = VoIPCall.objects.create(
+            phone_number='2101234567', started_at=timezone.now(),
+        )
+        # REMOTE_ADDR εκτός localhost — αλλιώς περνά από το IsLocalRequest gate
+        resp = self.api(self.assistant).post(
+            f'/accounting/api/v1/calls/{call.pk}/match_client/',
+            {'client_id': self.client_a.pk},
+            REMOTE_ADDR='10.0.0.5',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_scoped_user_cannot_auto_match_all(self):
+        resp = self.api(self.accountant).post(
+            '/accounting/api/v1/calls/auto_match_all/', REMOTE_ADDR='10.0.0.5',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_upload_with_version_requires_add_document(self):
+        assistant_staff = make_role_user(
+            'voithos_staff', 'Βοηθός', [self.client_a], is_staff=True,
+        )
+        self.client.force_login(assistant_staff)
+        resp = self.client.post('/accounting/api/v1/documents/upload-with-version/', {})
+        self.assertEqual(resp.status_code, 403)

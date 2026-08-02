@@ -30,7 +30,7 @@ ROLES = {
             'delete_clientcredential',
             'view_client_credential_secret',
             # Υποχρεώσεις: προφίλ/τύποι/αναθέσεις
-            'view_obligationprofile', 'view_obligationtype',
+            'view_obligationprofile', 'view_obligationtype', 'view_obligationgroup',
             'add_clientobligation', 'change_clientobligation', 'view_clientobligation',
             # Email: templates + αποστολή σε πελάτες
             'add_emailtemplate', 'change_emailtemplate', 'view_emailtemplate',
@@ -52,7 +52,8 @@ ROLES = {
         'codenames': [
             'view_clientprofile', 'view_clientdocument',
             'view_monthlyobligation', 'view_clientcredential',
-            'view_obligationprofile', 'view_obligationtype', 'view_clientobligation',
+            'view_obligationprofile', 'view_obligationtype', 'view_obligationgroup',
+            'view_clientobligation',
             'view_emailtemplate', 'view_emaillog',
             'view_sharedlink', 'view_documentrequest',
             'view_ticket', 'view_voipcall', 'view_voipcalllog',

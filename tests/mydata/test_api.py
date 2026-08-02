@@ -35,6 +35,13 @@ class InvoiceAPITest(TestCase):
         self.user = User.objects.create_user(
             'staff1', 's@test.com', 'pass12345', is_staff=True
         )
+        # Το send/cancel απαιτεί πλέον και το model permission του Invoice
+        from django.contrib.auth.models import Permission
+        self.user.user_permissions.add(
+            Permission.objects.get(codename='change_invoice',
+                                   content_type__app_label='inventory')
+        )
+        self.user = User.objects.get(pk=self.user.pk)
         self.client.force_login(self.user)
 
         self.client_profile = ClientProfile.objects.create(

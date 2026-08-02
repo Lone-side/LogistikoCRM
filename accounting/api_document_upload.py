@@ -128,6 +128,14 @@ def upload_document_with_version(request):
     Returns:
         JSON με πληροφορίες του νέου εγγράφου
     """
+    # Upload/νέα έκδοση = write: απαιτείται add_clientdocument
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse({
+            'success': False,
+            'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'
+        }, status=403)
+
     if 'file' not in request.FILES:
         return JsonResponse({
             'success': False,

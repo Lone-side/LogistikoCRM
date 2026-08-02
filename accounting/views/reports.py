@@ -14,6 +14,9 @@ from ..models import ClientProfile, MonthlyObligation
 from ..utils.report_constants import GREEK_MONTHS_FULL
 
 import logging
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +36,10 @@ def client_report_pdf(request, client_id):
             status=500
         )
 
-    client = get_object_or_404(ClientProfile, id=client_id)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     # Get all obligations for stats calculation (before slicing)
-    all_obligations = MonthlyObligation.objects.filter(client=client)
+    all_obligations = accessible_obligations(request.user).filter(client=client)
 
     # Calculate statistics from unsliced queryset
     stats = {
@@ -94,7 +97,7 @@ def monthly_report_pdf(request, year, month):
         )
 
     # Get all obligations for stats calculation (before any slicing)
-    all_obligations = MonthlyObligation.objects.filter(
+    all_obligations = accessible_obligations(request.user).filter(
         year=year,
         month=month
     )

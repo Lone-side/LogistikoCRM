@@ -30,6 +30,9 @@ from .helpers import (
 )
 
 import logging
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +90,7 @@ def dashboard_view(request):
     upcoming_count = upcoming_query.count()
 
     # ========== OVERDUE OBLIGATIONS ==========
-    overdue_query = MonthlyObligation.objects.filter(
+    overdue_query = accessible_obligations(request.user).filter(
         deadline__lt=now.date(),
         status__in=['pending', 'overdue']
     ).select_related('client', 'obligation_type')
@@ -102,7 +105,7 @@ def dashboard_view(request):
     overdue_count = overdue_query.count()
 
     # ========== FILTER OPTIONS ==========
-    all_clients = ClientProfile.objects.all().order_by('eponimia').values('id', 'eponimia', 'afm')
+    all_clients = accessible_clients(request.user).all().order_by('eponimia').values('id', 'eponimia', 'afm')
     all_types = ObligationType.objects.filter(is_active=True).order_by('name')
 
     # ========== PREPARE CONTEXT ==========
@@ -174,7 +177,7 @@ def reports_view(request):
     chart_data = _format_chart_data(monthly_stats)
 
     # Get clients for PDF export dropdown
-    clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+    clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
 
     # Year choices for monthly report
     current_year = now.year

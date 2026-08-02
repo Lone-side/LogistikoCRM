@@ -31,6 +31,9 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 import logging
 import json
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +49,7 @@ def quick_complete_obligation(request, obligation_id):
     Quick complete single obligation with optional file attachment
     """
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
+        obligation = accessible_obligations(request.user).get(id=obligation_id)
 
         # Handle both FormData and JSON requests
         if 'multipart/form-data' in request.META.get('CONTENT_TYPE', ''):
@@ -175,7 +178,7 @@ def bulk_complete_view(request):
                 'message': 'Den epilexthikan ypoxreoseis'
             })
 
-        obligations = MonthlyObligation.objects.filter(id__in=obligation_ids)
+        obligations = accessible_obligations(request.user).filter(id__in=obligation_ids)
         completed_count = 0
 
         for idx, obl in enumerate(obligations):
@@ -284,7 +287,7 @@ def advanced_bulk_complete(request):
                 try:
                     logger.info(f"  Processing obligation {obl_id}...")
 
-                    obligation = MonthlyObligation.objects.get(id=obl_id)
+                    obligation = accessible_obligations(request.user).get(id=obl_id)
 
                     # Update status
                     obligation.status = 'completed'
@@ -424,7 +427,7 @@ def check_obligation_duplicate(request):
             'error': 'Μη έγκυρες παράμετροι'
         }, status=400)
 
-    exists = MonthlyObligation.objects.filter(
+    exists = accessible_obligations(request.user).filter(
         client_id=client_id,
         obligation_type_id=type_id,
         year=year,
@@ -446,7 +449,7 @@ def complete_with_file(request, obligation_id):
     Handles multipart/form-data for file upload + completion
     """
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
+        obligation = accessible_obligations(request.user).get(id=obligation_id)
 
         # Validate file
         if 'file' not in request.FILES:
@@ -565,7 +568,7 @@ def bulk_complete_obligations(request):
             }, status=400)
 
         # Get obligations
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids,
             status__in=['pending', 'overdue']
         )
@@ -690,14 +693,14 @@ def obligation_detail_view(request, obligation_id):
     Allows viewing and editing all fields + document upload
     """
     try:
-        obligation = MonthlyObligation.objects.select_related(
+        obligation = accessible_obligations(request.user).select_related(
             'client', 'obligation_type', 'completed_by'
         ).prefetch_related(
             'client__documents'
         ).get(id=obligation_id)
 
         # Get all documents for this obligation
-        documents = ClientDocument.objects.filter(
+        documents = accessible_documents(request.user).filter(
             Q(obligation=obligation) | Q(client=obligation.client)
         ).order_by('-uploaded_at')
 
@@ -773,7 +776,7 @@ def api_obligations_wizard(request):
             }, status=400)
 
         # Get obligations with related data
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=ids
         ).select_related(
             'client', 'obligation_type'
@@ -788,7 +791,7 @@ def api_obligations_wizard(request):
 
         # Ένα batch query για τα έγγραφα όλων των υποχρεώσεων (όχι 1/υποχρέωση)
         docs_by_obligation = {}
-        for doc in ClientDocument.objects.filter(
+        for doc in accessible_documents(request.user).filter(
             obligation_id__in=[ob.id for ob in obligations]
         ).values('id', 'filename', 'uploaded_at', 'obligation_id'):
             docs_by_obligation.setdefault(doc.pop('obligation_id'), []).append(doc)
@@ -881,7 +884,7 @@ def wizard_bulk_process(request):
                     skipped_count += 1
                     continue
 
-                obligation = MonthlyObligation.objects.select_related(
+                obligation = accessible_obligations(request.user).select_related(
                     'client', 'obligation_type'
                 ).get(id=ob_id)
 

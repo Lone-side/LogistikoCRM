@@ -12,6 +12,9 @@ from django.db.models import Q
 from ..models import ClientProfile, MonthlyObligation
 
 import logging
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +34,7 @@ def global_search_api(request):
 
     try:
         # Search clients by eponimia, afm, email, or phone
-        clients = ClientProfile.objects.filter(
+        clients = accessible_clients(request.user).filter(
             Q(eponimia__icontains=query) |
             Q(afm__icontains=query) |
             Q(email__icontains=query) |
@@ -40,7 +43,7 @@ def global_search_api(request):
         ).filter(is_active=True)[:5]
 
         # Search obligations by client name or obligation type name
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             Q(client__eponimia__icontains=query) |
             Q(obligation_type__name__icontains=query) |
             Q(client__afm__icontains=query)

@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404
 
 from .models import VoIPCall, VoIPCallLog, Ticket, ClientProfile
 from .phone_utils import auto_match_call, batch_auto_match_calls, find_client_by_phone
-from .permissions import IsVoIPMonitor, IsLocalRequest
+from .permissions import ClientModelPermissions, IsVoIPMonitor, IsLocalRequest
 
 import logging
 
@@ -186,8 +186,27 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     """
     queryset = VoIPCall.objects.select_related('client').order_by('-started_at')
     serializer_class = VoIPCallFullSerializer
-    permission_classes = [permissions.IsAuthenticated | IsVoIPMonitor | IsLocalRequest]
+    # Χρήστες: auth + model perms. Εσωτερικές υπηρεσίες (Fritz monitor,
+    # localhost): δικό τους gate, χωρίς model perms.
+    permission_classes = [
+        (permissions.IsAuthenticated & ClientModelPermissions)
+        | IsVoIPMonitor | IsLocalRequest
+    ]
     pagination_class = StandardPagination
+    action_perms = {
+        'match_client': ['accounting.change_voipcall'],
+        'auto_match': ['accounting.change_voipcall'],
+        'auto_match_all': ['accounting.change_voipcall'],
+        'create_ticket': ['accounting.add_ticket'],
+    }
+
+    def perform_update(self, serializer):
+        # Το client_id στο payload μόνο για προσβάσιμο πελάτη
+        from accounting.services.access import get_accessible_client_or_404
+        client_id = serializer.validated_data.get('client_id')
+        if client_id:
+            get_accessible_client_or_404(self.request.user, client_id, request=self.request)
+        serializer.save()
 
     def get_queryset(self):
         queryset = _scope_by_client(super().get_queryset(), self.request.user)
@@ -348,6 +367,14 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         """
         dry_run = request.query_params.get('dry_run', 'false').lower() == 'true'
 
+        # Global ενέργεια: μόνο για χρήστες που βλέπουν όλους τους πελάτες
+        from accounting.mixins import user_sees_all_clients
+        if not user_sees_all_clients(request.user):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         stats = batch_auto_match_calls(dry_run=dry_run)
 
         return Response({
@@ -401,8 +428,12 @@ class TicketViewSet(viewsets.ModelViewSet):
     """
     queryset = Ticket.objects.select_related('client', 'call', 'assigned_to').order_by('-created_at')
     serializer_class = TicketSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions]
     pagination_class = StandardPagination
+    action_perms = {
+        'change_status': ['accounting.change_ticket'],
+        'assign': ['accounting.change_ticket'],
+    }
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -476,14 +507,25 @@ class TicketViewSet(viewsets.ModelViewSet):
             'stats': stats
         })
 
-    def perform_create(self, serializer):
-        """Auto-set status to open on create (μόνο για προσβάσιμο πελάτη)"""
+    def _check_client_id(self, serializer):
+        # Το client/client_id στο payload πρέπει να δείχνει σε προσβάσιμο πελάτη
+        from accounting.services.access import get_accessible_client_or_404, user_can_access_client
         from django.http import Http404
-        from accounting.services.access import user_can_access_client
         client = serializer.validated_data.get('client')
         if client is not None and not user_can_access_client(self.request.user, client):
             raise Http404('ClientProfile not found')
+        client_id = serializer.validated_data.get('client_id')
+        if client_id:
+            get_accessible_client_or_404(self.request.user, client_id, request=self.request)
+
+    def perform_create(self, serializer):
+        """Auto-set status to open on create (μόνο για προσβάσιμο πελάτη)"""
+        self._check_client_id(serializer)
         serializer.save(status='open')
+
+    def perform_update(self, serializer):
+        self._check_client_id(serializer)
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):

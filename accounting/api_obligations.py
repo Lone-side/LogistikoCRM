@@ -402,7 +402,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        obligations = MonthlyObligation.objects.filter(
+        # RBAC: μόνο προσβάσιμες υποχρεώσεις — ξένα IDs αγνοούνται
+        obligations = self.get_queryset().filter(
             id__in=obligation_ids,
             status__in=['pending', 'overdue']
         )
@@ -484,8 +485,9 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get clients
-        clients = ClientProfile.objects.filter(id__in=client_ids, is_active=True)
+        # Get clients (RBAC: μόνο προσβάσιμοι)
+        from accounting.services.access import accessible_clients
+        clients = accessible_clients(request.user).filter(id__in=client_ids, is_active=True)
         if not clients.exists():
             return Response(
                 {'error': 'Δεν βρέθηκαν ενεργοί πελάτες.'},
@@ -561,7 +563,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        obligations = MonthlyObligation.objects.filter(id__in=obligation_ids)
+        # RBAC: μόνο προσβάσιμες υποχρεώσεις
+        obligations = self.get_queryset().filter(id__in=obligation_ids)
 
         update_data = {'status': new_status}
         if new_status == 'completed':
@@ -591,7 +594,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        deleted_count, _ = MonthlyObligation.objects.filter(
+        # RBAC: μόνο προσβάσιμες υποχρεώσεις
+        deleted_count, _ = self.get_queryset().filter(
             id__in=obligation_ids
         ).delete()
 
