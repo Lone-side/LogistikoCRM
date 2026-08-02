@@ -141,6 +141,7 @@ def _calculate_monthly_stats(obligations, now):
 # ============================================
 
 def _process_individual_obligations(obligation_ids, files, notes, user):
+    from accounting.services.access import accessible_obligations
     """Process obligations with individual files"""
     completed = 0
     errors = []
@@ -181,6 +182,7 @@ def _process_individual_obligations(obligation_ids, files, notes, user):
 
 
 def _process_grouped_obligations(obligation_ids, files, notes, group_num, user):
+    from accounting.services.access import accessible_obligations
     """Process obligations with shared group file"""
     completed = 0
     errors = []
