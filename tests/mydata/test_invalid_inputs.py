@@ -18,7 +18,10 @@ BASE = '/accounting/api/mydata/'
 
 class InvalidInputTestCase(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user('tester', 't@test.com', 'pass12345')
+        from tests.utils.helpers import grant_mydata_model_perms
+        self.user = grant_mydata_model_perms(
+            User.objects.create_user('tester', 't@test.com', 'pass12345')
+        )
         self.client.force_login(self.user)
         self.profile = ClientProfile.objects.create(
             afm='123456783', eponimia='ΠΕΛΑΤΗΣ ΑΕ', eidos_ipoxreou='company'

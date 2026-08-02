@@ -250,6 +250,12 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     queryset = MonthlyObligation.objects.all()
     permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    # Bulk actions: map POST στο σωστό model permission ανά ενέργεια
+    action_perms = {
+        'bulk_complete': ['accounting.change_monthlyobligation'],
+        'bulk_update': ['accounting.change_monthlyobligation'],
+        'bulk_delete': ['accounting.delete_monthlyobligation'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = ObligationPagination
 

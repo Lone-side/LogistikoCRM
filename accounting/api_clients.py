@@ -225,6 +225,20 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
     client_field = 'assigned_users'
     pagination_class = ClientPagination
+    # Custom actions εγγράφων: τα σωστά permissions είναι του ClientDocument,
+    # όχι του ClientProfile (το POST θα απαιτούσε αλλιώς add_clientprofile)
+    action_perms = {
+        'upload_document': ['accounting.add_clientdocument'],
+        'delete_document': ['accounting.delete_clientdocument'],
+    }
+
+    def perform_create(self, serializer):
+        # Ο δημιουργός αναλαμβάνει αυτόματα τον νέο πελάτη — αλλιώς scoped
+        # χρήστης (Λογιστής) δεν θα τον ξαναέβλεπε μετά τη δημιουργία
+        from accounting.mixins import user_sees_all_clients
+        client = serializer.save()
+        if not user_sees_all_clients(self.request.user):
+            client.assigned_users.add(self.request.user)
 
     # Πεδία PII των οποίων οι αλλαγές καταγράφονται στο AuditLog
     AUDITED_PII_FIELDS = [

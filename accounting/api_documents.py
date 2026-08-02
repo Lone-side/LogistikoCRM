@@ -191,6 +191,10 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = ClientDocument.objects.all()
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    action_perms = {
+        'attach_to_obligation': ['accounting.change_clientdocument'],
+        'detach_from_obligation': ['accounting.change_clientdocument'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = DocumentPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -364,7 +368,14 @@ def attach_document_to_obligation(request, obligation_id):
     from django.http import Http404
     from accounting.services.access import (
         get_accessible_obligation_or_404, get_accessible_document_or_404,
+        check_model_perms,
     )
+    # Σύνδεση/upload εγγράφου = write: ο read-only ρόλος παίρνει 403
+    if not check_model_perms(request, 'accounting.change_clientdocument'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     try:
         obligation = get_accessible_obligation_or_404(
             request.user, obligation_id, request=request

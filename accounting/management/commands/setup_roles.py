@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand
 
 ROLES = {
     'Διαχειριστής': {
-        'app_all': ['accounting'],
+        'app_all': ['accounting', 'mydata'],
         'extra': ['view_all_clients', 'view_client_credential_secret'],
     },
     'Λογιστής': {
@@ -29,12 +29,35 @@ ROLES = {
             'add_clientcredential', 'change_clientcredential', 'view_clientcredential',
             'delete_clientcredential',
             'view_client_credential_secret',
+            # Υποχρεώσεις: προφίλ/τύποι/αναθέσεις
+            'view_obligationprofile', 'view_obligationtype',
+            'add_clientobligation', 'change_clientobligation', 'view_clientobligation',
+            # Email: templates + αποστολή σε πελάτες
+            'add_emailtemplate', 'change_emailtemplate', 'view_emailtemplate',
+            'view_emaillog', 'send_client_email',
+            # Shared links / αιτήματα εγγράφων / tickets / VoIP
+            'add_sharedlink', 'change_sharedlink', 'view_sharedlink', 'delete_sharedlink',
+            'add_documentrequest', 'change_documentrequest', 'view_documentrequest',
+            'delete_documentrequest',
+            'add_ticket', 'change_ticket', 'view_ticket', 'delete_ticket',
+            'add_voipcall', 'change_voipcall', 'view_voipcall', 'view_voipcalllog',
+            # myDATA
+            'add_mydatacredentials', 'change_mydatacredentials', 'view_mydatacredentials',
+            'delete_mydatacredentials',
+            'view_vatrecord', 'view_vatsynclog',
+            'add_vatperiodresult', 'change_vatperiodresult', 'view_vatperiodresult',
         ],
     },
     'Βοηθός': {
         'codenames': [
             'view_clientprofile', 'view_clientdocument',
             'view_monthlyobligation', 'view_clientcredential',
+            'view_obligationprofile', 'view_obligationtype', 'view_clientobligation',
+            'view_emailtemplate', 'view_emaillog',
+            'view_sharedlink', 'view_documentrequest',
+            'view_ticket', 'view_voipcall', 'view_voipcalllog',
+            'view_mydatacredentials', 'view_vatrecord', 'view_vatsynclog',
+            'view_vatperiodresult',
         ],
     },
 }

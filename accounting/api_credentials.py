@@ -77,6 +77,11 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 
     serializer_class = ClientCredentialSerializer
     permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    # Το reveal είναι POST αλλά δεν είναι "add" — αρκεί view_clientcredential,
+    # το ειδικό view_client_credential_secret ελέγχεται μέσα στο action
+    action_perms = {
+        'reveal': ['accounting.view_clientcredential'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = None
 

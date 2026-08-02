@@ -163,3 +163,24 @@ def grant_accounting_model_perms(user):
     user.user_permissions.add(*perms)
     # Καθάρισμα permission cache
     return User.objects.get(pk=user.pk)
+
+
+def grant_extra_perms(user, *codenames):
+    """Δίνει επιπλέον permissions με codename (π.χ. send_client_email)."""
+    from django.contrib.auth.models import Permission, User
+
+    perms = Permission.objects.filter(codename__in=codenames)
+    user.user_permissions.add(*perms)
+    return User.objects.get(pk=user.pk)
+
+
+def grant_mydata_model_perms(user):
+    """Δίνει στον χρήστη τα CRUD model permissions του mydata app."""
+    from django.contrib.auth.models import Permission, User
+
+    perms = Permission.objects.filter(
+        content_type__app_label='mydata',
+        codename__regex=r'^(view|add|change|delete)_',
+    )
+    user.user_permissions.add(*perms)
+    return User.objects.get(pk=user.pk)

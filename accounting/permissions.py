@@ -152,3 +152,15 @@ class ClientModelPermissions(DjangoModelPermissions):
         'PATCH': ['%(app_label)s.change_%(model_name)s'],
         'DELETE': ['%(app_label)s.delete_%(model_name)s'],
     }
+
+    def has_permission(self, request, view):
+        # Custom actions: το HTTP method δεν αντιστοιχεί πάντα στο σωστό
+        # model permission (π.χ. POST bulk-delete → delete_*, όχι add_*).
+        # Κάθε ViewSet μπορεί να δηλώσει view.action_perms = {action: [perms]}.
+        action = getattr(view, 'action', None)
+        override = getattr(view, 'action_perms', {}).get(action)
+        if override is not None:
+            if not (request.user and request.user.is_authenticated):
+                return False
+            return request.user.has_perms(override)
+        return super().has_permission(request, view)

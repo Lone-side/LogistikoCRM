@@ -76,6 +76,42 @@ def get_accessible_document_or_404(user, pk, request=None):
     return _get_or_404(accessible_documents(user), pk, user, request, 'ClientDocument')
 
 
+def check_model_perms(request, *perms):
+    """
+    Inline έλεγχος model permissions μέσα σε view (για views με πολλά
+    HTTP methods όπου το decorator δεν αρκεί). Επιστρέφει True/False
+    και καταγράφει την απόρριψη στο AuditLog.
+    """
+    if request.user.has_perms(perms):
+        return True
+    _audit_deny(request.user, request, f'{request.method} {request.path}: λείπουν δικαιώματα {sorted(perms)}')
+    return False
+
+
+def require_model_perms(*perms):
+    """
+    Decorator για function-based DRF views: 403 αν λείπει έστω ένα από τα
+    Django model permissions (π.χ. 'accounting.view_clientprofile').
+    Superusers περνούν πάντα (has_perms → True). Καταγράφει την απόρριψη.
+    """
+    from functools import wraps
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            from rest_framework.response import Response
+            user = request.user
+            if not user.has_perms(perms):
+                _audit_deny(user, request, f'{request.method} {request.path}: λείπουν δικαιώματα {sorted(perms)}')
+                return Response(
+                    {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                    status=403,
+                )
+            return view_func(request, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def mask_pii_value(value):
     """
     Μάσκαρε τιμή PII για audit log: κρατά μόνο τα 4 τελευταία ψηφία/χαρακτήρες.

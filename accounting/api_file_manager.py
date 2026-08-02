@@ -355,6 +355,12 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     queryset = ClientDocument.objects.filter(is_current=True)
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    # Custom actions: POST δεν σημαίνει πάντα add — map στο σωστό permission
+    action_perms = {
+        'bulk_delete': ['accounting.delete_clientdocument'],
+        'add_tags': ['accounting.change_clientdocument'],
+        'remove_tag': ['accounting.change_clientdocument'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -587,7 +593,9 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
     """ViewSet for shared links management"""
     queryset = SharedLink.objects.all()
     serializer_class = SharedLinkSerializer
-    permission_classes = [IsAuthenticated]
+    # ClientModelPermissions: ο read-only ρόλος (Βοηθός) δεν δημιουργεί
+    # δημόσια shared links — απαιτείται add/change/delete_sharedlink
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     ordering = ['-created_at']

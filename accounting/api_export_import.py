@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import ClientProfile, ObligationType, ObligationProfile, ClientObligation
+from .services.access import accessible_clients, require_model_perms
 
 try:
     import openpyxl
@@ -79,6 +80,7 @@ def export_clients_template(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile')
 def export_clients_csv(request):
     """
     GET /api/v1/export/clients/csv/
@@ -128,7 +130,8 @@ def export_clients_csv(request):
             cell.font = header_font
 
         # Data rows
-        clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+        # Μόνο πελάτες στους οποίους έχει πρόσβαση ο χρήστης (RBAC scoping)
+        clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
 
         # Map eidos_ipoxreou to Greek
         eidos_map = {
@@ -205,6 +208,7 @@ def export_clients_csv(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.add_clientprofile', 'accounting.change_clientprofile')
 @parser_classes([MultiPartParser, FormParser])
 def import_clients_csv(request):
     """
@@ -361,6 +365,11 @@ def import_clients_csv(request):
                 existing = ClientProfile.objects.filter(afm=afm).first()
 
                 if existing:
+                    # Scoped χρήστες δεν ενημερώνουν πελάτες εκτός ανάθεσης
+                    if not accessible_clients(request.user).filter(pk=existing.pk).exists():
+                        errors.append(f'Γραμμή {row_num}: ΑΦΜ {afm} εκτός ανάθεσης — παραλείφθηκε')
+                        skipped_count += 1
+                        continue
                     if mode == 'update':
                         # Update existing client
                         for field, value in row_data.items():
@@ -376,6 +385,11 @@ def import_clients_csv(request):
                     # Create new client
                     row_data['is_active'] = True
                     new_client = ClientProfile.objects.create(**row_data)
+                    # Ο δημιουργός αναλαμβάνει αυτόματα τον νέο πελάτη —
+                    # αλλιώς scoped χρήστης δεν θα τον ξαναέβλεπε
+                    from accounting.mixins import user_sees_all_clients
+                    if not user_sees_all_clients(request.user):
+                        new_client.assigned_users.add(request.user)
                     if credentials:
                         store_client_credentials(new_client, credentials, updated_by=request.user)
                     created_count += 1
@@ -464,6 +478,7 @@ def clean_value(value, field_name):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_obligationprofile')
 def export_obligation_profiles_csv(request):
     """Export obligation profiles - kept for compatibility."""
     from django.http import HttpResponse
@@ -487,6 +502,7 @@ def export_obligation_profiles_csv(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_obligationtype')
 def export_obligation_types_csv(request):
     """Export obligation types - kept for compatibility."""
     from django.http import HttpResponse
@@ -512,6 +528,7 @@ def export_obligation_types_csv(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile')
 def export_client_obligations_csv(request):
     """Export client obligation assignments."""
     from django.http import HttpResponse
@@ -525,7 +542,9 @@ def export_client_obligations_csv(request):
     writer = csv.writer(response)
     writer.writerow(['ΑΦΜ', 'Επωνυμία', 'Profiles', 'Τύποι'])
 
-    cos = ClientObligation.objects.all().select_related('client').prefetch_related(
+    cos = ClientObligation.objects.filter(
+        client__in=accessible_clients(request.user)
+    ).select_related('client').prefetch_related(
         'obligation_profiles', 'obligation_types'
     )
     for co in cos:
@@ -538,6 +557,7 @@ def export_client_obligations_csv(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_clientprofile')
 @parser_classes([MultiPartParser, FormParser])
 def import_client_obligations_csv(request):
     """Import client obligation assignments from CSV."""
@@ -570,7 +590,7 @@ def import_client_obligations_csv(request):
                 if not afm:
                     continue
 
-                client = ClientProfile.objects.filter(afm=afm).first()
+                client = accessible_clients(request.user).filter(afm=afm).first()
                 if not client:
                     errors.append(f'Γραμμή {row_num}: ΑΦΜ {afm} δεν βρέθηκε')
                     continue

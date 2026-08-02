@@ -16,6 +16,12 @@ from .models import (
     EmailSettings
 )
 from .services.email_service import EmailService
+from .services.access import (
+    accessible_clients, accessible_obligations, check_model_perms,
+    require_model_perms,
+)
+
+PERM_DENIED = {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
 
 
 # ============================================
@@ -181,6 +187,8 @@ def email_templates(request):
         return Response(serializer.data)
 
     elif request.method == 'POST':
+        if not check_model_perms(request, 'accounting.add_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailTemplateSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -222,6 +230,8 @@ def email_template_detail(request, template_id):
         })
 
     elif request.method == 'PUT':
+        if not check_model_perms(request, 'accounting.change_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailTemplateSerializer(template, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -229,6 +239,8 @@ def email_template_detail(request, template_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'DELETE':
+        if not check_model_perms(request, 'accounting.delete_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         # Soft delete - set is_active=False
         template.is_active = False
         template.save(update_fields=['is_active'])
@@ -271,7 +283,7 @@ def preview_email(request):
 
     if obligation_id:
         try:
-            obligation = MonthlyObligation.objects.get(id=obligation_id)
+            obligation = accessible_obligations(request.user).get(id=obligation_id)
             client = obligation.client
         except MonthlyObligation.DoesNotExist:
             return Response(
@@ -280,7 +292,7 @@ def preview_email(request):
             )
     elif client_id:
         try:
-            client = ClientProfile.objects.get(id=client_id)
+            client = accessible_clients(request.user).get(id=client_id)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Ο πελάτης δεν βρέθηκε.'},
@@ -303,6 +315,7 @@ def preview_email(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.send_client_email')
 def send_email(request):
     """
     POST /api/v1/email/send/
@@ -327,7 +340,9 @@ def send_email(request):
     template_id = serializer.validated_data.get('template_id')
     attachment_ids = serializer.validated_data.get('attachment_ids', [])
 
-    client = ClientProfile.objects.get(id=client_id)
+    client = accessible_clients(request.user).filter(id=client_id).first()
+    if client is None:
+        return Response({'error': 'Ο πελάτης δεν βρέθηκε.'}, status=status.HTTP_404_NOT_FOUND)
     template = None
     if template_id:
         template = EmailTemplate.objects.get(id=template_id)
@@ -370,6 +385,7 @@ def send_email(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.send_client_email')
 def send_obligation_notice(request):
     """
     POST /api/v1/email/send-obligation-notice/
@@ -394,7 +410,9 @@ def send_obligation_notice(request):
     include_attachment = serializer.validated_data['include_attachment']
     attachment_ids = serializer.validated_data.get('attachment_ids', [])
 
-    obligation = MonthlyObligation.objects.get(id=obligation_id)
+    obligation = accessible_obligations(request.user).filter(id=obligation_id).first()
+    if obligation is None:
+        return Response({'error': 'Η υποχρέωση δεν βρέθηκε.'}, status=status.HTTP_404_NOT_FOUND)
     client = obligation.client
 
     # Get template
@@ -466,6 +484,7 @@ def send_obligation_notice(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_monthlyobligation')
 def complete_and_notify(request, obligation_id):
     """
     POST /api/v1/obligations/{id}/complete-and-notify/
@@ -485,7 +504,7 @@ def complete_and_notify(request, obligation_id):
     import os
 
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
+        obligation = accessible_obligations(request.user).get(id=obligation_id)
     except MonthlyObligation.DoesNotExist:
         return Response(
             {'error': 'Η υποχρέωση δεν βρέθηκε.'},
@@ -511,6 +530,9 @@ def complete_and_notify(request, obligation_id):
     send_email_flag = request.data.get('send_email', 'false')
     if isinstance(send_email_flag, str):
         send_email_flag = send_email_flag.lower() == 'true'
+
+    if send_email_flag and not check_model_perms(request, 'accounting.send_client_email'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
     attach_to_email = request.data.get('attach_to_email', 'false')
     if isinstance(attach_to_email, str):
@@ -663,6 +685,7 @@ def complete_and_notify(request, obligation_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_monthlyobligation')
 def bulk_complete_with_notify(request):
     """
     POST /api/v1/obligations/bulk-complete-notify/
@@ -681,10 +704,13 @@ def bulk_complete_with_notify(request):
     obligation_ids = serializer.validated_data['obligation_ids']
     send_notifications = serializer.validated_data['send_notifications']
 
+    if send_notifications and not check_model_perms(request, 'accounting.send_client_email'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
     from django.utils import timezone
 
-    # Get obligations that can be completed
-    obligations = MonthlyObligation.objects.filter(
+    # Get obligations that can be completed (μόνο προσβάσιμες)
+    obligations = accessible_obligations(request.user).filter(
         id__in=obligation_ids,
         status__in=['pending', 'overdue']
     ).select_related('client', 'obligation_type')
@@ -770,6 +796,7 @@ def bulk_complete_with_notify(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_monthlyobligation')
 def bulk_complete_with_documents(request):
     """
     POST /api/v1/obligations/bulk-complete-with-documents/
@@ -815,6 +842,9 @@ def bulk_complete_with_documents(request):
     if isinstance(send_emails, str):
         send_emails = send_emails.lower() == 'true'
 
+    if send_emails and not check_model_perms(request, 'accounting.send_client_email'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
     attach_to_emails = request.data.get('attach_to_emails', 'false')
     if isinstance(attach_to_emails, str):
         attach_to_emails = attach_to_emails.lower() == 'true'
@@ -835,8 +865,8 @@ def bulk_complete_with_documents(request):
         except EmailTemplate.DoesNotExist:
             pass  # Will fallback to auto-select
 
-    # Get obligations
-    obligations = MonthlyObligation.objects.filter(
+    # Get obligations (μόνο προσβάσιμες)
+    obligations = accessible_obligations(request.user).filter(
         id__in=obligation_ids,
         status__in=['pending', 'overdue']
     ).select_related('client', 'obligation_type')
@@ -1004,6 +1034,11 @@ def email_history(request):
         'client', 'obligation', 'template_used', 'sent_by'
     ).order_by('-sent_at')
 
+    # RBAC: scoped χρήστες βλέπουν μόνο ιστορικό για προσβάσιμους πελάτες
+    from accounting.mixins import user_sees_all_clients
+    if not user_sees_all_clients(request.user):
+        queryset = queryset.filter(client__in=accessible_clients(request.user))
+
     # Apply filters
     client_id = request.query_params.get('client_id')
     obligation_id = request.query_params.get('obligation_id')
@@ -1096,10 +1131,14 @@ def email_settings(request):
     settings_obj = EmailSettings.get_settings()
 
     if request.method == 'GET':
+        if not check_model_perms(request, 'accounting.view_emailsettings'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailSettingsSerializer(settings_obj)
         return Response(serializer.data)
 
     elif request.method == 'PUT':
+        if not check_model_perms(request, 'accounting.change_emailsettings'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailSettingsSerializer(settings_obj, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -1109,6 +1148,7 @@ def email_settings(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_emailsettings')
 def email_settings_test(request):
     """
     POST /api/v1/email/settings/test/
@@ -1152,6 +1192,7 @@ def email_settings_test(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_emailsettings')
 def email_settings_send_test(request):
     """
     POST /api/v1/email/settings/send-test/

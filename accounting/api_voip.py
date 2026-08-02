@@ -155,6 +155,20 @@ class TicketCreateSerializer(serializers.ModelSerializer):
 # VIEWSETS
 # ============================================
 
+def _scope_by_client(queryset, user):
+    """
+    RBAC scoping για κλήσεις/tickets: scoped χρήστες βλέπουν εγγραφές
+    των ανατεθειμένων πελατών τους + όσες δεν έχουν αντιστοιχιστεί ακόμη
+    σε πελάτη (χρειάζονται triage από όποιον απαντά το τηλέφωνο).
+    """
+    from accounting.mixins import user_sees_all_clients
+    if user_sees_all_clients(user):
+        return queryset
+    return queryset.filter(
+        Q(client__isnull=True) | Q(client__assigned_users=user)
+    ).distinct()
+
+
 class VoIPCallViewSet(viewsets.ModelViewSet):
     """
     Enhanced VoIP Call ViewSet with match and ticket creation
@@ -176,7 +190,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPagination
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = _scope_by_client(super().get_queryset(), self.request.user)
 
         # Filter by direction
         direction = self.request.query_params.get('direction')
@@ -219,8 +233,8 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         """Override list to add stats"""
         queryset = self.get_queryset()
 
-        # Calculate stats (unfiltered for totals)
-        all_calls = VoIPCall.objects.all()
+        # Calculate stats (σύνολα μόνο στις προσβάσιμες κλήσεις)
+        all_calls = _scope_by_client(VoIPCall.objects.all(), request.user)
         today = timezone.now().date()
 
         stats = {
@@ -258,7 +272,8 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            client = ClientProfile.objects.get(id=client_id)
+            from accounting.services.access import accessible_clients
+            client = accessible_clients(request.user).get(id=client_id)
             call.client = client
             call.client_email = client.email
             call.save()
@@ -395,7 +410,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         return TicketSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = _scope_by_client(super().get_queryset(), self.request.user)
 
         # Filter by status
         ticket_status = self.request.query_params.get('status')
@@ -436,8 +451,8 @@ class TicketViewSet(viewsets.ModelViewSet):
         """Override list to add stats"""
         queryset = self.get_queryset()
 
-        # Calculate stats
-        all_tickets = Ticket.objects.all()
+        # Calculate stats (μόνο προσβάσιμα tickets)
+        all_tickets = _scope_by_client(Ticket.objects.all(), request.user)
 
         stats = {
             'total': all_tickets.count(),
@@ -462,7 +477,12 @@ class TicketViewSet(viewsets.ModelViewSet):
         })
 
     def perform_create(self, serializer):
-        """Auto-set status to open on create"""
+        """Auto-set status to open on create (μόνο για προσβάσιμο πελάτη)"""
+        from django.http import Http404
+        from accounting.services.access import user_can_access_client
+        client = serializer.validated_data.get('client')
+        if client is not None and not user_can_access_client(self.request.user, client):
+            raise Http404('ClientProfile not found')
         serializer.save(status='open')
 
     @action(detail=True, methods=['post'])
@@ -532,23 +552,24 @@ def calls_stats(request):
     this_week_start = today - timezone.timedelta(days=today.weekday())
     this_month_start = today.replace(day=1)
 
+    calls = _scope_by_client(VoIPCall.objects.all(), request.user)
     stats = {
         'today': {
-            'total': VoIPCall.objects.filter(started_at__date=today).count(),
-            'incoming': VoIPCall.objects.filter(started_at__date=today, direction='incoming').exclude(status='missed').count(),
-            'outgoing': VoIPCall.objects.filter(started_at__date=today, direction='outgoing').count(),
-            'missed': VoIPCall.objects.filter(started_at__date=today, status='missed').count(),
+            'total': calls.filter(started_at__date=today).count(),
+            'incoming': calls.filter(started_at__date=today, direction='incoming').exclude(status='missed').count(),
+            'outgoing': calls.filter(started_at__date=today, direction='outgoing').count(),
+            'missed': calls.filter(started_at__date=today, status='missed').count(),
         },
         'this_week': {
-            'total': VoIPCall.objects.filter(started_at__date__gte=this_week_start).count(),
-            'missed': VoIPCall.objects.filter(started_at__date__gte=this_week_start, status='missed').count(),
+            'total': calls.filter(started_at__date__gte=this_week_start).count(),
+            'missed': calls.filter(started_at__date__gte=this_week_start, status='missed').count(),
         },
         'this_month': {
-            'total': VoIPCall.objects.filter(started_at__date__gte=this_month_start).count(),
-            'missed': VoIPCall.objects.filter(started_at__date__gte=this_month_start, status='missed').count(),
+            'total': calls.filter(started_at__date__gte=this_month_start).count(),
+            'missed': calls.filter(started_at__date__gte=this_month_start, status='missed').count(),
         },
-        'unmatched_calls': VoIPCall.objects.filter(client__isnull=True).count(),
-        'calls_without_tickets': VoIPCall.objects.filter(status='missed', ticket_created=False).count(),
+        'unmatched_calls': calls.filter(client__isnull=True).count(),
+        'calls_without_tickets': calls.filter(status='missed', ticket_created=False).count(),
     }
 
     return Response(stats)
@@ -558,22 +579,23 @@ def calls_stats(request):
 @permission_classes([permissions.IsAuthenticated])
 def tickets_stats(request):
     """Get ticket statistics"""
+    tickets = _scope_by_client(Ticket.objects.all(), request.user)
     stats = {
-        'total': Ticket.objects.count(),
+        'total': tickets.count(),
         'by_status': {
-            'open': Ticket.objects.filter(status='open').count(),
-            'assigned': Ticket.objects.filter(status='assigned').count(),
-            'in_progress': Ticket.objects.filter(status='in_progress').count(),
-            'resolved': Ticket.objects.filter(status='resolved').count(),
-            'closed': Ticket.objects.filter(status='closed').count(),
+            'open': tickets.filter(status='open').count(),
+            'assigned': tickets.filter(status='assigned').count(),
+            'in_progress': tickets.filter(status='in_progress').count(),
+            'resolved': tickets.filter(status='resolved').count(),
+            'closed': tickets.filter(status='closed').count(),
         },
         'by_priority': {
-            'urgent': Ticket.objects.filter(priority='urgent', status__in=['open', 'assigned', 'in_progress']).count(),
-            'high': Ticket.objects.filter(priority='high', status__in=['open', 'assigned', 'in_progress']).count(),
-            'medium': Ticket.objects.filter(priority='medium', status__in=['open', 'assigned', 'in_progress']).count(),
-            'low': Ticket.objects.filter(priority='low', status__in=['open', 'assigned', 'in_progress']).count(),
+            'urgent': tickets.filter(priority='urgent', status__in=['open', 'assigned', 'in_progress']).count(),
+            'high': tickets.filter(priority='high', status__in=['open', 'assigned', 'in_progress']).count(),
+            'medium': tickets.filter(priority='medium', status__in=['open', 'assigned', 'in_progress']).count(),
+            'low': tickets.filter(priority='low', status__in=['open', 'assigned', 'in_progress']).count(),
         },
-        'open_tickets': Ticket.objects.filter(status__in=['open', 'assigned', 'in_progress']).count(),
+        'open_tickets': tickets.filter(status__in=['open', 'assigned', 'in_progress']).count(),
         'avg_resolution_days': None,  # Could calculate if needed
     }
 
@@ -589,7 +611,8 @@ def search_clients_for_match(request):
     if len(query) < 2:
         return Response([])
 
-    clients = ClientProfile.objects.filter(
+    from accounting.services.access import accessible_clients
+    clients = accessible_clients(request.user).filter(
         Q(eponimia__icontains=query) |
         Q(afm__icontains=query) |
         Q(kinito_tilefono__icontains=query) |

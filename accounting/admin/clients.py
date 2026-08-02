@@ -314,8 +314,9 @@ class ClientProfileAdmin(admin.ModelAdmin):
     export_selected.short_description = '📥 Export Επιλεγμένων (Πλήρες - 52 πεδία)'
 
     def export_all(self, request, queryset):
-        """Export όλων των πελατών με ΟΛΑ τα πεδία (52 fields)"""
-        return export_clients_to_excel()  # No queryset = όλοι
+        """Export όλων των προσβάσιμων πελατών με ΟΛΑ τα πεδία (52 fields)"""
+        # Scoped queryset: όχι όλο το πελατολόγιο για scoped χρήστες
+        return export_clients_to_excel(self.get_queryset(request))
     export_all.short_description = '📥 Export ΟΛΩΝ (Πλήρες - 52 πεδία)'
 
     def export_summary(self, request, queryset):
@@ -422,7 +423,12 @@ class ClientProfileAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def import_view(self, request):
-        """Import view για Excel"""
+        """Import view για Excel — μόνο για χρήστες που βλέπουν όλους τους πελάτες
+        (το import δημιουργεί/ενημερώνει πελάτες μαζικά, εκτός scoping)."""
+        from django.core.exceptions import PermissionDenied
+        from accounting.mixins import user_sees_all_clients
+        if not user_sees_all_clients(request.user):
+            raise PermissionDenied
         if request.method == 'POST' and 'excel_file' in request.FILES:
             excel_file = request.FILES['excel_file']
 
@@ -478,12 +484,15 @@ class ClientProfileAdmin(admin.ModelAdmin):
             return redirect('..')
 
     def mass_update_view(self, request):
-        """Μαζική ενημέρωση πελατών"""
+        """Μαζική ενημέρωση πελατών (μόνο στους προσβάσιμους)"""
+        from django.core.exceptions import PermissionDenied
+        if not self.has_change_permission(request):
+            raise PermissionDenied
         if request.method == 'POST':
             action = request.POST.get('action')
             client_ids = request.POST.getlist('client_ids')
 
-            clients = ClientProfile.objects.filter(id__in=client_ids)
+            clients = self.get_queryset(request).filter(id__in=client_ids)
 
             if action == 'activate':
                 clients.update(is_active=True)
@@ -504,7 +513,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
 
         context = {
             'title': 'Μαζική Ενημέρωση Πελατών',
-            'clients': ClientProfile.objects.all(),
+            'clients': self.get_queryset(request),
             'has_permission': True,
         }
         return render(request, 'admin/accounting/mass_update.html', context)
@@ -747,6 +756,32 @@ class DocumentRequestAdmin(admin.ModelAdmin):
     readonly_fields = ['last_reminder_sent_at', 'reminder_count',
                        'completed_at', 'created_at']
 
+    def get_queryset(self, request):
+        from accounting.mixins import user_sees_all_clients
+        qs = super().get_queryset(request).select_related('client', 'created_by')
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(client__assigned_users=request.user).distinct()
+        return qs
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj.client)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        from accounting.services.access import accessible_clients
+        if db_field.name == 'client':
+            kwargs['queryset'] = accessible_clients(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 # ============================================
 # CLIENT CREDENTIALS (κρυπτογραφημένοι κωδικοί)
@@ -785,6 +820,13 @@ class ClientCredentialAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Στο add form ο scoped χρήστης επιλέγει μόνο ανατεθειμένους πελάτες
+        from accounting.services.access import accessible_clients
+        if db_field.name == 'client':
+            kwargs['queryset'] = accessible_clients(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='Έχει κωδικό', boolean=True)
     def has_secret_display(self, obj):

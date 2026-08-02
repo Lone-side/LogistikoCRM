@@ -637,8 +637,9 @@ def vat_summary(request):
     try:
         from mydata.models import VATPeriodResult, VATRecord
 
-        # Get VATPeriodResults for the period
+        # Get VATPeriodResults for the period (RBAC: μόνο προσβάσιμοι πελάτες)
         vat_periods = VATPeriodResult.objects.filter(
+            client__in=ClientQS,
             year=year,
             period_type='M' if period_type == 'month' else 'Q'
         )

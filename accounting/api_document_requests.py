@@ -17,6 +17,8 @@ from django.utils import timezone
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from .permissions import ClientModelPermissions
 from rest_framework.response import Response
 
 from .models import (
@@ -140,8 +142,14 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
     Create: φτιάχνει αίτημα + SharedLink (allow_upload) + αρχικό email.
     Actions: send-reminder, mark-item.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     serializer_class = DocumentRequestSerializer
+    queryset = DocumentRequest.objects.all()
+    # Custom actions: αποστολή email θέλει send_client_email, το mark-item change
+    action_perms = {
+        'send_reminder': ['accounting.change_documentrequest', 'accounting.send_client_email'],
+        'mark_item': ['accounting.change_documentrequest'],
+    }
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):

@@ -30,6 +30,12 @@ from ..models import (
     EmailTemplate, EmailLog, ClientDocument, ArchiveConfiguration
 )
 from ..services import filing
+from ..services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+    check_model_perms,
+)
+
+PERM_DENIED_JSON = {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
 from ..services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
@@ -60,7 +66,7 @@ def obligation_list_view(request):
     }
 
     # Δημιουργία queryset
-    queryset = MonthlyObligation.objects.select_related(
+    queryset = accessible_obligations(request.user).select_related(
         'client', 'obligation_type', 'completed_by'
     ).order_by('deadline', 'client__eponimia')
 
@@ -91,7 +97,7 @@ def obligation_list_view(request):
     }
 
     # Data για dropdown φίλτρα
-    clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+    clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
     obligation_types = ObligationType.objects.filter(is_active=True).order_by('name')
 
     # Έτη διαθέσιμα
@@ -145,7 +151,7 @@ def obligation_list_api(request):
     type_id = request.GET.get('type', '')
 
     # Base queryset
-    queryset = MonthlyObligation.objects.select_related(
+    queryset = accessible_obligations(request.user).select_related(
         'client', 'obligation_type', 'completed_by'
     )
 
@@ -181,7 +187,7 @@ def obligation_list_api(request):
         queryset = queryset.order_by(order_field)
 
     # Counts
-    total_count = MonthlyObligation.objects.count()
+    total_count = accessible_obligations(request.user).count()
     filtered_count = queryset.count()
 
     # Pagination
@@ -254,7 +260,9 @@ def obligation_complete_single(request, obligation_id):
     """
     Ολοκλήρωση μίας υποχρέωσης με προαιρετικό file upload.
     """
-    obligation = get_object_or_404(MonthlyObligation, id=obligation_id)
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    obligation = get_object_or_404(accessible_obligations(request.user), id=obligation_id)
 
     try:
         # File upload
@@ -327,6 +335,8 @@ def obligation_complete_bulk(request):
     """
     Μαζική ολοκλήρωση υποχρεώσεων με per-obligation files.
     """
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
     try:
         # Parse obligation IDs
         obligation_ids = request.POST.getlist('obligation_ids[]')
@@ -347,7 +357,7 @@ def obligation_complete_bulk(request):
 
         for ob_id in obligation_ids:
             try:
-                obligation = MonthlyObligation.objects.select_related(
+                obligation = accessible_obligations(request.user).select_related(
                     'client', 'obligation_type'
                 ).get(id=int(ob_id))
 
@@ -421,7 +431,9 @@ def obligation_upload_file(request, obligation_id):
     """
     Upload αρχείου σε υποχρέωση χωρίς να την ολοκληρώσει.
     """
-    obligation = get_object_or_404(MonthlyObligation, id=obligation_id)
+    if not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    obligation = get_object_or_404(accessible_obligations(request.user), id=obligation_id)
 
     if 'file' not in request.FILES:
         return JsonResponse({
@@ -476,7 +488,7 @@ def email_compose_view(request):
 
     obligations = []
     if obligation_ids:
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
 
@@ -522,6 +534,8 @@ def email_send_view(request):
     """
     Αποστολή email με attachments.
     """
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
     try:
         # Parse data
         if request.content_type == 'application/json':
@@ -546,7 +560,7 @@ def email_send_view(request):
                 'error': 'Δεν καθορίστηκε πελάτης'
             }, status=400)
 
-        client = get_object_or_404(ClientProfile, id=client_id)
+        client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
         if not client.email:
             return JsonResponse({
@@ -561,7 +575,7 @@ def email_send_view(request):
             template = EmailTemplate.objects.filter(id=template_id).first()
 
         # Get obligations
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
 
@@ -635,6 +649,8 @@ def email_send_bulk_view(request):
     """
     Μαζική αποστολή email - 1 email ανά πελάτη με όλα τα attachments του.
     """
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
     try:
         if request.content_type == 'application/json':
             data = json.loads(request.body)
@@ -655,7 +671,7 @@ def email_send_bulk_view(request):
             template = EmailTemplate.objects.filter(id=template_id).first()
 
         # Get obligations and group by client
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
 
@@ -758,7 +774,7 @@ def client_files_view(request, client_id):
     """
     Προβολή αρχείων πελάτη με δενδρική δομή.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     # Βάση αρχειοθέτησης (από FilingSystemSettings)
     archive_root = filing.get_archive_root()
@@ -833,7 +849,7 @@ def file_download(request, client_id, file_path):
     """
     Download αρχείου πελάτη.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     archive_root = filing.get_archive_root()
     full_path = os.path.realpath(os.path.join(archive_root, file_path))
@@ -859,7 +875,9 @@ def file_delete(request, client_id, file_path):
     """
     Διαγραφή αρχείου πελάτη.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    if not check_model_perms(request, 'accounting.delete_clientdocument'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     archive_root = filing.get_archive_root()
     full_path = os.path.realpath(os.path.join(archive_root, file_path))
@@ -903,7 +921,7 @@ def open_document_folder(request, document_id):
     χρησιμοποιηθεί JavaScript με file:// protocol (με περιορισμούς
     ασφαλείας του browser).
     """
-    document = get_object_or_404(ClientDocument, id=document_id)
+    document = get_object_or_404(accessible_documents(request.user), id=document_id)
 
     folder_path = document.folder_path
     full_file_path = document.full_path
@@ -938,7 +956,7 @@ def open_client_folder(request, client_id):
     """
     Άνοιγμα φακέλου πελάτη.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     folder_path = filing.get_client_folder_path(client)
 

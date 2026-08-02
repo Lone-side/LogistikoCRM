@@ -25,6 +25,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounting.models import ClientProfile
+from accounting.mixins import ClientScopedQuerysetMixin
+from accounting.permissions import CanAccessClient, ClientModelPermissions
+from accounting.services.access import accessible_clients, user_can_access_client
 from .models import MyDataCredentials, VATRecord, VATSyncLog
 from .serializers import (
     MyDataCredentialsSerializer,
@@ -189,7 +192,7 @@ def build_date_range_category_breakdown(client, date_from, date_to, rec_type: in
 # CREDENTIALS VIEWSET
 # =============================================================================
 
-class MyDataCredentialsViewSet(viewsets.ModelViewSet):
+class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     ViewSet για MyDataCredentials.
 
@@ -206,7 +209,23 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 
     queryset = MyDataCredentials.objects.select_related('client').all()
     serializer_class = MyDataCredentialsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
+    # Όλα τα custom POST actions τροποποιούν credentials → change permission
+    action_perms = {
+        'verify': ['mydata.change_mydatacredentials'],
+        'update_credentials': ['mydata.change_mydatacredentials'],
+        'set_initial_credit': ['mydata.change_mydatacredentials'],
+        'sync': ['mydata.change_mydatacredentials'],
+        'by_client': ['mydata.view_mydatacredentials'],
+    }
+
+    def perform_create(self, serializer):
+        from django.http import Http404
+        client = serializer.validated_data.get('client')
+        if client is not None and not user_can_access_client(self.request.user, client):
+            raise Http404('ClientProfile not found')
+        serializer.save()
 
     def get_queryset(self):
         """Filter by client if specified."""
@@ -237,7 +256,7 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
         GET /api/mydata/credentials/by-client/{client_id}/
         """
         try:
-            credentials = MyDataCredentials.objects.select_related('client').get(
+            credentials = self.get_queryset().get(
                 client_id=client_id,
                 is_active=True
             )
@@ -381,7 +400,7 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 # VAT RECORD VIEWSET
 # =============================================================================
 
-class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class VATRecordViewSet(ClientScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet για VATRecord (read-only).
 
@@ -393,7 +412,8 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = VATRecord.objects.select_related('client').all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -466,7 +486,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         try:
-            client = ClientProfile.objects.get(afm=afm)
+            client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Δεν βρέθηκε πελάτης'},
@@ -501,7 +521,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         try:
-            client = ClientProfile.objects.get(afm=afm)
+            client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Δεν βρέθηκε πελάτης'},
@@ -532,7 +552,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
 # SYNC LOG VIEWSET
 # =============================================================================
 
-class VATSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
+class VATSyncLogViewSet(ClientScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet για VATSyncLog (read-only).
 
@@ -543,7 +563,8 @@ class VATSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = VATSyncLog.objects.select_related('client').all()
     serializer_class = VATSyncLogSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
 
     def get_queryset(self):
         """Apply filters."""
@@ -598,15 +619,19 @@ class MyDataDashboardView(APIView):
         year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
         month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
 
-        # Get all clients with mydata credentials
-        credentials_qs = MyDataCredentials.objects.select_related('client').all()
+        # Μόνο πελάτες στους οποίους έχει πρόσβαση ο χρήστης (RBAC scoping)
+        allowed_clients = accessible_clients(request.user)
+        credentials_qs = MyDataCredentials.objects.select_related('client').filter(
+            client__in=allowed_clients
+        )
 
-        total_clients = ClientProfile.objects.count()
+        total_clients = allowed_clients.count()
         clients_with_credentials = credentials_qs.count()
         verified_credentials = credentials_qs.filter(is_verified=True).count()
 
         # Aggregate totals for the period
         period_records = VATRecord.objects.filter(
+            client__in=allowed_clients,
             issue_date__year=year,
             issue_date__month=month,
             is_cancelled=False
@@ -682,7 +707,7 @@ class ClientVATDetailView(APIView):
 
     def get(self, request, afm):
         try:
-            client = ClientProfile.objects.get(afm=afm)
+            client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Δεν βρέθηκε πελάτης'},
@@ -832,8 +857,11 @@ class MonthlyTrendView(APIView):
 
         months.reverse()  # Oldest first
 
-        # Build queryset filter
-        base_qs = VATRecord.objects.filter(is_cancelled=False)
+        # Build queryset filter (RBAC: μόνο προσβάσιμοι πελάτες)
+        base_qs = VATRecord.objects.filter(
+            is_cancelled=False,
+            client__in=accessible_clients(request.user),
+        )
         if afm:
             base_qs = base_qs.filter(client__afm=afm)
 
@@ -906,12 +934,20 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
     - POST /periods/{id}/unlock/ - Ξεκλείδωμα περιόδου
     - POST /periods/{id}/set_credit/ - Ορισμός πιστωτικού
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    action_perms = {
+        'calculate': ['mydata.change_vatperiodresult'],
+        'lock': ['mydata.change_vatperiodresult'],
+        'unlock': ['mydata.change_vatperiodresult'],
+        'set_credit': ['mydata.change_vatperiodresult'],
+    }
 
     def get_queryset(self):
         from .models import VATPeriodResult
 
-        qs = VATPeriodResult.objects.select_related('client', 'locked_by')
+        qs = VATPeriodResult.objects.select_related('client', 'locked_by').filter(
+            client__in=accessible_clients(self.request.user)
+        )
 
         # Filter by client
         client_id = self.request.query_params.get('client')
@@ -944,6 +980,10 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Δημιουργία νέας περιόδου με κληρονομιά πιστωτικού."""
+        from django.http import Http404
+        client = serializer.validated_data.get('client')
+        if client is not None and not user_can_access_client(self.request.user, client):
+            raise Http404('ClientProfile not found')
         instance = serializer.save()
         # Αυτόματη κληρονομιά πιστωτικού από προηγούμενη περίοδο
         instance.inherit_credit_from_previous(save=True)
@@ -1141,12 +1181,13 @@ class VATPeriodCalculatorView(APIView):
         max_period = 12 if period_type == 'monthly' else 4
         period = _parse_int(period, 'period', min_val=1, max_val=max_period)
 
-        # Get client
+        # Get client (RBAC: μόνο προσβάσιμοι πελάτες)
         try:
+            allowed = accessible_clients(request.user)
             if client_id:
-                client = ClientProfile.objects.get(pk=client_id)
+                client = allowed.get(pk=client_id)
             else:
-                client = ClientProfile.objects.get(afm=afm)
+                client = allowed.get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Ο πελάτης δεν βρέθηκε'},

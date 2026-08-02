@@ -209,6 +209,12 @@ def client_obligation_profile(request, client_id):
         })
 
     elif request.method == 'PUT':
+        from accounting.services.access import check_model_perms
+        if not check_model_perms(request, 'accounting.change_clientobligation'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         obligation_type_ids = request.data.get('obligation_type_ids', [])
         obligation_profile_ids = request.data.get('obligation_profile_ids', [])
 
@@ -315,7 +321,13 @@ def obligation_profiles_list(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_month_obligations(request):
-    from accounting.services.access import accessible_clients
+    from accounting.services.access import accessible_clients, require_model_perms  # noqa: F401
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.add_monthlyobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     POST /api/v1/obligations/generate-month/
     Generate monthly obligations for clients based on their obligation profiles
@@ -468,6 +480,12 @@ def generate_month_obligations(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def bulk_assign_obligations(request):
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_clientobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     POST /api/v1/obligations/bulk-assign/
     Bulk assign obligation types and profiles to multiple clients
