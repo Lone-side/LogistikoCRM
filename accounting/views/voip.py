@@ -55,6 +55,7 @@ from .helpers import (
 logger = logging.getLogger(__name__)
 
 from accounting.api_voip import _scope_by_client
+from accounting.permissions import ServiceWriteOnly
 
 
 # ============================================
@@ -362,7 +363,11 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return _scope_by_client(super().get_queryset(), self.request.user)
     serializer_class = VoIPCallSerializer
-    permission_classes = [permissions.IsAdminUser | IsVoIPMonitor | IsLocalRequest]
+    # Service callers (monitor/localhost): ΜΟΝΟ create/update/end_call
+    permission_classes = [
+        permissions.IsAdminUser
+        | ((IsVoIPMonitor | IsLocalRequest) & ServiceWriteOnly)
+    ]
     filterset_fields = ['direction', 'status', 'client', 'phone_number']
     search_fields = ['phone_number', 'client__eponimia', 'notes']
     ordering_fields = ['started_at', 'duration_seconds']

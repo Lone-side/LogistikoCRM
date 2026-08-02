@@ -616,3 +616,103 @@ class Round4LegacyTest(SurfaceBase):
             self.assertIsNotNone(log)
             self.assertNotIn('123456789', log.description)
             self.assertNotIn('\n', log.description.replace('\\n', ''))
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True, FRITZ_API_TOKEN='test-token-123')
+class Round5Test(SurfaceBase):
+    """5ος γύρος: service VoIP boundary, GET χωρίς writes, doc perms, ρόλοι."""
+
+    def test_service_api_key_cannot_list_calls(self):
+        resp = APIClient().get(
+            '/accounting/api/v1/calls/',
+            HTTP_X_API_KEY='test-token-123', REMOTE_ADDR='10.0.0.5',
+        )
+        self.assertIn(resp.status_code, (401, 403))
+
+    def test_service_api_key_can_create_and_patch_call(self):
+        from accounting.models import VoIPCall
+        api = APIClient()
+        resp = api.post(
+            '/accounting/api/v1/calls/',
+            {'phone_number': '2101112223', 'direction': 'incoming',
+             'status': 'active', 'started_at': '2026-08-01T10:00:00Z'},
+            HTTP_X_API_KEY='test-token-123', REMOTE_ADDR='10.0.0.5',
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        call_id = VoIPCall.objects.latest('id').pk
+        patch = api.patch(
+            f'/accounting/api/v1/calls/{call_id}/',
+            {'status': 'completed'},
+            HTTP_X_API_KEY='test-token-123', REMOTE_ADDR='10.0.0.5',
+        )
+        self.assertEqual(patch.status_code, 200, patch.content)
+
+    def test_dashboard_get_does_not_write(self):
+        from accounting.models import MonthlyObligation
+        from datetime import date as d
+        stale = MonthlyObligation.objects.create(
+            client=self.client_a, obligation_type=self.otype, year=2020, month=1,
+            deadline=d(2020, 1, 20), status='pending',
+        )
+        # Το save() του μοντέλου γυρίζει αυτόματα pending→overdue όταν έχει
+        # περάσει η προθεσμία — παρακάμπτουμε με queryset update ώστε το test
+        # να ελέγχει αποκλειστικά αν το GET γράφει στη βάση.
+        MonthlyObligation.objects.filter(pk=stale.pk).update(status='pending')
+        resp = self.api(self.assistant).get('/accounting/api/dashboard/stats/')
+        self.assertEqual(resp.status_code, 200)
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, 'pending')
+
+    def test_calculator_requires_view_perm(self):
+        noperm = User.objects.create_user('noperm5', password='x')
+        self.client_a.assigned_users.add(noperm)
+        resp = self.api(User.objects.get(pk=noperm.pk)).get(
+            '/accounting/api/mydata/calculator/',
+            {'client_id': self.client_a.pk, 'year': 2026, 'period': 6},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_calculator_get_does_not_create_for_readonly(self):
+        from mydata.models import VATPeriodResult
+        resp = self.api(self.assistant).get(
+            '/accounting/api/mydata/calculator/',
+            {'client_id': self.client_a.pk, 'year': 2026, 'period': 6},
+        )
+        self.assertEqual(resp.status_code, 404)
+        self.assertFalse(
+            VATPeriodResult.objects.filter(client=self.client_a).exists()
+        )
+
+    def test_completion_with_file_requires_add_document(self):
+        from django.contrib.auth.models import Permission
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from accounting.models import MonthlyObligation
+        from datetime import date as d
+        # Χρήστης με change_monthlyobligation αλλά ΧΩΡΙΣ add_clientdocument
+        user = User.objects.create_user('complonly', password='x', is_staff=True)
+        user.user_permissions.add(
+            Permission.objects.get(codename='change_monthlyobligation',
+                                   content_type__app_label='accounting'),
+            Permission.objects.get(codename='view_monthlyobligation',
+                                   content_type__app_label='accounting'),
+        )
+        user = User.objects.get(pk=user.pk)
+        self.client_a.assigned_users.add(user)
+        obl = MonthlyObligation.objects.create(
+            client=self.client_a, obligation_type=self.otype, year=2026, month=8,
+            deadline=d(2026, 8, 20),
+        )
+        self.client.force_login(user)
+        resp = self.client.post(
+            f'/accounting/quick-complete/{obl.pk}/',
+            {'file': SimpleUploadedFile('a.pdf', b'%PDF-1.4')},
+        )
+        self.assertEqual(resp.status_code, 403)
+        obl.refresh_from_db()
+        self.assertNotEqual(obl.status, 'completed')
+
+    def test_admin_role_can_send_invoice_permission(self):
+        # Ο ρόλος «Διαχειριστής» έχει πλέον τα inventory permissions
+        admin_user = make_role_user('dioikitis5', 'Διαχειριστής', is_staff=True)
+        self.assertTrue(admin_user.has_perm('inventory.change_invoice'))
+        self.assertTrue(admin_user.has_perm('inventory.view_invoice'))

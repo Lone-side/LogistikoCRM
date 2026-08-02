@@ -262,6 +262,11 @@ def obligation_complete_single(request, obligation_id):
     """
     if not check_model_perms(request, 'accounting.change_monthlyobligation'):
         return JsonResponse(PERM_DENIED_JSON, status=403)
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
     obligation = get_object_or_404(accessible_obligations(request.user), id=obligation_id)
 
     try:
@@ -337,6 +342,11 @@ def obligation_complete_bulk(request):
     """
     if not check_model_perms(request, 'accounting.change_monthlyobligation'):
         return JsonResponse(PERM_DENIED_JSON, status=403)
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
     try:
         # Parse obligation IDs
         obligation_ids = request.POST.getlist('obligation_ids[]')

@@ -351,8 +351,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             deadline__lt=today
         ).order_by('deadline')
 
-        # Update status to overdue if needed
-        overdue.update(status='overdue')
+        # Το GET δεν γράφει στη βάση — η μόνιμη μετάβαση γίνεται από το
+        # Celery task update_overdue_obligations.
 
         page = self.paginate_queryset(overdue)
         if page is not None:
@@ -796,13 +796,7 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         if filter_status:
             queryset = queryset.filter(status=filter_status)
 
-        # Update overdue status for pending obligations past deadline
-        queryset.filter(
-            status='pending',
-            deadline__lt=today
-        ).update(status='overdue')
-
-        # Refresh queryset after update with select_related to avoid N+1 queries
+        # Το GET δεν γράφει στη βάση (βλ. update_overdue_obligations task)
         queryset = queryset.select_related(
             'client', 'obligation_type'
         ).order_by('deadline')

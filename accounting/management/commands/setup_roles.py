@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand
 
 ROLES = {
     'Διαχειριστής': {
-        'app_all': ['accounting', 'mydata'],
+        'app_all': ['accounting', 'mydata', 'inventory'],
         'extra': ['view_all_clients', 'view_client_credential_secret'],
     },
     'Λογιστής': {

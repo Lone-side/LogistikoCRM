@@ -16,7 +16,9 @@ from django.shortcuts import get_object_or_404
 
 from .models import VoIPCall, VoIPCallLog, Ticket, ClientProfile
 from .phone_utils import auto_match_call, batch_auto_match_calls, find_client_by_phone
-from .permissions import ClientModelPermissions, IsVoIPMonitor, IsLocalRequest
+from .permissions import (
+    ClientModelPermissions, IsVoIPMonitor, IsLocalRequest, ServiceWriteOnly,
+)
 
 import logging
 
@@ -162,6 +164,11 @@ def _scope_by_client(queryset, user):
     σε πελάτη (χρειάζονται triage από όποιον απαντά το τηλέφωνο).
     """
     from accounting.mixins import user_sees_all_clients
+    if not getattr(user, 'is_authenticated', False):
+        # Service caller (Fritz monitor / localhost) που πέρασε το δικό του
+        # permission gate — χωρίς user δεν έχει νόημα assignment scoping,
+        # και το PATCH του monitor πρέπει να βρίσκει την κλήση.
+        return queryset
     if user_sees_all_clients(user):
         return queryset
     return queryset.filter(
@@ -188,9 +195,10 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     serializer_class = VoIPCallFullSerializer
     # Χρήστες: auth + model perms. Εσωτερικές υπηρεσίες (Fritz monitor,
     # localhost): δικό τους gate, χωρίς model perms.
+    # Service callers (monitor/localhost): ΜΟΝΟ create/update κλήσης
     permission_classes = [
         (permissions.IsAuthenticated & ClientModelPermissions)
-        | IsVoIPMonitor | IsLocalRequest
+        | ((IsVoIPMonitor | IsLocalRequest) & ServiceWriteOnly)
     ]
     pagination_class = StandardPagination
     action_perms = {

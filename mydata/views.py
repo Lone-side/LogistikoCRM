@@ -1152,6 +1152,13 @@ class VATPeriodCalculatorView(APIView):
     def get(self, request):
         from .models import VATPeriodResult
 
+        # Read endpoint: απαιτεί το view model permission, όχι μόνο auth
+        if not request.user.has_perm('mydata.view_vatperiodresult'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         client_id = request.query_params.get('client_id')
         afm = request.query_params.get('afm')
         period_type = request.query_params.get('period_type', 'monthly')
@@ -1194,16 +1201,28 @@ class VATPeriodCalculatorView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Get or create period result
-        period_result, created = VATPeriodResult.get_or_create_for_period(
-            client=client,
-            period_type=period_type,
-            year=year,
-            period=period
-        )
+        # Το GET δεν δημιουργεί εγγραφές για read-only χρήστες: η δημιουργία
+        # ή ο επανυπολογισμός απαιτούν το change permission
+        can_write = request.user.has_perm('mydata.change_vatperiodresult')
+        period_result = VATPeriodResult.objects.filter(
+            client=client, period_type=period_type, year=year, period=period,
+        ).first()
+        created = False
+        if period_result is None:
+            if not can_write:
+                return Response(
+                    {'error': 'Δεν έχει υπολογιστεί ακόμη αυτή η περίοδος.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            period_result, created = VATPeriodResult.get_or_create_for_period(
+                client=client,
+                period_type=period_type,
+                year=year,
+                period=period
+            )
 
         # If new or request wants recalculation
-        if created or request.query_params.get('recalculate'):
+        if (created or request.query_params.get('recalculate')) and can_write:
             period_result.calculate_from_records(save=True)
 
         # Build response - flat structure matching frontend interface

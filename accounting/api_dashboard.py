@@ -58,11 +58,9 @@ def dashboard_stats(request):
         Q(status='overdue') | Q(status='pending', deadline__lt=today)
     ).count()
 
-    # Update overdue status for those that are pending but past deadline
-    ObligationQS.filter(
-        status='pending',
-        deadline__lt=today
-    ).update(status='overdue')
+    # Το GET δεν γράφει στη βάση: το overdue_count πιο πάνω υπολογίζεται
+    # δυναμικά (pending + deadline < σήμερα)· η μόνιμη μετάβαση σε
+    # 'overdue' γίνεται από το Celery task update_overdue_obligations.
 
     # Upcoming deadlines (next 7 days)
     upcoming_obligations = ObligationQS.filter(

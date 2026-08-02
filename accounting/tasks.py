@@ -1160,3 +1160,19 @@ def notify_portal_upload(shared_link_id, document_ids):
         f'{len(recipients)} παραλήπτες'
     )
     return f'Notified {len(recipients)} recipients'
+
+
+@shared_task
+def update_overdue_obligations():
+    """
+    Μαρκάρει ως 'overdue' τις εκκρεμείς υποχρεώσεις με περασμένη προθεσμία.
+
+    Τρέχει από το Celery beat — τα GET endpoints (dashboard κλπ) υπολογίζουν
+    το overdue δυναμικά και ΔΕΝ γράφουν στη βάση.
+    """
+    from django.utils import timezone as tz
+    updated = MonthlyObligation.objects.filter(
+        status='pending', deadline__lt=tz.now().date()
+    ).update(status='overdue')
+    logger.info(f"update_overdue_obligations: {updated} υποχρεώσεις → overdue")
+    return updated

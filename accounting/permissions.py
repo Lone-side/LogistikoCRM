@@ -112,6 +112,21 @@ class IsLocalRequest(BasePermission):
         return False
 
 
+class ServiceWriteOnly(BasePermission):
+    """
+    Περιορίζει τους service callers (Fritz monitor API-key, localhost) στις
+    ελάχιστες ενέργειες που χρειάζονται: δημιουργία/ενημέρωση κλήσης.
+    Χρήστες με session/JWT δεν περιορίζονται εδώ (έχουν δικό τους RBAC path).
+    """
+
+    SERVICE_ALLOWED_ACTIONS = {'create', 'update', 'partial_update', 'end_call'}
+
+    def has_permission(self, request, view):
+        if request.user and request.user.is_authenticated:
+            return True
+        return getattr(view, 'action', None) in self.SERVICE_ALLOWED_ACTIONS
+
+
 class CanAccessClient(BasePermission):
     """
     Object-level permission: πρόσβαση μόνο σε ανατεθειμένους πελάτες.

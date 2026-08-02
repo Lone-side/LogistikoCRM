@@ -54,6 +54,11 @@ def quick_complete_obligation(request, obligation_id):
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=403,
         )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
 
     try:
         obligation = accessible_obligations(request.user).get(id=obligation_id)
@@ -155,6 +160,11 @@ def bulk_complete_view(request):
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=403,
         )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
 
     try:
         try:
@@ -250,6 +260,11 @@ def advanced_bulk_complete(request):
     if not check_model_perms(request, 'accounting.change_monthlyobligation'):
         return JsonResponse(
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
             status=403,
         )
 
@@ -475,6 +490,11 @@ def complete_with_file(request, obligation_id):
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=403,
         )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
 
     try:
         obligation = accessible_obligations(request.user).get(id=obligation_id)
@@ -582,6 +602,11 @@ def bulk_complete_obligations(request):
     if not check_model_perms(request, 'accounting.change_monthlyobligation'):
         return JsonResponse(
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
             status=403,
         )
 
@@ -883,6 +908,11 @@ def wizard_bulk_process(request):
     if not check_model_perms(request, 'accounting.change_monthlyobligation'):
         return JsonResponse(
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
             status=403,
         )
 

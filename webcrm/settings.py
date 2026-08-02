@@ -679,6 +679,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'accounting.tasks.cleanup_stale_sync_logs',
         'schedule': crontab(minute='*/30'),  # Κολλημένα PENDING sync logs
     },
+    'update-overdue-obligations': {
+        'task': 'accounting.tasks.update_overdue_obligations',
+        'schedule': crontab(hour=0, minute=15),  # Καθημερινά 00:15
+    },
     'send-document-request-reminders': {
         'task': 'accounting.tasks.send_document_request_reminders',
         'schedule': crontab(hour=10, minute=0, day_of_week='1-5'),  # 10:00 Δευ-Παρ
