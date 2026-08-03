@@ -27,7 +27,35 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404, HttpResponse
 
-from common.utils.media_tokens import verify_media_token
+def can_access_thefile(request, the_file):
+    """
+    Object-level access policy για CRM συνημμένα (common.TheFile), βάσει
+    του πραγματικού content_object (owner/department/co_owner) μέσω της
+    canonical CRM πολιτικής `clarify_permission`.
+
+    Fail closed: μη authenticated χρήστης, dangling GenericForeignKey, ή
+    content_object που δεν υποστηρίζει την πολιτική → False. Ο γενικός
+    `?mt=` token ΔΕΝ δίνει πρόσβαση σε CRM attachment.
+    """
+    user = getattr(request, 'user', None)
+    if not (user and user.is_authenticated and user.is_active):
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        obj = the_file.content_object
+    except Exception:
+        return False
+    if obj is None:
+        # Dangling GFK ή άγνωστο/μη υποστηριζόμενο target → fail closed
+        return False
+    try:
+        from crm.utils.clarify_permission import clarify_permission
+        return bool(clarify_permission(request, obj))
+    except AttributeError:
+        # content_object χωρίς owner/department ή request χωρίς role flags
+        # (π.χ. χωρίς το middleware) → fail closed
+        return False
 
 
 def _resolve_media_path(path):
@@ -89,16 +117,18 @@ def _authorize(request, storage_name):
         return
 
     from common.models import TheFile
-    crm_file = TheFile.objects.filter(file=storage_name).only('id').first()
+    crm_file = (
+        TheFile.objects.filter(file=storage_name)
+        .select_related('content_type').first()
+    )
     if crm_file is not None:
-        # CRM συνημμένα: κρατάμε την προηγούμενη πολιτική (session ή token
-        # δεμένο στο path) — το CRM app έχει το δικό του owner scoping.
-        if authenticated:
-            return
-        token = request.GET.get('mt', '')
-        if token and verify_media_token(token, storage_name):
-            return
-        raise PermissionDenied('Δεν επιτρέπεται η πρόσβαση στο αρχείο.')
+        # CRM συνημμένα: object-level authorization βάσει του πραγματικού
+        # content_object. Ο γενικός ?mt= token ΔΕΝ παρακάμπτει πλέον την
+        # πολιτική. 404 (όχι 403) για μη-πρόσβαση ώστε να μην αποκαλύπτεται
+        # η ύπαρξη του αρχείου.
+        if not can_access_thefile(request, crm_file):
+            raise Http404
+        return
 
     # Fail closed: path χωρίς αντιστοίχιση σε επιτρεπόμενο μοντέλο
     raise Http404

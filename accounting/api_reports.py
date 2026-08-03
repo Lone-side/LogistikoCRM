@@ -650,40 +650,46 @@ def vat_summary(request):
         months = [period]
         period_label = f'{GREEK_MONTHS_FULL.get(period, period)} {year}'
 
-    # Try to get data from myDATA VATPeriodResult if available
+    # Τα myDATA financial ποσά (vat_output/input/balance) επιστρέφονται
+    # ΜΟΝΟ σε χρήστη με mydata.view_vatperiodresult. Χωρίς αυτό, το report
+    # περιλαμβάνει μόνο accounting obligation data (καθόλου myDATA values).
+    can_see_mydata = request.user.has_perm('mydata.view_vatperiodresult')
+
+    # Try to get data from myDATA VATPeriodResult if available (μόνο με perm)
     vat_data_from_mydata = []
-    try:
-        from mydata.models import VATPeriodResult, VATRecord
+    if can_see_mydata:
+        try:
+            from mydata.models import VATPeriodResult, VATRecord
 
-        # Get VATPeriodResults for the period (RBAC: μόνο προσβάσιμοι πελάτες)
-        vat_periods = VATPeriodResult.objects.filter(
-            client__in=ClientQS,
-            year=year,
-            # Το VATPeriodResult αποθηκεύει 'monthly'/'quarterly' (όχι 'M'/'Q')
-            period_type='monthly' if period_type == 'month' else 'quarterly'
-        )
-        if period_type == 'month':
-            vat_periods = vat_periods.filter(period__in=months)
-        else:
-            vat_periods = vat_periods.filter(period=period)
+            # Get VATPeriodResults for the period (RBAC: μόνο προσβάσιμοι πελάτες)
+            vat_periods = VATPeriodResult.objects.filter(
+                client__in=ClientQS,
+                year=year,
+                # VATPeriodResult αποθηκεύει 'monthly'/'quarterly' (όχι 'M'/'Q')
+                period_type='monthly' if period_type == 'month' else 'quarterly'
+            )
+            if period_type == 'month':
+                vat_periods = vat_periods.filter(period__in=months)
+            else:
+                vat_periods = vat_periods.filter(period=period)
 
-        if client_id:
-            vat_periods = vat_periods.filter(client_id=client_id)
+            if client_id:
+                vat_periods = vat_periods.filter(client_id=client_id)
 
-        for vp in vat_periods.select_related('client'):
-            vat_data_from_mydata.append({
-                'client_id': vp.client_id,
-                'client_name': vp.client.eponimia if vp.client else 'N/A',
-                'client_afm': vp.client.afm if vp.client else 'N/A',
-                'vat_output': float(vp.vat_output or 0),
-                'vat_input': float(vp.vat_input or 0),
-                'vat_balance': float(vp.vat_difference or 0),
-                'source': 'myDATA'
-            })
-    except ImportError:
-        pass  # myDATA app not available
-    except Exception:
-        pass  # myDATA models might not be configured
+            for vp in vat_periods.select_related('client'):
+                vat_data_from_mydata.append({
+                    'client_id': vp.client_id,
+                    'client_name': vp.client.eponimia if vp.client else 'N/A',
+                    'client_afm': vp.client.afm if vp.client else 'N/A',
+                    'vat_output': float(vp.vat_output or 0),
+                    'vat_input': float(vp.vat_input or 0),
+                    'vat_balance': float(vp.vat_difference or 0),
+                    'source': 'myDATA'
+                })
+        except ImportError:
+            pass  # myDATA app not available
+        except Exception:
+            pass  # myDATA models might not be configured
 
     # Build summary from obligations data (as fallback or supplement)
     vat_obligations = ObligationQS.filter(

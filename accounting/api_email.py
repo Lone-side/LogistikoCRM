@@ -417,7 +417,9 @@ def send_email(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.send_client_email')
+@require_model_perms('accounting.send_client_email',
+                     'accounting.view_monthlyobligation',
+                     'accounting.view_clientprofile')
 def send_obligation_notice(request):
     """
     POST /api/v1/email/send-obligation-notice/
@@ -449,9 +451,15 @@ def send_obligation_notice(request):
     if not client.email:
         return Response({'error': 'Ο πελάτης δεν έχει email.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Get template
+    # Get template — permission + ασφαλές lookup (invalid/inactive → 404)
     if template_id:
-        template = EmailTemplate.objects.get(id=template_id, is_active=True)
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True).first()
+        if template is None:
+            return Response({'error': 'Το πρότυπο δεν βρέθηκε.'},
+                            status=status.HTTP_404_NOT_FOUND)
     else:
         # Find appropriate template based on type
         template = EmailTemplate.get_template_for_obligation(obligation)
@@ -468,20 +476,28 @@ def send_obligation_notice(request):
         user=request.user
     )
 
-    # Collect attachments - use new unified document system
+    # Collect attachments - use new unified document system.
+    # Απαιτείται view_clientdocument· τα attachment_ids πρέπει να είναι
+    # προσβάσιμα, current και ΤΟΥ ΙΔΙΟΥ πελάτη — αλλιώς όλο το request
+    # απορρίπτεται ΠΡΙΝ από αποστολή.
     attachments = []
+    if include_attachment or attachment_ids:
+        if not check_model_perms(request, 'accounting.view_clientdocument'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
     if include_attachment:
-        # Get attachments from obligation's documents
         email_attachments = obligation.get_email_attachments()
         attachments.extend(email_attachments)
 
-    # Also include any specifically selected documents
     if attachment_ids:
         documents = ClientDocument.objects.filter(
             id__in=attachment_ids,
             client=client,
             is_current=True
         )
+        if len(documents) != len(set(attachment_ids)):
+            return Response(
+                {'error': 'Μη έγκυρα ή ξένα συνημμένα.'},
+                status=status.HTTP_400_BAD_REQUEST)
         for doc in documents:
             if doc.file and doc.file.path not in attachments:
                 attachments.append(doc.file.path)

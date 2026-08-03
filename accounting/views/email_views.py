@@ -42,6 +42,10 @@ def api_email_templates(request):
     """
     API endpoint to get all active email templates
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_emailtemplate'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα προβολής προτύπων.'}, status=403)
     try:
         templates = EmailTemplate.objects.filter(is_active=True).order_by('name')
 
@@ -58,9 +62,9 @@ def api_email_templates(request):
         logger.info(f"Email templates API: {len(result)} templates returned")
         return JsonResponse(result, safe=False)
 
-    except Exception as e:
-        logger.error(f"Error in api_email_templates: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
+    except Exception:
+        logger.exception("Error in api_email_templates")
+        return JsonResponse({'error': 'Σφάλμα'}, status=500)
 
 
 @require_POST
@@ -70,7 +74,10 @@ def api_send_bulk_email(request):
     Schedule bulk emails for obligations
     """
     from accounting.services.access import check_model_perms
-    if not check_model_perms(request, 'accounting.send_client_email'):
+    if not check_model_perms(
+        request, 'accounting.send_client_email',
+        'accounting.view_monthlyobligation', 'accounting.view_emailtemplate',
+    ):
         return JsonResponse(
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=403,
@@ -124,12 +131,9 @@ def api_send_bulk_email(request):
             'message': f'Προγραμματίστηκαν {emails_created} emails'
         })
 
-    except Exception as e:
-        logger.error(f"Error in api_send_bulk_email: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })
+    except Exception:
+        logger.exception("Error in api_send_bulk_email")
+        return JsonResponse({'success': False, 'error': 'Σφάλμα'}, status=500)
 
 
 @staff_member_required
@@ -137,6 +141,10 @@ def api_email_template_detail(request, template_id):
     """
     API endpoint to get a single email template's full content
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_emailtemplate'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     try:
         template = EmailTemplate.objects.get(id=template_id, is_active=True)
 
@@ -155,12 +163,9 @@ def api_email_template_detail(request, template_id):
             'success': False,
             'error': 'Template not found'
         }, status=404)
-    except Exception as e:
-        logger.error(f"Error in api_email_template_detail: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    except Exception:
+        logger.exception("Error in api_email_template_detail")
+        return JsonResponse({'success': False, 'error': 'Σφάλμα'}, status=500)
 
 
 @require_POST
@@ -176,7 +181,10 @@ def api_send_bulk_email_direct(request):
         - Sends emails immediately to each recipient
     """
     from accounting.services.access import check_model_perms
-    if not check_model_perms(request, 'accounting.send_client_email'):
+    if not check_model_perms(
+        request, 'accounting.send_client_email',
+        'accounting.view_monthlyobligation',
+    ):
         return JsonResponse(
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=403,
@@ -217,13 +225,19 @@ def api_send_bulk_email_direct(request):
                 'error': 'Δεν βρέθηκαν υποχρεώσεις'
             })
 
-        # Get template if specified (for logging purposes)
+        # Get template if specified — permission + ασφαλές lookup
         email_template = None
         if template_id:
-            try:
-                email_template = EmailTemplate.objects.get(id=template_id)
-            except EmailTemplate.DoesNotExist:
-                pass
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return JsonResponse(
+                    {'success': False, 'error': 'Δεν έχετε δικαίωμα προτύπων.'},
+                    status=403)
+            email_template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if email_template is None:
+                return JsonResponse(
+                    {'success': False, 'error': 'Το πρότυπο δεν βρέθηκε'},
+                    status=404)
 
         # Check if this is a scheduled email
         send_at = None
@@ -336,13 +350,15 @@ def api_send_bulk_email_direct(request):
                 subject = subject.replace(placeholder, str(value) if value else '')
                 body = body.replace(placeholder, str(value) if value else '')
 
-            # Prepare attachments
+            # Prepare attachments (απαιτείται view_clientdocument)
             attachments = []
             if include_attachments and obligation.attachment:
-                try:
-                    attachments.append(obligation.attachment)
-                except Exception as e:
-                    logger.warning(f"Could not add attachment for obligation {obligation.id}: {e}")
+                if not check_model_perms(request, 'accounting.view_clientdocument'):
+                    return JsonResponse(
+                        {'success': False,
+                         'error': 'Δεν έχετε δικαίωμα επισύναψης εγγράφων.'},
+                        status=403)
+                attachments.append(obligation.attachment)
 
             # Send email
             success, result = EmailService.send_email(
@@ -370,7 +386,7 @@ def api_send_bulk_email_direct(request):
                     'obligation_id': obligation.id,
                     'client': client.eponimia,
                     'status': 'failed',
-                    'message': str(result)
+                    'message': 'Η αποστολή email απέτυχε.'
                 })
 
         # Build response message
@@ -398,12 +414,9 @@ def api_send_bulk_email_direct(request):
             'success': False,
             'error': 'Invalid JSON data'
         }, status=400)
-    except Exception as e:
-        logger.error(f"Error in api_send_bulk_email_direct: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })
+    except Exception:
+        logger.exception("Error in api_send_bulk_email_direct")
+        return JsonResponse({'success': False, 'error': 'Σφάλμα'}, status=500)
 
 
 @staff_member_required
@@ -411,7 +424,10 @@ def api_send_bulk_email_direct(request):
 def send_ticket_email(request):
     """Send email about ticket"""
     from accounting.services.access import check_model_perms
-    if not check_model_perms(request, 'accounting.send_client_email'):
+    if not check_model_perms(
+        request, 'accounting.send_client_email', 'accounting.view_ticket',
+        'accounting.view_emailtemplate',
+    ):
         return JsonResponse(
             {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
             status=403,
@@ -435,12 +451,16 @@ def send_ticket_email(request):
                 'message': 'Missing ticket_id or template_id'
             }, status=400)
 
-        # Get ticket
+        # Get ticket (scoped)
         from accounting.api_voip import _scope_by_client
         ticket = _scope_by_client(Ticket.objects.all(), request.user).get(id=ticket_id)
 
-        # Get template
-        template = EmailTemplate.objects.get(id=template_id, is_active=True)
+        # Get template — ασφαλές lookup
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True).first()
+        if template is None:
+            return JsonResponse(
+                {'success': False, 'message': 'Template δεν βρέθηκε'}, status=404)
 
         # Prepare context
         context = {
@@ -494,7 +514,7 @@ def send_ticket_email(request):
         ticket.email_sent = True
         ticket.save()
 
-        logger.info(f"Email sent for ticket #{ticket_id} to {recipient}")
+        logger.info(f"Email sent for ticket #{ticket_id}")
 
         return JsonResponse({
             'success': True,
@@ -511,9 +531,6 @@ def send_ticket_email(request):
             'success': False,
             'message': 'Template δεν βρέθηκε'
         }, status=404)
-    except Exception as e:
-        logger.error(f"Error sending email: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'message': f'Σφάλμα: {str(e)}'
-        }, status=500)
+    except Exception:
+        logger.exception("Error sending ticket email")
+        return JsonResponse({'success': False, 'message': 'Σφάλμα'}, status=500)

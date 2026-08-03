@@ -137,10 +137,10 @@ def quick_complete_obligation(request, obligation_id):
             {'success': False, 'message': 'Μη έγκυρα δεδομένα JSON'},
             status=400
         )
-    except Exception as e:
-        logger.error(f"Error in quick_complete: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Error in quick_complete")
         return JsonResponse(
-            {'success': False, 'message': f'Sfalma: {str(e)}'},
+            {'success': False, 'message': 'Παρουσιάστηκε σφάλμα'},
             status=500
         )
 
@@ -242,10 +242,10 @@ def bulk_complete_view(request):
         })
 
     except Exception as e:
-        logger.error(f"Error in bulk_complete: {str(e)}", exc_info=True)
+        logger.exception("Error in bulk_complete")
         return JsonResponse({
             'success': False,
-            'message': f'Sfalma: {str(e)}'
+            'message': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -273,13 +273,10 @@ def advanced_bulk_complete(request):
     logger.info("="*50)
     logger.info("ADVANCED BULK COMPLETE - START")
     logger.info(f"Method: {request.method}")
-    logger.info(f"POST data keys: {request.POST.keys()}")
-    logger.info(f"FILES keys: {request.FILES.keys()}")
-
     try:
         # Get completion data
         completion_data_raw = request.POST.get('completion_data', '[]')
-        logger.info(f"Raw completion_data: {completion_data_raw[:200]}...")  # First 200 chars
+        logger.info(f"completion_data length: {len(completion_data_raw)} chars")
 
         completion_data = json.loads(completion_data_raw)
         notes = request.POST.get('notes', '')
@@ -385,10 +382,9 @@ def advanced_bulk_complete(request):
                     error_msg = f"Obligation {obl_id} not found"
                     logger.error(f"    {error_msg}")
                     errors.append(error_msg)
-                except Exception as e:
-                    error_msg = f"Error with {obl_id}: {str(e)}"
-                    logger.error(f"    {error_msg}", exc_info=True)
-                    errors.append(error_msg)
+                except Exception:
+                    logger.exception(f"    Error completing obligation {obl_id}")
+                    errors.append(f"Σφάλμα στην υποχρέωση {obl_id}")
 
         # Final summary
         logger.info(f"\n=== SUMMARY ===")
@@ -412,27 +408,26 @@ def advanced_bulk_complete(request):
             'details': processed_details[:10]
         }
 
-        logger.info(f"Response: {response_data}")
-        logger.info("="*50)
+        logger.info(f"Bulk complete: {completed_count} completed, "
+                    f"{len(errors)} errors")
 
         return JsonResponse(response_data)
 
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON Decode Error: {e}")
-        logger.error(f"Raw data was: {request.POST.get('completion_data', '')[:500]}")
+    except json.JSONDecodeError:
+        logger.exception("advanced_bulk_complete: invalid JSON payload")
         return JsonResponse({
             'success': False,
-            'message': f'JSON Error: {str(e)}',
+            'message': 'Μη έγκυρα δεδομένα',
             'completed_count': 0
-        })
+        }, status=400)
 
-    except Exception as e:
-        logger.error(f"Critical error: {e}", exc_info=True)
+    except Exception:
+        logger.exception("advanced_bulk_complete: critical error")
         return JsonResponse({
             'success': False,
-            'message': f'Krisimo sfalma: {str(e)}',
+            'message': 'Παρουσιάστηκε σφάλμα',
             'completed_count': 0
-        })
+        }, status=500)
 
 
 # ============================================
@@ -445,6 +440,11 @@ def check_obligation_duplicate(request):
     """
     AJAX endpoint for checking duplicate obligations
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse(
+            {'exists': False, 'error': 'Δεν έχετε δικαίωμα.'}, status=403)
+
     client_id = request.GET.get('client')
     type_id = request.GET.get('type')
     year = request.GET.get('year')
@@ -580,11 +580,11 @@ def complete_with_file(request, obligation_id):
             'success': False,
             'error': 'I ypoxreosi den vrethike'
         }, status=404)
-    except Exception as e:
-        logger.error(f'Error completing obligation {obligation_id} with file: {e}')
+    except Exception:
+        logger.exception(f'Error completing obligation {obligation_id} with file')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -712,10 +712,10 @@ def bulk_complete_obligations(request):
 
                 completed_count += 1
 
-            except Exception as e:
+            except Exception:
                 failed_count += 1
-                errors.append(f'{obligation.client.eponimia} - {obligation.obligation_type.name}: {str(e)}')
-                logger.error(f'Error bulk completing obligation {obligation.id}: {e}')
+                errors.append(f'{obligation.client.eponimia} - {obligation.obligation_type.name}: σφάλμα')
+                logger.exception(f'Error bulk completing obligation {obligation.id}')
 
         # Build response message
         message = f'Oloklirothikan {completed_count} ypoxreoseis epityxos'
@@ -735,11 +735,11 @@ def bulk_complete_obligations(request):
             'success': False,
             'error': 'Mh egkyra dedomena ypoxreoseon'
         }, status=400)
-    except Exception as e:
-        logger.error(f'Error in bulk completion: {e}')
+    except Exception:
+        logger.exception('Error in bulk completion')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -891,11 +891,11 @@ def api_obligations_wizard(request):
             'obligations': obligations_data
         })
 
-    except Exception as e:
-        logger.error(f"Error in api_obligations_wizard: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Error in api_obligations_wizard")
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -1057,11 +1057,11 @@ def wizard_bulk_process(request):
                             email_sent = True
                             logger.info(f"Email sent for obligation {ob_id} to client id={obligation.client_id}")
                         else:
-                            email_error_msg = str(result)
+                            email_error_msg = 'αποτυχία'
                             logger.warning(f"Could not send email for {ob_id}: {result}")
-                    except Exception as email_error:
-                        email_error_msg = str(email_error)
-                        logger.warning(f"Could not send email for {ob_id}: {email_error}")
+                    except Exception:
+                        email_error_msg = 'αποτυχία'
+                        logger.exception(f"Could not send email for {ob_id}")
 
                 completed_count += 1
                 message_parts = [f'{obligation.client.eponimia} - {obligation.obligation_type.name}: Oloklirothike']
@@ -1080,10 +1080,10 @@ def wizard_bulk_process(request):
             except MonthlyObligation.DoesNotExist:
                 failed_count += 1
                 errors.append(f'Ypoxreosi {ob_id_str} den vrethike')
-            except Exception as e:
+            except Exception:
                 failed_count += 1
-                errors.append(f'Sfalma me ypoxreosi {ob_id_str}: {str(e)}')
-                logger.error(f"Error processing obligation {ob_id_str} in wizard: {e}", exc_info=True)
+                errors.append(f'Σφάλμα στην υποχρέωση {ob_id_str}')
+                logger.exception(f"Error processing obligation {ob_id_str} in wizard")
 
         # Build response message
         if completed_count > 0:
@@ -1114,9 +1114,9 @@ def wizard_bulk_process(request):
             'details': processed_details[:20] if processed_details else []
         })
 
-    except Exception as e:
-        logger.error(f"Critical error in wizard_bulk_process: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Critical error in wizard_bulk_process")
         return JsonResponse({
             'success': False,
-            'error': f'Krisimo sfalma: {str(e)}'
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)

@@ -115,6 +115,12 @@ class ProtectedMediaViewTest(TestCase):
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA, MEDIA_ACCEL_REDIRECT=False)
 class CrmFileMediaTest(TestCase):
+    """
+    Γύρος 15: CRM συνημμένα (TheFile) → object-level authorization βάσει
+    του content_object. Δεν αρκεί session, ούτε γενικός ?mt= token.
+    Πλήρης owner/department κάλυψη στο test_rbac_round15.TheFileAuthTest·
+    εδώ ελέγχεται το fail-closed για μη-CRM content_object.
+    """
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
@@ -132,25 +138,27 @@ class CrmFileMediaTest(TestCase):
     def _url(self):
         return f'/media/{self.rel_path}'
 
-    def test_crm_file_session_serves(self):
+    def test_crm_file_session_alone_denied(self):
+        # ClientProfile content_object δεν υποστηρίζει CRM policy → 404
         user = User.objects.create_user('plain', 'p@t.com', 'pass12345')
         self.client.force_login(user)
         resp = self.client.get(self._url())
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 404)
 
-    def test_crm_file_token_serves(self):
+    def test_crm_file_token_denied(self):
         resp = self.client.get(self._url(),
                                {'mt': make_media_token(self.rel_path)})
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 404)
 
-    def test_crm_file_anonymous_no_token_denied(self):
+    def test_crm_file_anonymous_denied(self):
         resp = self.client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 404)
 
-    def test_crm_file_token_bound_to_path(self):
-        resp = self.client.get(self._url(),
-                               {'mt': make_media_token('docs/other.pdf')})
-        self.assertEqual(resp.status_code, 403)
+    def test_crm_file_superuser_serves(self):
+        su = User.objects.create_superuser('su_crm', 'su@t.com', 'pass12345')
+        self.client.force_login(su)
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 200)
 
 
 class MediaTokenTest(TestCase):

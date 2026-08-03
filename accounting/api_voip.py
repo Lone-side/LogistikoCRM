@@ -659,7 +659,10 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Auto-set status to open on create (μόνο για προσβάσιμο πελάτη)"""
+        from django.core.exceptions import ValidationError as DjangoValidationError
         from django.db import transaction
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import sync_ticket_call_client
         call = self._check_client_id(serializer)
         extra = {'status': 'open'}
         if (
@@ -673,12 +676,27 @@ class TicketViewSet(viewsets.ModelViewSet):
             extra['client'] = call.client
         with transaction.atomic():
             serializer.save(**extra)
+            # Invariant και από την πλευρά του ticket: ticket με πελάτη +
+            # unassigned κλήση → αντιστοίχιση της κλήσης atomic
+            try:
+                sync_ticket_call_client(serializer.instance, user=self.request.user)
+            except DjangoValidationError as e:
+                raise ValidationError(
+                    getattr(e, 'message_dict', None) or e.messages)
 
     def perform_update(self, serializer):
+        from django.core.exceptions import ValidationError as DjangoValidationError
         from django.db import transaction
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import sync_ticket_call_client
         self._check_client_id(serializer)
         with transaction.atomic():
             serializer.save()
+            try:
+                sync_ticket_call_client(serializer.instance, user=self.request.user)
+            except DjangoValidationError as e:
+                raise ValidationError(
+                    getattr(e, 'message_dict', None) or e.messages)
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):

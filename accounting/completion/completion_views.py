@@ -614,16 +614,38 @@ def email_send_view(request):
                 'error': f'Ο πελάτης {client.eponimia} δεν έχει email'
             }, status=400)
 
-        # Get template
+        # Get template — permission + ασφαλές lookup ΠΡΙΝ από οτιδήποτε
         template_id = data.get('template_id')
         template = None
         if template_id:
-            template = EmailTemplate.objects.filter(id=template_id).first()
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return JsonResponse(PERM_DENIED_JSON, status=403)
+            template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if template is None:
+                return JsonResponse(
+                    {'success': False, 'error': 'Το πρότυπο δεν βρέθηκε'},
+                    status=404)
 
-        # Get obligations
+        # Get obligations — SECURITY: κάθε ζητούμενη υποχρέωση πρέπει να
+        # ανήκει στον ΕΠΙΛΕΓΜΕΝΟ πελάτη (όχι απλώς προσβάσιμη), αλλιώς
+        # cross-client leak. Απόρριψη ΠΡΙΝ από κάθε αποστολή/attachment read.
+        if obligation_ids and not check_model_perms(
+            request, 'accounting.view_monthlyobligation'
+        ):
+            return JsonResponse(PERM_DENIED_JSON, status=403)
         obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
+        if len(obligations) != len(set(str(i) for i in obligation_ids)):
+            return JsonResponse(
+                {'success': False, 'error': 'Μη έγκυρη επιλογή υποχρεώσεων'},
+                status=404)
+        if any(ob.client_id != client.id for ob in obligations):
+            return JsonResponse(
+                {'success': False,
+                 'error': 'Οι υποχρεώσεις δεν αντιστοιχούν στον πελάτη'},
+                status=400)
 
         # Build subject and body
         subject = data.get('subject', '')
@@ -641,16 +663,20 @@ def email_send_view(request):
             if not body:
                 body = rendered_body
 
-        # Collect attachments
+        # Collect attachments — απαιτείται view_clientdocument
         attachments = []
         if data.get('include_attachments', True):
             attachment_ids = data.get('attachment_ids', [])
-            for ob in obligations:
-                if ob.attachment:
-                    # If specific attachments selected, check if this one is included
-                    if attachment_ids and str(ob.id) not in attachment_ids:
-                        continue
-                    attachments.append(ob.attachment.path)
+            candidate_atts = [ob for ob in obligations if ob.attachment]
+            if candidate_atts and not check_model_perms(
+                request, 'accounting.view_clientdocument'
+            ):
+                return JsonResponse(PERM_DENIED_JSON, status=403)
+            for ob in candidate_atts:
+                # If specific attachments selected, check if this one is included
+                if attachment_ids and str(ob.id) not in attachment_ids:
+                    continue
+                attachments.append(ob.attachment.path)
 
         # Send email
         success, result = EmailService.send_email(
@@ -712,15 +738,39 @@ def email_send_bulk_view(request):
         template_id = data.get('template_id')
         include_attachments = data.get('include_attachments', True)
 
-        # Get template
+        if obligation_ids and not check_model_perms(
+            request, 'accounting.view_monthlyobligation'
+        ):
+            return JsonResponse(PERM_DENIED_JSON, status=403)
+
+        # Get template — permission + ασφαλές lookup
         template = None
         if template_id:
-            template = EmailTemplate.objects.filter(id=template_id).first()
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return JsonResponse(PERM_DENIED_JSON, status=403)
+            template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if template is None:
+                return JsonResponse(
+                    {'success': False, 'error': 'Το πρότυπο δεν βρέθηκε'},
+                    status=404)
 
-        # Get obligations and group by client
+        # Get obligations (κάθε email πάει στον πελάτη ΤΗΣ υποχρέωσης — 1
+        # email/πελάτη — οπότε δεν υπάρχει cross-client mismatch εδώ)
         obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
+        if len(obligations) != len(set(str(i) for i in obligation_ids)):
+            return JsonResponse(
+                {'success': False, 'error': 'Μη έγκυρη επιλογή υποχρεώσεων'},
+                status=404)
+
+        needs_att_perm = include_attachments and any(
+            ob.attachment for ob in obligations)
+        if needs_att_perm and not check_model_perms(
+            request, 'accounting.view_clientdocument'
+        ):
+            return JsonResponse(PERM_DENIED_JSON, status=403)
 
         clients_data = {}
         for ob in obligations:

@@ -82,3 +82,44 @@ def change_call_client(call, new_client, *, user=None, log_action=None):
     call.client_id = new_client_id
     call.client_email = locked_call.client_email
     return locked_call
+
+
+def sync_ticket_call_client(ticket, *, user=None):
+    """
+    Επιβολή του invariant ΑΠΟ την πλευρά του ticket, atomic.
+
+    Μετά τη δημιουργία/ενημέρωση ενός ticket με πελάτη που είναι
+    συνδεδεμένο σε unassigned κλήση, αντιστοιχίζει και την κλήση στον ίδιο
+    πελάτη (policy A) — ώστε να μην υπάρξει ποτέ ticket(client=X) +
+    call(client=None). Αν η κλήση είναι ήδη bound σε άλλον πελάτη, ρίχνει
+    ValidationError (ο caller το έχει ήδη μπλοκάρει, εδώ είναι backstop).
+
+    Απαιτεί `change_voipcall` όταν πράγματι αλλάζει την κλήση.
+    """
+    from django.core.exceptions import ValidationError
+    from accounting.models import Ticket, VoIPCall
+
+    if not ticket.call_id or not ticket.client_id:
+        return
+    with transaction.atomic():
+        locked_ticket = Ticket.objects.select_for_update().get(pk=ticket.pk)
+        if not locked_ticket.call_id or not locked_ticket.client_id:
+            return
+        locked_call = VoIPCall.objects.select_for_update().get(
+            pk=locked_ticket.call_id
+        )
+        if locked_call.client_id == locked_ticket.client_id:
+            return
+        if locked_call.client_id is not None:
+            raise ValidationError({
+                'call': 'Η κλήση ανήκει σε διαφορετικό πελάτη από το ticket.'
+            })
+        if user is not None and not user.has_perm('accounting.change_voipcall'):
+            raise ValidationError({
+                'call': 'Η αντιστοίχιση της κλήσης στον πελάτη του ticket '
+                        'απαιτεί δικαίωμα αλλαγής κλήσης.'
+            })
+        client = locked_ticket.client
+        locked_call.client_id = locked_ticket.client_id
+        locked_call.client_email = (client.email or '') if client else ''
+        locked_call.save(update_fields=['client', 'client_email'])

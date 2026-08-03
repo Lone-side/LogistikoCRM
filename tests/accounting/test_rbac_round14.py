@@ -276,7 +276,11 @@ class ProtectedMediaAuthTest(Round14Base):
         resp = self._serve(self.foreign_doc.file.name, user=manager)
         self.assertEqual(resp.status_code, 200)
 
-    def test_crm_thefile_keeps_legacy_policy(self):
+    def test_crm_thefile_object_level_policy(self):
+        # Γύρος 15: ένα CRM TheFile δεν είναι πλέον προσβάσιμο μόνο επειδή ο
+        # χρήστης είναι authenticated — η πρόσβαση κρίνεται object-level από
+        # το content_object. Ένα TheFile σε content_object που δεν
+        # υποστηρίζει την CRM πολιτική (π.χ. ClientProfile) → fail closed.
         from django.contrib.contenttypes.models import ContentType
         from django.core.files.base import ContentFile
         from common.models import TheFile
@@ -284,11 +288,12 @@ class ProtectedMediaAuthTest(Round14Base):
         the_file = TheFile(content_type=ct, object_id=self.client_profile.pk)
         the_file.file.save('σημειωση.txt', ContentFile(b'crm note'), save=True)
         plain = User.objects.create_user('media_plain', password='x')
-        resp = self._serve(the_file.file.name, user=plain)
-        self.assertEqual(resp.status_code, 200)
+        with self.assertRaises(Http404):
+            self._serve(the_file.file.name, user=plain)
+        # Ο γενικός token επίσης δεν παρακάμπτει (fail closed)
         token = make_media_token(the_file.file.name)
-        resp2 = self._serve(the_file.file.name, token=token)
-        self.assertEqual(resp2.status_code, 200)
+        with self.assertRaises(Http404):
+            self._serve(the_file.file.name, token=token)
 
 
 # ---------------------------------------------------------------------------
