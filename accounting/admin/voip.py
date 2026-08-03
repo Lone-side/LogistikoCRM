@@ -267,15 +267,14 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     # Custom delete view
     def save_model(self, request, obj, form, change):
         from django.db import transaction
+        from accounting.services.call_assignment import change_call_client
         with transaction.atomic():
             super().save_model(request, obj, form, change)
-            if change and obj.client_id:
-                # Atomic ενημέρωση ΚΑΙ των δύο: unassigned (triage) ticket
-                # της κλήσης παίρνει τον ίδιο πελάτη (invariant). Bound
-                # ticket σε άλλον πελάτη το έχει ήδη απορρίψει το clean().
-                Ticket.objects.filter(call=obj, client__isnull=True).update(
-                    client_id=obj.client_id
-                )
+            if change and 'client' in getattr(form, 'changed_data', []):
+                # Κεντρικό service: atomic invariant κλήσης-ticket (bound
+                # mismatch/unassign το έχει ήδη απορρίψει το clean() στη
+                # φόρμα — εδώ γίνεται το claim του unassigned ticket)
+                change_call_client(obj, obj.client, user=request.user)
 
     def delete_view(self, request, object_id, extra_context=None):
         obj = self.get_object(request, object_id)

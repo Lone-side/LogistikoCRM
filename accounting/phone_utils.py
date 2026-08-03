@@ -176,8 +176,6 @@ def auto_match_call(call, save=True, clients_qs=None):
     Returns:
         ClientProfile if matched, None otherwise
     """
-    from .models import VoIPCallLog
-
     if call.client is not None:
         # Already matched
         return call.client
@@ -185,20 +183,28 @@ def auto_match_call(call, save=True, clients_qs=None):
     client = find_client_by_phone(call.phone_number, clients_qs=clients_qs)
 
     if client:
-        call.client = client
-        call.client_email = client.email or ''
-
-        if save:
-            call.save(update_fields=['client', 'client_email'])
-
-            # Log the auto-match action
-            VoIPCallLog.objects.create(
-                call=call,
-                action='client_matched',
-                description=f'Auto-matched to client: {client.eponimia}'
+        # Κλήση με ticket ήδη αντιστοιχισμένο σε ΑΛΛΟΝ πελάτη: το
+        # auto-match δεν την αγγίζει — μένει για χειροκίνητο triage
+        from .models import Ticket
+        linked_client_id = Ticket.objects.filter(call=call).values_list(
+            'client_id', flat=True
+        ).first()
+        if linked_client_id and linked_client_id != client.pk:
+            logger.warning(
+                f"Auto-match skipped for call {call.id}: linked ticket "
+                f"bound to different client"
             )
+            return None
+        if save:
+            # Κεντρικό service: atomic + invariant κλήσης-ticket (το
+            # auto-match ενημερώνει και τυχόν unassigned linked ticket)
+            from accounting.services.call_assignment import change_call_client
+            change_call_client(call, client, log_action='client_matched')
+        else:
+            call.client = client
+            call.client_email = client.email or ''
 
-        logger.info(f"Auto-matched call {call.id} to client {client.id} ({client.eponimia})")
+        logger.info(f"Auto-matched call {call.id} to client {client.id}")
         return client
 
     return None

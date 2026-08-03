@@ -70,9 +70,10 @@ def export_clients_template(request):
         os.unlink(tmp_path)
         return response
 
-    except Exception as e:
+    except Exception:
+        logger.exception('Σφάλμα δημιουργίας template')
         return Response(
-            {'error': f'Σφάλμα δημιουργίας template: {str(e)}'},
+            {'error': 'Σφάλμα δημιουργίας template'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -198,9 +199,10 @@ def export_clients_csv(request):
 
         return response
 
-    except Exception as e:
+    except Exception:
+        logger.exception('Σφάλμα εξαγωγής πελατών')
         return Response(
-            {'error': f'Σφάλμα εξαγωγής: {str(e)}'},
+            {'error': 'Σφάλμα εξαγωγής'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -385,8 +387,9 @@ def import_clients_csv(request):
                         )
                         credentials_note_added = True
 
-                # Check if client exists
-                existing = ClientProfile.objects.filter(afm=afm).first()
+                # SECURITY: scoped lookup — δεν αποκαλύπτουμε αν το ΑΦΜ
+                # υπάρχει σε ξένο, μη ανατεθειμένο πελάτη
+                existing = accessible_clients(request.user).filter(afm=afm).first()
 
                 def _credential_perms_ok(client_obj):
                     """add μόνο για νέα credentials, change μόνο για υπάρχοντα."""
@@ -408,11 +411,6 @@ def import_clients_csv(request):
                     )
 
                 if existing:
-                    # Scoped χρήστες δεν ενημερώνουν πελάτες εκτός ανάθεσης
-                    if not accessible_clients(request.user).filter(pk=existing.pk).exists():
-                        errors.append(f'Γραμμή {row_num}: ΑΦΜ {afm} εκτός ανάθεσης — παραλείφθηκε')
-                        skipped_count += 1
-                        continue
                     if mode == 'update':
                         if not _credential_perms_ok(existing):
                             errors.append(
@@ -441,18 +439,26 @@ def import_clients_csv(request):
                         )
                         skipped_count += 1
                         continue
-                    # Create new client (transactional γραμμή)
-                    row_data['is_active'] = True
-                    with transaction.atomic():
-                        new_client = ClientProfile.objects.create(**row_data)
-                        # Ο δημιουργός αναλαμβάνει αυτόματα τον νέο πελάτη —
-                        # αλλιώς scoped χρήστης δεν θα τον ξαναέβλεπε
-                        from accounting.mixins import user_sees_all_clients
-                        if not user_sees_all_clients(request.user):
-                            new_client.assigned_users.add(request.user)
-                        if credentials:
-                            store_client_credentials(
-                                new_client, credentials, updated_by=request.user)
+                    # Create new client (transactional γραμμή). IntegrityError
+                    # (π.χ. το ΑΦΜ ανήκει σε μη προσβάσιμο πελάτη) → ίδιο
+                    # ουδέτερο μήνυμα με κάθε αποτυχία — χωρίς enumeration
+                    from django.db import IntegrityError
+                    try:
+                        with transaction.atomic():
+                            new_client = ClientProfile.objects.create(**row_data)
+                            from accounting.mixins import user_sees_all_clients
+                            if not user_sees_all_clients(request.user):
+                                new_client.assigned_users.add(request.user)
+                            if credentials:
+                                store_client_credentials(
+                                    new_client, credentials,
+                                    updated_by=request.user)
+                    except IntegrityError:
+                        errors.append(
+                            f'Γραμμή {row_num}: Η εισαγωγή του ΑΦΜ απέτυχε — '
+                            f'παραλείφθηκε')
+                        skipped_count += 1
+                        continue
                     created_count += 1
 
         return Response({
@@ -592,7 +598,11 @@ def export_obligation_types_csv(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.view_clientprofile', 'accounting.export_clientprofile')
+@require_model_perms(
+    'accounting.view_clientprofile', 'accounting.export_clientprofile',
+    'accounting.view_clientobligation', 'accounting.view_obligationprofile',
+    'accounting.view_obligationtype',
+)
 def export_client_obligations_csv(request):
     """Export client obligation assignments."""
     from django.http import HttpResponse
@@ -621,7 +631,10 @@ def export_client_obligations_csv(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.change_clientprofile')
+@require_model_perms(
+    'accounting.add_clientobligation', 'accounting.change_clientobligation',
+    'accounting.view_obligationprofile', 'accounting.view_obligationtype',
+)
 @parser_classes([MultiPartParser, FormParser])
 def import_client_obligations_csv(request):
     """Import client obligation assignments from CSV."""
@@ -691,5 +704,7 @@ def import_client_obligations_csv(request):
             'message': f'Ενημερώθηκαν {updated_count}, δημιουργήθηκαν {created_count}.'
         })
 
-    except Exception as e:
-        return Response({'error': f'Σφάλμα: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception:
+        logger.exception('Σφάλμα εισαγωγής αναθέσεων υποχρεώσεων')
+        return Response({'error': 'Σφάλμα εισαγωγής αρχείου'},
+                        status=status.HTTP_400_BAD_REQUEST)

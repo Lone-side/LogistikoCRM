@@ -5,6 +5,8 @@ Author: Claude
 Description: REST API for email sending - templates, send, obligation notifications
 """
 
+import logging
+
 from rest_framework import status, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -22,6 +24,8 @@ from .services.access import (
 )
 
 PERM_DENIED = {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================
@@ -203,7 +207,19 @@ def email_template_detail(request, template_id):
     Soft-delete an email template (set is_active=False)
     """
     try:
-        template = EmailTemplate.objects.get(id=template_id)
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα χρήσης προτύπων email.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True
+        ).first()
+        if template is None:
+            return Response(
+                {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
     except EmailTemplate.DoesNotExist:
         return Response(
             {'error': 'Το πρότυπο δεν βρέθηκε.'},
@@ -278,6 +294,11 @@ def preview_email(request):
     client = None
 
     if obligation_id:
+        if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα προβολής υποχρεώσεων.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
             obligation = accessible_obligations(request.user).get(id=obligation_id)
             client = obligation.client
@@ -311,7 +332,8 @@ def preview_email(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.send_client_email')
+@require_model_perms('accounting.send_client_email',
+                     'accounting.view_clientprofile')
 def send_email(request):
     """
     POST /api/v1/email/send/
@@ -343,7 +365,19 @@ def send_email(request):
         return Response({'error': 'Ο πελάτης δεν έχει email.'}, status=status.HTTP_400_BAD_REQUEST)
     template = None
     if template_id:
-        template = EmailTemplate.objects.get(id=template_id)
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα χρήσης προτύπων email.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True
+        ).first()
+        if template is None:
+            return Response(
+                {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
     # Get attachments
     attachments = []
@@ -377,7 +411,7 @@ def send_email(request):
         return Response({
             'success': False,
             'message': 'Αποτυχία αποστολής email.',
-            'error': str(result)
+            'error': 'Η αποστολή email απέτυχε.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -474,7 +508,7 @@ def send_obligation_notice(request):
         return Response({
             'success': False,
             'message': 'Αποτυχία αποστολής email.',
-            'error': str(result)
+            'error': 'Η αποστολή email απέτυχε.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -657,7 +691,8 @@ def complete_and_notify(request, obligation_id):
 
             email_sent = success
             if not success:
-                email_error = str(result)
+                logger.error(f'Email send failed: {result}')
+                email_error = 'Η αποστολή email απέτυχε.'
 
     # Prepare response
     from .api_obligations import ObligationDetailSerializer
@@ -781,7 +816,7 @@ def bulk_complete_with_notify(request):
                     'obligation_id': obligation.id,
                     'client': client.eponimia,
                     'status': 'failed',
-                    'message': str(result)
+                    'message': 'Η αποστολή email απέτυχε.'
                 })
 
     response_data = {
@@ -992,7 +1027,7 @@ def bulk_complete_with_documents(request):
                             'obligation_id': obligation.id,
                             'client': client.eponimia,
                             'status': 'failed',
-                            'message': str(result)
+                            'message': 'Η αποστολή email απέτυχε.'
                         })
                 else:
                     email_results['failed'] += 1
@@ -1271,11 +1306,11 @@ def email_settings_send_test(request):
         else:
             return Response({
                 'success': False,
-                'message': f'Αποτυχία αποστολής: {result}'
+                'message': 'Αποτυχία αποστολής δοκιμαστικού email'
             }, status=status.HTTP_400_BAD_REQUEST)
 
     except Exception as e:
         return Response({
             'success': False,
-            'message': f'Σφάλμα: {str(e)}'
+            'message': 'Σφάλμα κατά την αποστολή δοκιμαστικού email'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -47,12 +47,11 @@ class IsVoIPMonitor(BasePermission):
             logger.info(f"IsVoIPMonitor: ✅ GRANTED - Valid API key (IP: {self._get_client_ip(request)})")
             return True
         else:
-            # Log mismatch with masked tokens for debugging
-            provided_masked = api_key[:4] + '...' if len(api_key) > 4 else '****'
-            expected_masked = expected_token[:4] + '...' if len(expected_token) > 4 else '****'
+            # ΔΕΝ καταγράφεται κανένα τμήμα του πραγματικού token (ούτε
+            # prefix) — attacker-triggerable log line
             logger.warning(
                 f"IsVoIPMonitor: ❌ DENIED - Token mismatch "
-                f"(provided: {provided_masked}, expected: {expected_masked}, IP: {self._get_client_ip(request)})"
+                f"(IP: {self._get_client_ip(request)})"
             )
             return False
 

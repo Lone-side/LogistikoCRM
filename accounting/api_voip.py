@@ -239,39 +239,33 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_update(self, serializer):
+        from django.core.exceptions import ValidationError as DjangoValidationError
         from django.db import transaction
         from rest_framework.exceptions import ValidationError
+        from accounting.models import ClientProfile
+        from accounting.services.call_assignment import change_call_client
         self._validate_client_id(serializer)
-        # Invariant κλήσης-ticket: αλλαγή πελάτη της κλήσης δεν επιτρέπεται
-        # να αφήσει το συνδεδεμένο ticket σε άλλον πελάτη — είτε απορρίπτεται
-        # (unassign) είτε ενημερώνονται και τα δύο ατομικά (ίδιο transaction,
-        # με κλείδωμα γραμμής στο ticket).
+        # Αλλαγή πελάτη: ΜΟΝΟ μέσω του κεντρικού service (invariant
+        # κλήσης-ticket, atomic, select_for_update και στα δύο rows)
+        data = serializer.validated_data
+        client_change = 'client_id' in data
+        new_client = None
+        if client_change:
+            new_client_id = data.pop('client_id')
+            if new_client_id is not None:
+                # Ήδη επικυρωμένο ως προσβάσιμο στο _validate_client_id
+                new_client = ClientProfile.objects.get(pk=new_client_id)
         with transaction.atomic():
-            propagate_ticket = None
-            if 'client_id' in serializer.validated_data:
-                new_client_id = serializer.validated_data['client_id']
-                linked = Ticket.objects.select_for_update().filter(
-                    call=serializer.instance
-                ).first()
-                if linked is not None and linked.client_id is not None:
-                    if new_client_id is None:
-                        raise ValidationError({
-                            'client_id': 'Η κλήση έχει ticket αντιστοιχισμένο σε '
-                                         'πελάτη — η αφαίρεση πελάτη πρέπει να '
-                                         'γίνει και στα δύο μαζί.'
-                        })
-                    if new_client_id != linked.client_id:
-                        if not self.request.user.has_perm('accounting.change_ticket'):
-                            raise ValidationError({
-                                'client_id': 'Η αλλαγή πελάτη ενημερώνει και το '
-                                             'συνδεδεμένο ticket — απαιτείται '
-                                             'δικαίωμα αλλαγής ticket.'
-                            })
-                        propagate_ticket = linked
             serializer.save()
-            if propagate_ticket is not None:
-                propagate_ticket.client_id = serializer.instance.client_id
-                propagate_ticket.save(update_fields=['client'])
+            if client_change:
+                try:
+                    change_call_client(
+                        serializer.instance, new_client, user=self.request.user
+                    )
+                except DjangoValidationError as e:
+                    raise ValidationError(
+                        getattr(e, 'message_dict', None) or e.messages
+                    )
 
     def get_queryset(self):
         queryset = _scope_by_client(super().get_queryset(), self.request.user)
@@ -356,18 +350,23 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            from accounting.services.access import accessible_clients
-            client = accessible_clients(request.user).get(id=client_id)
-            call.client = client
-            call.client_email = client.email
-            call.save()
-
-            # Log the action
-            VoIPCallLog.objects.create(
-                call=call,
-                action='client_matched',
-                description=f'Matched to client: {client.eponimia}'
+            from django.core.exceptions import (
+                ValidationError as DjangoValidationError,
             )
+            from accounting.services.access import accessible_clients
+            from accounting.services.call_assignment import change_call_client
+            client = accessible_clients(request.user).get(id=client_id)
+            # Κεντρικό service: atomic + invariant κλήσης-ticket
+            try:
+                change_call_client(
+                    call, client, user=request.user,
+                    log_action='client_matched',
+                )
+            except DjangoValidationError as e:
+                return Response(
+                    {'error': '; '.join(e.messages)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             return Response(VoIPCallFullSerializer(call).data)
         except ClientProfile.DoesNotExist:

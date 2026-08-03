@@ -804,25 +804,34 @@ def make_shared_access_token(shared_link, email=''):
     )
 
 
-def verify_shared_access_token(shared_link, token_value):
+def load_shared_access_payload(shared_link, token_value):
+    """
+    Επιστρέφει το payload ενός έγκυρου access token για ΤΟ συγκεκριμένο
+    link (με έλεγχο fingerprint/max-age) ή None. Το payload χρειάζεται
+    όπου πρέπει να δεθεί το email proof με το email του request.
+    """
     from django.core import signing
     if not token_value:
-        return False
+        return None
     try:
         data = signing.loads(token_value, salt=ACCESS_TOKEN_SALT,
                              max_age=ACCESS_TOKEN_MAX_AGE)
     except signing.BadSignature:
-        return False
+        return None
     if data.get('t') != shared_link.token:
-        return False
+        return None
     if data.get('p') != _link_fingerprint(shared_link):
-        return False
+        return None
     # Για requires_email το token πρέπει να περιέχει απόδειξη email —
     # tokens που εκδόθηκαν πριν ενεργοποιηθεί το requires_email
     # απορρίπτονται ήδη από το fingerprint παραπάνω.
     if shared_link.requires_email and not data.get('e'):
-        return False
-    return True
+        return None
+    return data
+
+
+def verify_shared_access_token(shared_link, token_value):
+    return load_shared_access_payload(shared_link, token_value) is not None
 
 
 def shared_link_auth_ok(shared_link, request):
@@ -943,7 +952,12 @@ class PublicSharedLinkView(APIView):
                     'filename': doc.filename,
                     'file_type': doc.file_type,
                     'file_size_display': doc.file_size_display,
-                    'preview_url': signed_media_url(doc.file, request) if doc.file else None,
+                    # SECURITY: όχι γενικό signed media URL — το preview
+                    # περνά από shared-link-aware endpoint που ελέγχει την
+                    # κατάσταση του link στη βάση σε ΚΑΘΕ request
+                    'preview_url': self._shared_preview_url(
+                        request, shared_link, doc, email=email
+                    ) if doc.file else None,
                     'can_download': shared_link.access_level == 'download'
                 },
                 **common,
@@ -972,6 +986,18 @@ class PublicSharedLinkView(APIView):
                 } for doc in docs],
                 **common,
             })
+
+    def _shared_preview_url(self, request, shared_link, doc, email=''):
+        """URL προς το shared-link-aware preview endpoint (όχι γενικό
+        media token) — με access token στο query για προστατευμένα links."""
+        from django.urls import reverse
+        from urllib.parse import urlencode
+        url = reverse('accounting:shared_link_preview', args=[shared_link.token])
+        params = {'doc_id': doc.id}
+        if shared_link_is_protected(shared_link):
+            params['auth'] = make_shared_access_token(shared_link, email=email)
+        url = f'{url}?{urlencode(params)}'
+        return request.build_absolute_uri(url)
 
     def _get_document_request(self, shared_link):
         """Το ανοιχτό αίτημα εγγράφων του link (ή None) — για το portal checklist."""
@@ -1075,6 +1101,72 @@ class PublicSharedLinkDownloadView(APIView):
             raise Http404("Σφάλμα κατά τη λήψη")
 
 
+class PublicSharedLinkPreviewView(APIView):
+    """
+    Inline preview (iframe/img) εγγράφου μέσω shared link.
+
+    Shared-link-aware: σε ΚΑΘΕ request φορτώνει το SharedLink από τη
+    βάση και ελέγχει active/expiration/ιδιοκτησία εγγράφου/access token —
+    deactivation, λήξη, token regeneration ή αλλαγή password/requires_email
+    ακυρώνουν αμέσως την πρόσβαση (όχι μόνο μέσω expiry του signed token).
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        shared_link = get_object_or_404(SharedLink, token=token)
+
+        if not shared_link.is_active or shared_link.is_expired:
+            return Response({'error': 'Μη έγκυρος σύνδεσμος'},
+                            status=status.HTTP_410_GONE)
+
+        if shared_link_is_protected(shared_link) and not verify_shared_access_token(
+            shared_link, request.query_params.get('auth')
+        ):
+            return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        # Το έγγραφο πρέπει να ανήκει ΣΤΟ link (ή στον shared client folder)
+        doc = shared_link.document
+        if not doc and shared_link.client:
+            doc_id = request.query_params.get('doc_id')
+            if doc_id:
+                doc = ClientDocument.objects.filter(
+                    id=doc_id, client=shared_link.client, is_current=True
+                ).first()
+        if not doc or not doc.file:
+            raise Http404('Το αρχείο δεν βρέθηκε')
+
+        # Το preview ΔΕΝ παρακάμπτει το max_downloads: όταν υπάρχει όριο
+        # λήψεων, κάθε preview δεσμεύει ατομικά ένα slot (streams ολόκληρο
+        # το αρχείο — ισοδύναμο με λήψη)
+        if shared_link.max_downloads is not None:
+            if not shared_link.try_record_download():
+                return Response({'error': 'Έχει φτάσει το όριο λήψεων'},
+                                status=status.HTTP_410_GONE)
+        else:
+            shared_link.record_access(is_download=False)
+
+        SharedLinkAccess.objects.create(
+            shared_link=shared_link,
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+            action='view',
+        )
+
+        try:
+            file_handle = doc.file.open('rb')
+        except Exception:
+            raise Http404('Σφάλμα κατά την προβολή')
+        content_type, _ = mimetypes.guess_type(doc.filename)
+        response = FileResponse(
+            file_handle,
+            content_type=content_type or 'application/octet-stream',
+        )
+        response['Content-Disposition'] = 'inline'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
+
+
 class PublicSharedLinkUploadView(APIView):
     """
     Upload εγγράφων από τον πελάτη μέσω shared link (χωρίς login).
@@ -1109,12 +1201,21 @@ class PublicSharedLinkUploadView(APIView):
 
         # SECURITY: προστατευμένο link (κωδικός Ή requires_email) → μόνο με
         # έγκυρο access token, που εκδίδεται αφού περάσουν όλοι οι έλεγχοι
-        if not shared_link_auth_ok(shared_link, request):
-            return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-
-        # Το email (για το access log) — η απόδειξη ότι δόθηκε ζει στο token
         email = (request.data.get('email') or '').strip()
+        if shared_link_is_protected(shared_link):
+            token_value = (request.query_params.get('auth')
+                           or request.data.get('auth'))
+            payload = load_shared_access_payload(shared_link, token_value)
+            if payload is None:
+                return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
+                                status=status.HTTP_401_UNAUTHORIZED)
+            if shared_link.requires_email:
+                # Το email του request πρέπει να ταυτίζεται με το proof του
+                # token — token που εκδόθηκε για email Α δεν καταγράφει
+                # email Β (ή κενό) στο access log
+                if not email or _email_proof(email) != payload.get('e'):
+                    return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
+                                    status=status.HTTP_401_UNAUTHORIZED)
 
         client = shared_link.upload_target_client
         if not client:
@@ -1129,18 +1230,9 @@ class PublicSharedLinkUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Ατομική δέσμευση slots ΠΡΙΝ την επεξεργασία — conditional UPDATE
-        # στη βάση, ώστε concurrent requests να μην υπερβούν το max_uploads
-        if not shared_link.try_reserve_uploads(len(files)):
-            remaining = max(
-                0, (shared_link.max_uploads or 0) - shared_link.upload_count
-            )
-            return Response(
-                {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # Προαιρετική αντιστοίχιση σε item αιτήματος εγγράφων
+        # Προαιρετική αντιστοίχιση σε item αιτήματος εγγράφων — επικύρωση
+        # ΠΡΙΝ από τη δέσμευση slots, ώστε άκυρο request_item_id να μην
+        # καταναλώνει quota
         request_item = None
         request_item_id = request.data.get('request_item_id')
         if request_item_id:
@@ -1157,41 +1249,57 @@ class PublicSharedLinkUploadView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # Ατομική δέσμευση slots ΠΡΙΝ την επεξεργασία — conditional UPDATE
+        # στη βάση, ώστε concurrent requests να μην υπερβούν το max_uploads
+        if not shared_link.try_reserve_uploads(len(files)):
+            remaining = max(
+                0, (shared_link.max_uploads or 0) - shared_link.upload_count
+            )
+            return Response(
+                {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         sender = email or 'πελάτη'
         uploaded = []
         uploaded_docs = []
         errors = []
-        for f in files:
-            try:
-                # on_existing='keep': τα uploads πελατών δεν εκτοπίζουν ΠΟΤΕ
-                # υπάρχοντα έγγραφα του γραφείου ως «νέα έκδοση»
-                doc = filing.create_client_document(
-                    client=client,
-                    uploaded_file=f,
-                    category=(
-                        (request_item.category if request_item else '')
-                        or shared_link.upload_category or 'general'
-                    ),
-                    user=None,
-                    description=f'Μεταφόρτωση από {sender} μέσω portal',
-                    on_existing='keep',
-                )
-            except DjangoValidationError as e:
-                errors.append({'filename': f.name, 'error': '; '.join(e.messages)})
-                continue
-            entry = {
-                'filename': doc.original_filename,
-                'stored_as': doc.filename,
-                'file_size_display': doc.file_size_display,
-            }
-            if doc.afm_mismatch:
-                entry['warning'] = 'Το ΑΦΜ στο έγγραφο δεν αντιστοιχεί στον πελάτη'
-            uploaded.append(entry)
-            uploaded_docs.append(doc)
-
-        # Αποδέσμευση slots για αρχεία που απέτυχαν στο validation
-        if errors:
-            shared_link.release_uploads(len(errors))
+        try:
+            for f in files:
+                try:
+                    # on_existing='keep': τα uploads πελατών δεν εκτοπίζουν
+                    # ΠΟΤΕ υπάρχοντα έγγραφα του γραφείου ως «νέα έκδοση»
+                    doc = filing.create_client_document(
+                        client=client,
+                        uploaded_file=f,
+                        category=(
+                            (request_item.category if request_item else '')
+                            or shared_link.upload_category or 'general'
+                        ),
+                        user=None,
+                        description=f'Μεταφόρτωση από {sender} μέσω portal',
+                        on_existing='keep',
+                    )
+                except DjangoValidationError as e:
+                    errors.append(
+                        {'filename': f.name, 'error': '; '.join(e.messages)})
+                    continue
+                entry = {
+                    'filename': doc.original_filename,
+                    'stored_as': doc.filename,
+                    'file_size_display': doc.file_size_display,
+                }
+                if doc.afm_mismatch:
+                    entry['warning'] = 'Το ΑΦΜ στο έγγραφο δεν αντιστοιχεί στον πελάτη'
+                uploaded.append(entry)
+                uploaded_docs.append(doc)
+        finally:
+            # Κάθε δεσμευμένο slot που ΔΕΝ κατέληξε σε επιτυχές upload
+            # αποδεσμεύεται — και σε validation failures και σε unexpected
+            # exception (το finally τρέχει πριν φύγει το response/raise)
+            unused = len(files) - len(uploaded)
+            if unused > 0:
+                shared_link.release_uploads(unused)
 
         if uploaded and request_item:
             self._mark_item_received(request_item, uploaded_docs[0])

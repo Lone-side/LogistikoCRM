@@ -18,14 +18,22 @@ BASE = '/accounting/api/mydata/'
 
 class InvalidInputTestCase(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import Permission
         from tests.utils.helpers import grant_mydata_model_perms
         self.user = grant_mydata_model_perms(
             User.objects.create_user('tester', 't@test.com', 'pass12345')
         )
+        # Το dashboard/detail επιστρέφει client metadata → απαιτεί πλέον
+        # και accounting.view_clientprofile (γύρος 14)
+        self.user.user_permissions.add(Permission.objects.get(
+            codename='view_clientprofile',
+            content_type__app_label='accounting'))
+        self.user = User.objects.get(pk=self.user.pk)
         self.client.force_login(self.user)
         self.profile = ClientProfile.objects.create(
             afm='123456783', eponimia='ΠΕΛΑΤΗΣ ΑΕ', eidos_ipoxreou='company'
         )
+        self.profile.assigned_users.add(self.user)
 
     # ---- VATRecordViewSet list filters ----
 

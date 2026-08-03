@@ -10,6 +10,7 @@ Contains:
 import io
 import os
 import csv
+import logging
 import tempfile
 from datetime import datetime
 
@@ -63,6 +64,9 @@ class HasObligationsFilter(admin.SimpleListFilter):
         return queryset
 from ..export_import import export_clients_to_excel, export_clients_summary_to_excel
 from .mixins import VoIPCallInline, TicketInline, ClientProfileDocumentInline
+
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(ClientProfile)
@@ -452,10 +456,32 @@ class ClientProfileAdmin(admin.ModelAdmin):
         (το import δημιουργεί/ενημερώνει πελάτες μαζικά, εκτός scoping)."""
         from django.core.exceptions import PermissionDenied
         from accounting.mixins import user_sees_all_clients
+        # Το view_all_clients από μόνο του ΔΕΝ είναι write permission —
+        # το import δημιουργεί/ενημερώνει πελάτες μαζικά
         if not user_sees_all_clients(request.user):
+            raise PermissionDenied
+        if not (
+            request.user.has_perm('accounting.add_clientprofile')
+            and request.user.has_perm('accounting.change_clientprofile')
+        ):
             raise PermissionDenied
         if request.method == 'POST' and 'excel_file' in request.FILES:
             excel_file = request.FILES['excel_file']
+            if not excel_file.name.lower().endswith(('.xlsx', '.xls')):
+                messages.error(request, '❌ Μόνο αρχεία Excel (.xlsx, .xls)')
+                return redirect('..')
+            # Η εισαγωγή credentials από το αρχείο απαιτεί τα αντίστοιχα
+            # credential permissions (το command γράφει ClientCredential)
+            if not (
+                request.user.has_perm('accounting.add_clientcredential')
+                and request.user.has_perm('accounting.change_clientcredential')
+            ):
+                messages.error(
+                    request,
+                    '❌ Η εισαγωγή από Excel μπορεί να περιλαμβάνει κωδικούς '
+                    'πελατών — απαιτούνται δικαιώματα credentials.',
+                )
+                return redirect('..')
 
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
                 for chunk in excel_file.chunks():
@@ -473,8 +499,9 @@ class ClientProfileAdmin(admin.ModelAdmin):
                 else:
                     messages.warning(request, output)
 
-            except Exception as e:
-                messages.error(request, f'❌ Σφάλμα: {str(e)}')
+            except Exception:
+                logger.exception('Σφάλμα εισαγωγής πελατών από admin')
+                messages.error(request, '❌ Σφάλμα κατά την εισαγωγή του αρχείου')
             finally:
                 os.unlink(tmp_path)
 
@@ -504,8 +531,9 @@ class ClientProfileAdmin(admin.ModelAdmin):
             os.unlink(tmp_path)
             return response
 
-        except Exception as e:
-            messages.error(request, f'❌ Σφάλμα: {str(e)}')
+        except Exception:
+            logger.exception('Σφάλμα εισαγωγής πελατών από admin')
+            messages.error(request, '❌ Σφάλμα κατά την εισαγωγή του αρχείου')
             return redirect('..')
 
     def mass_update_view(self, request):

@@ -11,7 +11,7 @@ Django REST Framework Views για myDATA module.
 
 from datetime import date, timedelta
 from calendar import monthrange
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import logging
 
 from django.db.models import Sum, Count, Q
@@ -331,9 +331,20 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            period_year = request.data.get('initial_credit_period_year')
+            period = request.data.get('initial_credit_period')
+            if period_year is not None:
+                period_year = int(period_year)
+                if not 2000 <= period_year <= 2100:
+                    raise ValueError('year out of range')
+            if period is not None:
+                period = int(period)
+                if not 1 <= period <= 12:
+                    raise ValueError('period out of range')
+
             credentials.initial_credit_balance = balance
-            credentials.initial_credit_period_year = request.data.get('initial_credit_period_year')
-            credentials.initial_credit_period = request.data.get('initial_credit_period')
+            credentials.initial_credit_period_year = period_year
+            credentials.initial_credit_period = period
             credentials.save(update_fields=[
                 'initial_credit_balance',
                 'initial_credit_period_year',
@@ -345,9 +356,9 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
                 'message': f'Το αρχικό πιστωτικό ορίστηκε σε {balance}€',
                 'initial_credit_balance': str(balance),
             })
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError, InvalidOperation):
             return Response(
-                {'error': f'Μη έγκυρο ποσό: {e}'},
+                {'error': 'Μη έγκυρη τιμή — απαιτούνται αριθμοί (ποσό, έτος, περίοδος)'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -371,10 +382,33 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get sync parameters
-        days = request.data.get('days', 30)
-        year = request.data.get('year')
-        month = request.data.get('month')
+        # Get sync parameters — validated με λογικά bounds
+        try:
+            days = int(request.data.get('days', 30))
+            year = request.data.get('year')
+            month = request.data.get('month')
+            if year is not None:
+                year = int(year)
+            if month is not None:
+                month = int(month)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Μη έγκυρες παράμετροι — απαιτούνται αριθμοί'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not 1 <= days <= 365:
+            return Response(
+                {'error': 'Το days πρέπει να είναι 1-365'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if year is not None and not 2000 <= year <= 2100:
+            return Response(
+                {'error': 'Μη έγκυρο έτος'}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if month is not None and not 1 <= month <= 12:
+            return Response(
+                {'error': 'Μη έγκυρος μήνας'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             out = StringIO()
@@ -623,8 +657,13 @@ class MyDataDashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        if not check_model_perms(request, 'mydata.view_vatrecord'):
+        # Επιστρέφει client metadata (ΑΦΜ/επωνυμίες) → απαιτεί και
+        # accounting.view_clientprofile
+        if not check_model_perms(
+            request, 'mydata.view_vatrecord', 'accounting.view_clientprofile'
+        ):
             return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        can_see_credentials = request.user.has_perm('mydata.view_mydatacredentials')
         today = date.today()
         year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
         month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
@@ -668,9 +707,10 @@ class MyDataDashboardView(APIView):
             clients_data.append({
                 'client_afm': client.afm,
                 'client_name': client.eponimia,
-                'has_credentials': creds.has_credentials,
-                'is_verified': creds.is_verified,
-                'last_sync': creds.last_vat_sync_at,
+                # Credential status μόνο με mydata.view_mydatacredentials
+                'has_credentials': creds.has_credentials if can_see_credentials else None,
+                'is_verified': creds.is_verified if can_see_credentials else None,
+                'last_sync': creds.last_vat_sync_at if can_see_credentials else None,
                 'current_period': summary,
                 'income_by_category': income_breakdown,
                 'expense_by_category': expense_breakdown,
@@ -716,7 +756,9 @@ class ClientVATDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, afm):
-        if not check_model_perms(request, 'mydata.view_vatrecord'):
+        if not check_model_perms(
+            request, 'mydata.view_vatrecord', 'accounting.view_clientprofile'
+        ):
             return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         try:
             client = accessible_clients(request.user).get(afm=afm)
@@ -791,11 +833,15 @@ class ClientVATDetailView(APIView):
                     'afm': client.afm,
                     'name': client.eponimia,
                 },
-                'credentials': {
-                    'has_credentials': has_credentials,
-                    'is_verified': is_verified,
-                    'last_sync': last_sync,
-                },
+                'credentials': (
+                    {
+                        'has_credentials': has_credentials,
+                        'is_verified': is_verified,
+                        'last_sync': last_sync,
+                    }
+                    if request.user.has_perm('mydata.view_mydatacredentials')
+                    else None
+                ),
                 'period': {
                     'year': year,
                     'month': month,
@@ -1147,6 +1193,11 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
 
         try:
             period.previous_credit = Decimal(str(credit))
+            if period.previous_credit < 0:
+                return Response(
+                    {'error': 'Το πιστωτικό δεν μπορεί να είναι αρνητικό'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             period.save(update_fields=['previous_credit', 'updated_at'])
 
             # Recalculate with new credit
@@ -1361,8 +1412,12 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         except MyDataValidationError as e:
             # Η ΑΑΔΕ απέρριψε το παραστατικό (business validation) — 422, όχι 502
             return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        except MyDataAPIError as e:
-            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except MyDataAPIError:
+            logger.exception('myDATA submit failed for invoice id=%s', invoice.pk)
+            return Response(
+                {'error': 'Σφάλμα επικοινωνίας με το myDATA'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         invoice.refresh_from_db()
         return Response({
@@ -1385,8 +1440,12 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except MyDataValidationError as e:
             return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        except MyDataAPIError as e:
-            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+        except MyDataAPIError:
+            logger.exception('myDATA cancel failed for invoice id=%s', invoice.pk)
+            return Response(
+                {'error': 'Σφάλμα επικοινωνίας με το myDATA'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         invoice.refresh_from_db()
         return Response({

@@ -213,4 +213,5 @@ jobs:
             tests.accounting.test_final_hardening \
             tests.accounting.test_rbac_round12 \
             tests.accounting.test_rbac_round13 \
+            tests.accounting.test_rbac_round14 \
             -v 2
