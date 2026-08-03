@@ -564,7 +564,11 @@ class MonthlyObligationAdmin(admin.ModelAdmin):
         )
         self.message_user(request, f'↺ Επαναφέρθηκαν {updated} υποχρεώσεις!', messages.SUCCESS)
 
-    @admin.action(description='📊 Export σε CSV')
+    def has_export_permission(self, request):
+        # Το CSV περιέχει ΑΦΜ/επωνυμίες — θέλει το ξεχωριστό export permission
+        return request.user.has_perm('accounting.export_clientprofile')
+
+    @admin.action(description='📊 Export σε CSV', permissions=['export'])
     def export_obligations_csv(self, request, queryset):
         """Export obligations to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')

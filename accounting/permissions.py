@@ -126,8 +126,11 @@ class ServiceWriteOnly(BasePermission):
     SERVICE_ALLOWED_ACTIONS = {'create', 'update', 'partial_update', 'end_call'}
 
     def has_permission(self, request, view):
+        # Authenticated χρήστες ΔΕΝ περνούν από το service clause — αλλιώς
+        # στο OR composition (user RBAC) | (service gate) κάθε logged-in
+        # χρήστης από loopback θα παρέκαμπτε τα model/action permissions.
         if request.user and request.user.is_authenticated:
-            return True
+            return False
         return getattr(view, 'action', None) in self.SERVICE_ALLOWED_ACTIONS
 
 

@@ -255,7 +255,8 @@ def reports_export(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation',
+                     'accounting.export_clientprofile')
 def reports_export_download(request):
     from accounting.services.access import accessible_obligations
     ObligationQS = accessible_obligations(request.user)
@@ -434,7 +435,8 @@ def reports_export_download(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation',
+                     'accounting.export_clientprofile')
 def client_statement(request, client_id):
     """
     GET /api/reports/client-statement/<client_id>/
@@ -594,6 +596,16 @@ def vat_summary(request):
     period = request.query_params.get('period')
     client_id = request.query_params.get('client_id')
     export_format = request.query_params.get('format', 'json')
+
+    # Το xlsx περιέχει ΑΦΜ/επωνυμίες μαζικά — θέλει το export permission
+    # (το JSON dashboard μένει διαθέσιμο με τα view permissions)
+    if export_format == 'xlsx' and not request.user.has_perm(
+        'accounting.export_clientprofile'
+    ):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα εξαγωγής στοιχείων πελατών.'},
+            status=403,
+        )
 
     try:
         year = int(request.query_params.get('year', current_date.year))

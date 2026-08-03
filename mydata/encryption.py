@@ -66,7 +66,7 @@ def _get_fernet() -> MultiFernet:
             logger.warning(
                 "DATA_ENCRYPTION_KEY_CURRENT δεν έχει οριστεί — χρήση legacy "
                 "κλειδιού από SECRET_KEY. Όρισε ανεξάρτητο κλειδί "
-                "(manage.py rotate_encryption_key --generate)."
+                "(python scripts/generate_fernet_key.py)."
             )
             _warned_legacy = True
     previous = _configured_key('DATA_ENCRYPTION_KEY_PREVIOUS')

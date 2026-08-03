@@ -80,7 +80,7 @@ def export_clients_template(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.view_clientprofile')
+@require_model_perms('accounting.view_clientprofile', 'accounting.export_clientprofile')
 def export_clients_csv(request):
     """
     GET /api/v1/export/clients/csv/
@@ -528,7 +528,7 @@ def export_obligation_types_csv(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@require_model_perms('accounting.view_clientprofile')
+@require_model_perms('accounting.view_clientprofile', 'accounting.export_clientprofile')
 def export_client_obligations_csv(request):
     """Export client obligation assignments."""
     from django.http import HttpResponse

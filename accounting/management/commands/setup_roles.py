@@ -22,6 +22,8 @@ ROLES = {
     'Λογιστής': {
         'codenames': [
             'add_clientprofile', 'change_clientprofile', 'view_clientprofile',
+            # Μαζική εξαγωγή στοιχείων πελατών (ο Βοηθός δεν το έχει)
+            'export_clientprofile',
             'add_clientdocument', 'change_clientdocument', 'view_clientdocument',
             'delete_clientdocument',
             'add_monthlyobligation', 'change_monthlyobligation', 'view_monthlyobligation',

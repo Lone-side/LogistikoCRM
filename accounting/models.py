@@ -106,6 +106,7 @@ class ClientProfile(models.Model):
         permissions = [
             ('view_all_clients', 'Πρόσβαση σε όλους τους πελάτες ανεξαρτήτως ανάθεσης'),
             ('send_client_email', 'Αποστολή email σε πελάτες'),
+            ('export_clientprofile', 'Μαζική εξαγωγή στοιχείων πελατών (Excel/CSV)'),
         ]
 
     def __str__(self):

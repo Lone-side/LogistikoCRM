@@ -206,6 +206,10 @@ class VoIPCallAdmin(admin.ModelAdmin):
         logger.info(f"{request.user} marked {updated} calls as pending")
     mark_as_pending.short_description = '⏳ Εκκρεμεί'
 
+    def has_export_permission(self, request):
+        # Τηλέφωνα + επωνυμίες πελατών — θέλει το ξεχωριστό export permission
+        return request.user.has_perm('accounting.export_clientprofile')
+
     def export_calls_csv(self, request, queryset):
         """Export to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
@@ -228,6 +232,7 @@ class VoIPCallAdmin(admin.ModelAdmin):
         logger.info(f"{request.user} exported {queryset.count()} calls to CSV")
         return response
     export_calls_csv.short_description = '📊 Export CSV'
+    export_calls_csv.allowed_permissions = ('export',)
 
     # Bulk delete actions
     def delete_with_tickets(self, request, queryset):
@@ -522,6 +527,10 @@ class TicketAdmin(admin.ModelAdmin):
         self.message_user(request, f'🔒 {updated} tickets closed')
     mark_as_closed.short_description = '🔒 Closed'
 
+    def has_export_permission(self, request):
+        # Επωνυμίες πελατών στο CSV — θέλει το ξεχωριστό export permission
+        return request.user.has_perm('accounting.export_clientprofile')
+
     def export_tickets_csv(self, request, queryset):
         """Export to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
@@ -545,6 +554,7 @@ class TicketAdmin(admin.ModelAdmin):
         self.message_user(request, f'✅ Εξήχθησαν {queryset.count()} tickets')
         return response
     export_tickets_csv.short_description = '📊 Export CSV'
+    export_tickets_csv.allowed_permissions = ('export',)
 
     def save_model(self, request, obj, form, change):
         if not change and not obj.assigned_to:

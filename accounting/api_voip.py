@@ -196,7 +196,8 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         'match_client': ['accounting.change_voipcall'],
         'auto_match': ['accounting.change_voipcall'],
         'auto_match_all': ['accounting.change_voipcall'],
-        'create_ticket': ['accounting.add_ticket'],
+        # Δημιουργία ticket ΑΠΟ κλήση: διαβάζει την κλήση + γράφει ticket
+        'create_ticket': ['accounting.view_voipcall', 'accounting.add_ticket'],
     }
 
     def _validate_client_id(self, serializer):

@@ -704,6 +704,11 @@ def voip_export_csv(request):
     """
     Export VoIP calls to CSV
     """
+    # Τηλέφωνα/emails/επωνυμίες πελατών — θέλει το ξεχωριστό export permission
+    if not request.user.has_perm('accounting.export_clientprofile'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα εξαγωγής στοιχείων πελατών.'}, status=403
+        )
     try:
         # Create response
         response = HttpResponse(content_type='text/csv; charset=utf-8')

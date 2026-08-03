@@ -35,7 +35,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'default-key-for-development')
 
 # Ανεξάρτητο κλειδί κρυπτογράφησης δεδομένων (Fernet) — δείτε mydata/encryption.py.
-# Δημιουργία: python manage.py rotate_encryption_key --generate
+# Δημιουργία (standalone, χωρίς Django settings): python scripts/generate_fernet_key.py
+# (ή manage.py rotate_encryption_key --generate σε ήδη λειτουργική εγκατάσταση)
 DATA_ENCRYPTION_KEY_CURRENT = os.getenv('DATA_ENCRYPTION_KEY_CURRENT', '')
 DATA_ENCRYPTION_KEY_PREVIOUS = os.getenv('DATA_ENCRYPTION_KEY_PREVIOUS', '')
 DATA_ENCRYPTION_KEY_ID = os.getenv('DATA_ENCRYPTION_KEY_ID', '')
@@ -472,6 +473,10 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
+    # Τα export endpoints διαβάζουν μόνα τους το ?format= (xlsx/pdf/json).
+    # Χωρίς αυτό το DRF ερμήνευε το ?format=xlsx ως renderer negotiation
+    # και γύριζε 404 πριν καν τρέξει το view (σπασμένα Excel downloads).
+    'URL_FORMAT_OVERRIDE': None,
     # OpenAPI/Swagger schema generation
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # Rate limiting - protects against abuse/DDoS
@@ -779,8 +784,8 @@ if not DEBUG:
             raise ImproperlyConfigured(
                 'DATA_ENCRYPTION_KEY_CURRENT is required in production — '
                 'χωρίς αυτό τα credentials κρυπτογραφούνται με το legacy '
-                'κλειδί από το SECRET_KEY. Δημιουργία: '
-                '`python manage.py rotate_encryption_key --generate`.'
+                'κλειδί από το SECRET_KEY. Δημιουργία (χωρίς να χρειάζεται '
+                'να εκκινεί το Django): `python scripts/generate_fernet_key.py`.'
             )
         if not ENFORCE_CLIENT_ASSIGNMENT and os.getenv(
             'ALLOW_UNSCOPED_CLIENT_ACCESS', 'False'

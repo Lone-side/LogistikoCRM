@@ -16,6 +16,20 @@ from .gsis_client import lookup_afm, get_gsis_client, GSISError
 logger = logging.getLogger(__name__)
 
 
+def _require_settings_admin(request):
+    """Οι ρυθμίσεις GSIS (ΑΦΜ/username/password γραφείου) είναι μόνο για
+    Διαχειριστή (superuser ή view_all_clients) — όχι για κάθε logged-in χρήστη."""
+    user = request.user
+    if user.is_superuser or user.has_perm('accounting.view_all_clients'):
+        return None
+    from accounting.services.access import _audit_deny
+    _audit_deny(user, request, f'{request.method} {request.path}: ρυθμίσεις GSIS χωρίς ρόλο Διαχειριστή')
+    return Response(
+        {'error': 'Μόνο διαχειριστές μπορούν να δουν/αλλάξουν τις ρυθμίσεις GSIS.'},
+        status=status.HTTP_403_FORBIDDEN,
+    )
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def afm_lookup(request):
@@ -117,6 +131,9 @@ def gsis_settings_status(request):
             "username": "..." (μόνο αν configured)
         }
     """
+    denied = _require_settings_admin(request)
+    if denied is not None:
+        return denied
     from settings.models import GSISSettings
 
     settings = GSISSettings.get_settings()
@@ -157,6 +174,9 @@ def gsis_settings_update(request):
             "message": "Οι ρυθμίσεις αποθηκεύτηκαν."
         }
     """
+    denied = _require_settings_admin(request)
+    if denied is not None:
+        return denied
     from settings.models import GSISSettings
 
     afm = request.data.get('afm', '').strip()
@@ -224,6 +244,9 @@ def gsis_test_connection(request):
             "message": "..."
         }
     """
+    denied = _require_settings_admin(request)
+    if denied is not None:
+        return denied
     client = get_gsis_client()
 
     if not client:

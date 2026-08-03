@@ -312,22 +312,30 @@ class ClientProfileAdmin(admin.ModelAdmin):
     # ============================================
     # EXPORT ACTIONS
     # ============================================
+    # Όλα τα exports απαιτούν το accounting.export_clientprofile — το σκέτο
+    # view_clientprofile δεν επιτρέπει μαζική εξαγωγή ΑΦΜ/ΑΜΚΑ/IBAN κλπ.
+
+    def has_export_permission(self, request):
+        return request.user.has_perm('accounting.export_clientprofile')
 
     def export_selected(self, request, queryset):
         """Export επιλεγμένων πελατών με ΟΛΑ τα πεδία (52 fields)"""
         return export_clients_to_excel(queryset)
     export_selected.short_description = '📥 Export Επιλεγμένων (Πλήρες - 52 πεδία)'
+    export_selected.allowed_permissions = ('export',)
 
     def export_all(self, request, queryset):
         """Export όλων των προσβάσιμων πελατών με ΟΛΑ τα πεδία (52 fields)"""
         # Scoped queryset: όχι όλο το πελατολόγιο για scoped χρήστες
         return export_clients_to_excel(self.get_queryset(request))
     export_all.short_description = '📥 Export ΟΛΩΝ (Πλήρες - 52 πεδία)'
+    export_all.allowed_permissions = ('export',)
 
     def export_summary(self, request, queryset):
         """Export συνοπτικής λίστας (11 basic fields)"""
         return export_clients_summary_to_excel(queryset)
     export_summary.short_description = '📄 Export Επιλεγμένων (Σύνοψη - 11 πεδία)'
+    export_summary.allowed_permissions = ('export',)
 
     def export_to_csv(self, request, queryset):
         """Export to CSV - Enhanced με περισσότερα πεδία"""
@@ -397,6 +405,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
         self.message_user(request, f'✅ Εξήχθησαν {queryset.count()} πελάτες σε CSV (25 πεδία)', messages.SUCCESS)
         return response
     export_to_csv.short_description = '📊 Export σε CSV'
+    export_to_csv.allowed_permissions = ('export',)
 
 
     def mark_active(self, request, queryset):
