@@ -15,6 +15,7 @@ from datetime import datetime
 
 from django.urls import reverse, path
 from django.utils.html import format_html
+from django import forms
 from django.contrib import admin
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -793,31 +794,73 @@ class ArchiveConfigurationAdmin(admin.ModelAdmin):
 from accounting.models import DocumentRequest, DocumentRequestItem  # noqa: E402
 
 
+class DocumentRequestItemInlineFormSet(forms.BaseInlineFormSet):
+    """Server-side έλεγχος: το received_document πρέπει να ανήκει στον
+    πελάτη του DocumentRequest — και σε crafted POST, όχι μόνο στο dropdown."""
+
+    def clean(self):
+        super().clean()
+        parent = self.instance
+        parent_client_id = getattr(parent, 'client_id', None)
+        for form in self.forms:
+            if not getattr(form, 'cleaned_data', None) or form.cleaned_data.get('DELETE'):
+                continue
+            doc = form.cleaned_data.get('received_document')
+            if doc is not None and parent_client_id and doc.client_id != parent_client_id:
+                form.add_error(
+                    'received_document',
+                    'Το έγγραφο δεν ανήκει στον πελάτη του αιτήματος.',
+                )
+
+
 class DocumentRequestItemInline(admin.TabularInline):
     model = DocumentRequestItem
     extra = 1
     fields = ['label', 'category', 'is_received', 'received_document', 'received_at']
     readonly_fields = ['received_at']
+    formset = DocumentRequestItemInlineFormSet
 
     def get_formset(self, request, obj=None, **kwargs):
-        # Κρατάμε το parent DocumentRequest για να περιορίσουμε το
-        # received_document στα έγγραφα του πελάτη του αιτήματος
-        self._parent_request = obj
-        return super().get_formset(request, obj, **kwargs)
+        # ΟΧΙ instance state στο shared inline admin (cross-request leakage
+        # σε ταυτόχρονα requests) — το queryset μπαίνει στο formset class που
+        # δημιουργείται εδώ ανά request.
+        formset = super().get_formset(request, obj, **kwargs)
+        from accounting.services.access import accessible_documents
+        qs = accessible_documents(request.user).select_related('client')
+        if obj is not None:
+            qs = qs.filter(client=obj.client)
+        formset.form.base_fields['received_document'].queryset = qs
+        return formset
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == 'received_document':
-            from accounting.services.access import accessible_documents
-            qs = accessible_documents(request.user)
-            parent = getattr(self, '_parent_request', None)
-            if parent is not None:
-                qs = qs.filter(client=parent.client)
-            kwargs['queryset'] = qs.select_related('client')
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+class DocumentRequestAdminForm(forms.ModelForm):
+    """Server-side cross-client έλεγχος: το shared_link πρέπει να αφορά τον
+    ίδιο πελάτη με το αίτημα (και μέσω document link) — ισχύει και σε
+    crafted POST, όχι μόνο στο dropdown filtering."""
+
+    class Meta:
+        model = DocumentRequest
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        link = cleaned.get('shared_link')
+        client = cleaned.get('client')
+        if link is not None and client is not None:
+            link_client_id = link.client_id or (
+                link.document.client_id if link.document_id else None
+            )
+            if link_client_id is not None and link_client_id != client.pk:
+                self.add_error(
+                    'shared_link',
+                    'Το shared link δεν αντιστοιχεί στον πελάτη του αιτήματος.',
+                )
+        return cleaned
 
 
 @admin.register(DocumentRequest)
 class DocumentRequestAdmin(admin.ModelAdmin):
+    form = DocumentRequestAdminForm
     list_display = ['title', 'client', 'status', 'due_date',
                     'reminder_count', 'created_by', 'created_at']
     list_filter = ['status', 'created_at']
@@ -850,6 +893,18 @@ class DocumentRequestAdmin(admin.ModelAdmin):
         from accounting.services.access import accessible_clients
         if db_field.name == 'client':
             kwargs['queryset'] = accessible_clients(request.user)
+        elif db_field.name == 'shared_link':
+            # Μόνο links προσβάσιμων πελατών (και μέσω document) — αλλιώς
+            # scoped staff θα έδενε αίτημα πελάτη Α με link πελάτη Β
+            from django.db.models import Q
+            from accounting.models import SharedLink
+            accessible = accessible_clients(request.user)
+            kwargs['queryset'] = SharedLink.objects.select_related(
+                'client', 'document__client'
+            ).filter(
+                Q(client__in=accessible)
+                | Q(client__isnull=True, document__client__in=accessible)
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 

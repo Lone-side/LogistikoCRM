@@ -18,7 +18,7 @@ from common.models import AuditLog
 from accounting.services.access import mask_pii_value
 
 from .mixins import ClientScopedQuerysetMixin
-from .models import ClientCredential, ClientProfile
+from .models import ClientCredential
 from .permissions import CanAccessClient, ClientModelPermissions
 
 
@@ -94,10 +94,18 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         return super().get_queryset()
 
     def _get_client(self):
-        from django.shortcuts import get_object_or_404
-        client = get_object_or_404(ClientProfile, pk=self.kwargs['client_pk'])
-        self.check_object_permissions(self.request, client)
-        return client
+        # Scoped lookup — ΟΧΙ global get_object_or_404 + permission check:
+        # εκείνο έδινε 403 για υπαρκτό ξένο πελάτη και 404 για ανύπαρκτο,
+        # άρα client-ID enumeration. Τώρα: πανομοιότυπο 404 και στα δύο.
+        from accounting.services.access import get_accessible_client_or_404
+        return get_accessible_client_or_404(
+            self.request.user, self.kwargs['client_pk'], request=self.request,
+        )
+
+    def list(self, request, *args, **kwargs):
+        # 404 για ξένο/ανύπαρκτο πελάτη — όχι κενή λίστα που «δουλεύει»
+        self._get_client()
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         client = self._get_client()

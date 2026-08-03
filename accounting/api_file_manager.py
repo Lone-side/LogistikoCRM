@@ -274,8 +274,9 @@ class SharedLinkSerializer(serializers.ModelSerializer):
             'is_active', 'is_expired', 'is_valid',
             'public_url', 'created_at', 'created_by', 'created_by_name'
         ]
+        # created_by: αυστηρά read-only — αλλιώς PATCH θα άλλαζε ιδιοκτήτη link
         read_only_fields = ['token', 'download_count', 'view_count', 'upload_count',
-                            'last_accessed_at', 'created_at']
+                            'last_accessed_at', 'created_at', 'created_by']
 
     def get_public_url(self, obj):
         request = self.context.get('request')
@@ -651,9 +652,26 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        return super().get_queryset().select_related(
-            'document', 'client', 'created_by'
-        ).filter(created_by=self.request.user)
+        # Current-access scoping: δεν αρκεί το created_by — αν ο δημιουργός
+        # έχασε την ανάθεση του πελάτη (ή το link αφορά ξένο πελάτη/έγγραφο),
+        # δεν βλέπει/διαχειρίζεται πλέον το link. Orphan links (χωρίς client
+        # και χωρίς document) ορατά μόνο σε see-all χρήστες. Ισχύει για list,
+        # retrieve, update, destroy, regenerate-token και access-logs (όλα
+        # περνούν από εδώ μέσω get_object).
+        from django.db.models import Q
+        from accounting.mixins import user_sees_all_clients
+        from accounting.services.access import accessible_clients
+        qs = super().get_queryset().select_related(
+            'document', 'document__client', 'client', 'created_by'
+        )
+        user = self.request.user
+        if user_sees_all_clients(user):
+            return qs
+        accessible = accessible_clients(user)
+        return qs.filter(created_by=user).filter(
+            Q(client__in=accessible)
+            | Q(client__isnull=True, document__client__in=accessible)
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = SharedLinkCreateSerializer(data=request.data)

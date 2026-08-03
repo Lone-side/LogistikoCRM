@@ -12,6 +12,7 @@ from django import forms
 from django.urls import reverse
 from django.utils.html import format_html, escape
 from django.contrib import admin
+from .scoping import ClientScopedAdminMixin
 from django.contrib import messages
 
 from ..models import (
@@ -100,7 +101,8 @@ class EmailAutomationRuleAdmin(admin.ModelAdmin):
 
 
 @admin.register(ScheduledEmail)
-class ScheduledEmailAdmin(admin.ModelAdmin):
+class ScheduledEmailAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    allow_unassigned = True
     list_display = [
         'recipients_display',
         'recipient_count_display',
@@ -258,7 +260,8 @@ class ScheduledEmailAdmin(admin.ModelAdmin):
 
 
 @admin.register(EmailLog)
-class EmailLogAdmin(admin.ModelAdmin):
+class EmailLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    allow_unassigned = True
     list_select_related = ('client', 'template_used', 'sent_by')
 
     """Admin for viewing sent email history"""

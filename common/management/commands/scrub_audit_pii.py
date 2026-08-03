@@ -41,8 +41,9 @@ ADDRESS_CHANGE_KEYS = {
 TEXT_PATTERNS = [
     # Email
     re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}'),
-    # Ελληνικό IBAN (GR + 25 αλφαριθμητικά)
-    re.compile(r'\bGR\d{2}[A-Z0-9]{21}\b'),
+    # Ελληνικό IBAN: 27 χαρακτήρες συνολικά (GR + 2 check digits + 23
+    # αλφαριθμητικοί), προαιρετικά με κενά ανά τετράδες, και lowercase
+    re.compile(r'\bGR\d{2}(?:\s?[A-Z0-9]){23}\b', re.IGNORECASE),
     # ΑΜΚΑ (11 ψηφία)
     re.compile(r'\b\d{11}\b'),
     # Τηλέφωνα (10 ψηφία)

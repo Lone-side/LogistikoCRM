@@ -14,6 +14,7 @@ from datetime import datetime
 from django.urls import reverse
 from django.utils.html import format_html, escape
 from django.contrib import admin
+from .scoping import ClientScopedAdminMixin
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.contrib.admin.utils import get_deleted_objects
@@ -30,7 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 @admin.register(VoIPCall)
-class VoIPCallAdmin(admin.ModelAdmin):
+class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    allow_unassigned = True
     list_select_related = ('client',)
 
     """Complete VoIP Admin"""
@@ -277,7 +279,9 @@ class VoIPCallAdmin(admin.ModelAdmin):
 
 
 @admin.register(VoIPCallLog)
-class VoIPCallLogAdmin(admin.ModelAdmin):
+class VoIPCallLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    client_scope_field = "call__client"
+    allow_unassigned = True
     """VoIP Call Logs - Audit Trail"""
 
     list_display = ['call_link', 'action_badge', 'description_short', 'created_at_formatted']
@@ -329,7 +333,8 @@ class VoIPCallLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(Ticket)
-class TicketAdmin(admin.ModelAdmin):
+class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    allow_unassigned = True
     list_select_related = ('client', 'call', 'assigned_to')
 
     """Professional Ticket Admin"""

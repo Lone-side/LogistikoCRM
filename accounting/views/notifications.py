@@ -22,11 +22,20 @@ def get_notifications(request):
     """
     Get user notifications for dashboard
     """
+    # RBAC: view perm + scoping — το staff_member_required δεν αρκεί,
+    # αλλιώς scoped staff έβλεπε υποχρεώσεις/επωνυμίες όλων των πελατών
+    from accounting.services.access import accessible_obligations, check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403,
+        )
+    scoped_obligations = accessible_obligations(request.user)
+
     now = timezone.now()
     notifications = []
 
     # Overdue obligations
-    overdue = MonthlyObligation.objects.filter(
+    overdue = scoped_obligations.filter(
         deadline__lt=now.date(),
         status__in=['pending', 'overdue']
     ).select_related('client', 'obligation_type').order_by('deadline')[:10]
@@ -45,7 +54,7 @@ def get_notifications(request):
         })
 
     # Due today
-    today_obligations = MonthlyObligation.objects.filter(
+    today_obligations = scoped_obligations.filter(
         deadline=now.date(),
         status='pending'
     ).select_related('client', 'obligation_type')
@@ -64,7 +73,7 @@ def get_notifications(request):
 
     # Upcoming (next 3 days)
     next_3_days = now.date() + timedelta(days=3)
-    upcoming = MonthlyObligation.objects.filter(
+    upcoming = scoped_obligations.filter(
         deadline__range=[now.date() + timedelta(days=1), next_3_days],
         status='pending'
     ).select_related('client', 'obligation_type').order_by('deadline')[:5]

@@ -16,6 +16,7 @@ from datetime import datetime
 from django.urls import reverse, path
 from django.utils.html import format_html, escape
 from django.contrib import admin
+from .scoping import ClientScopedAdminMixin
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import HttpResponse
@@ -155,7 +156,7 @@ class ObligationTypeAdmin(admin.ModelAdmin):
 
 
 @admin.register(ClientObligation)
-class ClientObligationAdmin(admin.ModelAdmin):
+class ClientObligationAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     form = ClientObligationForm
     list_display = ['client', 'is_active', 'created_at']
     list_filter = ['is_active', 'obligation_profiles']
@@ -186,14 +187,20 @@ class ClientObligationAdmin(admin.ModelAdmin):
 
     def bulk_assign_view(self, request):
         """Μαζική ανάθεση υποχρεώσεων - Βελτιωμένο με mode επιλογής"""
-        from ..models import ClientProfile
+        # Το admin_view ελέγχει μόνο is_staff — εδώ χρειάζονται και τα
+        # model permissions, και scoping των επιλέξιμων πελατών
+        from django.core.exceptions import PermissionDenied
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        from accounting.services.access import accessible_clients
+        accessible = accessible_clients(request.user)
 
-        # Στατιστικά
-        total_clients = ClientProfile.objects.filter(is_active=True).count()
-        clients_with_obl = ClientObligation.objects.filter(is_active=True).count()
+        # Στατιστικά — μόνο για προσβάσιμους πελάτες
+        total_clients = accessible.filter(is_active=True).count()
+        clients_with_obl = self.get_queryset(request).filter(is_active=True).count()
 
         if request.method == 'POST':
-            form = BulkAssignForm(request.POST)
+            form = BulkAssignForm(request.POST, user=request.user)
             if form.is_valid():
                 clients = form.cleaned_data['clients']
                 profiles = form.cleaned_data['obligation_profiles']
@@ -282,7 +289,7 @@ class ClientObligationAdmin(admin.ModelAdmin):
                 messages.success(request, format_html(msg))
                 return redirect('..')
         else:
-            form = BulkAssignForm()
+            form = BulkAssignForm(user=request.user)
 
         context = {
             'form': form,
@@ -302,7 +309,7 @@ class ClientObligationAdmin(admin.ModelAdmin):
 
 
 @admin.register(MonthlyObligation)
-class MonthlyObligationAdmin(admin.ModelAdmin):
+class MonthlyObligationAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     # Inline Documents
     inlines = [ClientDocumentInline]
 
@@ -689,16 +696,25 @@ class MonthlyObligationAdmin(admin.ModelAdmin):
 
     def generate_obligations_view(self, request):
         """Custom view για δημιουργία μηνιαίων υποχρεώσεων - Βελτιωμένο"""
-        from ..models import ClientProfile
         from ..forms import MONTH_CHOICES
 
-        # Στατιστικά για warnings
-        total_active_clients = ClientProfile.objects.filter(is_active=True).count()
-        clients_with_obligations = ClientObligation.objects.filter(is_active=True).count()
+        # Το admin_view ελέγχει μόνο is_staff — εδώ δημιουργούνται
+        # MonthlyObligations, άρα απαιτείται και το add permission
+        from django.core.exceptions import PermissionDenied
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        from accounting.services.access import accessible_clients
+        accessible = accessible_clients(request.user)
+
+        # Στατιστικά για warnings — μόνο προσβάσιμοι πελάτες
+        total_active_clients = accessible.filter(is_active=True).count()
+        clients_with_obligations = ClientObligation.objects.filter(
+            is_active=True, client__in=accessible,
+        ).count()
         clients_without_obligations = total_active_clients - clients_with_obligations
 
         if request.method == 'POST':
-            form = GenerateObligationsForm(request.POST)
+            form = GenerateObligationsForm(request.POST, user=request.user)
             if form.is_valid():
                 year = form.cleaned_data['year']
                 month = form.cleaned_data['month']
@@ -713,7 +729,10 @@ class MonthlyObligationAdmin(admin.ModelAdmin):
                 if selected_clients:
                     client_obligations = selected_clients
                 else:
-                    client_obligations = ClientObligation.objects.filter(is_active=True)
+                    # «Όλοι οι πελάτες» = όλοι οι ΠΡΟΣΒΑΣΙΜΟΙ πελάτες
+                    client_obligations = ClientObligation.objects.filter(
+                        is_active=True, client__in=accessible,
+                    )
 
                 for client_obl in client_obligations:
                     client = client_obl.client
@@ -772,7 +791,7 @@ class MonthlyObligationAdmin(admin.ModelAdmin):
                 messages.success(request, format_html(msg))
                 return redirect('..')
         else:
-            form = GenerateObligationsForm()
+            form = GenerateObligationsForm(user=request.user)
 
         context = {
             'form': form,

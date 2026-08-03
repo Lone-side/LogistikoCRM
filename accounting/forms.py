@@ -69,6 +69,17 @@ class GenerateObligationsForm(forms.Form):
         help_text='Αφήστε κενό για όλους τους τύπους που έχει ο κάθε πελάτης'
     )
 
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        # RBAC: μόνο ClientObligations ανατεθειμένων πελατών
+        if user is not None:
+            from accounting.services.access import accessible_clients
+            self.fields['clients'].queryset = (
+                self.fields['clients'].queryset.filter(
+                    client__in=accessible_clients(user)
+                )
+            )
+
     def clean_month(self):
         """Μετατροπή σε integer"""
         return int(self.cleaned_data['month'])
@@ -118,6 +129,18 @@ class BulkAssignForm(forms.Form):
         initial=False,
         help_text='Αν επιλεγεί, θα δημιουργηθούν αυτόματα οι υποχρεώσεις για τον τρέχοντα μήνα'
     )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        # RBAC: scoped χρήστης επιλέγει (και υποβάλλει) μόνο ανατεθειμένους
+        # πελάτες — server-side, όχι μόνο στο widget
+        if user is not None:
+            from accounting.services.access import accessible_clients
+            self.fields['clients'].queryset = (
+                self.fields['clients'].queryset.filter(
+                    pk__in=accessible_clients(user)
+                )
+            )
 
     def clean(self):
         cleaned_data = super().clean()

@@ -349,7 +349,9 @@ class NotificationsEndpointTest(TestCase):
     def test_portal_upload_notification_within_48h(self):
         from accounting.models import SharedLinkAccess
 
-        user = User.objects.create_user('staff1', 's@office.gr', 'pass12345')
+        # Το endpoint απαιτεί πλέον view_monthlyobligation + scoping —
+        # εδώ ελέγχεται το 48ωρο παράθυρο, οπότε superuser
+        user = User.objects.create_superuser('staff1', 's@office.gr', 'pass12345')
         self.client.force_login(user)
         client_profile = make_client()
         link = make_link(client_profile, user)
