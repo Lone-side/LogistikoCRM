@@ -173,6 +173,8 @@ def email_templates(request):
     Create a new email template
     """
     if request.method == 'GET':
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         templates = EmailTemplate.objects.filter(is_active=True).order_by('name')
         serializer = EmailTemplateSerializer(templates, many=True)
         return Response(serializer.data)
@@ -209,6 +211,8 @@ def email_template_detail(request, template_id):
         )
 
     if request.method == 'GET':
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         if not template.is_active:
             return Response(
                 {'error': 'Το πρότυπο δεν βρέθηκε.'},
@@ -1024,6 +1028,7 @@ def bulk_complete_with_documents(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_emaillog')
 def email_history(request):
     """
     GET /api/v1/email/history/

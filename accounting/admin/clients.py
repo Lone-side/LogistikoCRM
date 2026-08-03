@@ -271,8 +271,13 @@ class ClientProfileAdmin(admin.ModelAdmin):
 
         search_term_clean = search_term.strip()
 
+        # Όλα τα search branches ξεκινούν από το scoped queryset — ποτέ από
+        # self.model.objects, αλλιώς scoped χρήστης ξαναφέρνει ξένους πελάτες
+        # με αναζήτηση ΑΦΜ/τηλεφώνου/email (και μέσω autocomplete).
+        base_qs = self.get_queryset(request)
+
         if search_term_clean.isdigit():
-            phone_search = self.model.objects.filter(
+            phone_search = base_qs.filter(
                 Q(afm__icontains=search_term_clean) |
                 Q(kinito_tilefono__icontains=search_term_clean) |
                 Q(tilefono_oikias_1__icontains=search_term_clean) |
@@ -284,14 +289,14 @@ class ClientProfileAdmin(admin.ModelAdmin):
             use_distinct = True
 
         elif '@' in search_term_clean:
-            email_search = self.model.objects.filter(
+            email_search = base_qs.filter(
                 Q(email__icontains=search_term_clean)
             )
             queryset |= email_search
             use_distinct = True
 
         else:
-            text_search = self.model.objects.filter(
+            text_search = base_qs.filter(
                 Q(eponimia__icontains=search_term_clean) |
                 Q(onoma__icontains=search_term_clean) |
                 Q(onoma_patros__icontains=search_term_clean) |
@@ -718,12 +723,42 @@ class ClientDocumentAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
     def get_queryset(self, request):
-        """Default: εμφάνιση μόνο τρεχουσών εκδόσεων εκτός αν φιλτράρει"""
+        """Default: μόνο τρέχουσες εκδόσεις + RBAC scoping ανά πελάτη"""
+        from accounting.mixins import user_sees_all_clients
         qs = super().get_queryset(request)
         # Αν δεν υπάρχει φίλτρο is_current, δείξε μόνο τις τρέχουσες
         if 'is_current__exact' not in request.GET:
             qs = qs.filter(is_current=True)
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(client__assigned_users=request.user).distinct()
         return qs.select_related('client', 'obligation', 'uploaded_by')
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj.client)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Περιορισμός FK επιλογών σε προσβάσιμους πελάτες/αντικείμενα —
+        # ισχύει και για validation των raw_id τιμών στο POST.
+        from accounting.services.access import (
+            accessible_clients, accessible_documents, accessible_obligations,
+        )
+        if db_field.name == 'client':
+            kwargs['queryset'] = accessible_clients(request.user)
+        elif db_field.name == 'obligation':
+            kwargs['queryset'] = accessible_obligations(request.user)
+        elif db_field.name == 'previous_version':
+            kwargs['queryset'] = accessible_documents(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(ArchiveConfiguration)

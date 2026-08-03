@@ -68,28 +68,32 @@ class IsLocalRequest(BasePermission):
     """
     Permission that allows requests from localhost/loopback addresses.
 
-    Useful as a fallback for internal services running on the same machine.
+    Useful as a fallback for internal services running on the same machine
+    ΜΟΝΟ σε development. Πίσω από reverse proxy στον ίδιο server το
+    REMOTE_ADDR εξωτερικού request φαίνεται loopback, οπότε σε production
+    το fallback απενεργοποιείται (VOIP_ALLOW_LOCALHOST, default: DEBUG)
+    και απαιτείται πάντα X-API-Key.
 
-    Allowed IPs:
-    - 127.0.0.1 (IPv4 loopback)
-    - localhost (resolved)
+    Allowed IPs (μόνο με ενεργό flag):
+    - 127.0.0.0/8 (IPv4 loopback)
     - ::1 (IPv6 loopback)
-    - 0.0.0.0 (some Windows configurations)
 
     Usage in ViewSet:
         permission_classes = [IsAuthenticated | IsVoIPMonitor | IsLocalRequest]
     """
 
-    # Extended list to cover all localhost variants
     ALLOWED_IPS = {
         '127.0.0.1',      # IPv4 loopback
-        'localhost',       # hostname
         '::1',            # IPv6 loopback
-        '0.0.0.0',        # Some Windows configs
         '::ffff:127.0.0.1',  # IPv6-mapped IPv4 loopback
     }
 
     def has_permission(self, request, view):
+        if not getattr(settings, 'VOIP_ALLOW_LOCALHOST', settings.DEBUG):
+            logger.info("IsLocalRequest: ❌ DENIED - localhost fallback disabled "
+                        "(VOIP_ALLOW_LOCALHOST off) — απαιτείται X-API-Key")
+            return False
+
         remote_addr = request.META.get('REMOTE_ADDR', 'unknown')
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
 

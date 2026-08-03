@@ -15,10 +15,12 @@ from calendar import monthrange
 from collections import defaultdict
 
 from .models import ClientProfile, MonthlyObligation
+from .services.access import require_model_perms
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_stats(request):
     from accounting.services.access import accessible_clients, accessible_obligations
     ClientQS = accessible_clients(request.user)
@@ -191,6 +193,7 @@ def dashboard_stats(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_calendar(request):
     from accounting.services.access import accessible_obligations
     ObligationQS = accessible_obligations(request.user)
@@ -281,6 +284,7 @@ def dashboard_calendar(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_recent_activity(request):
     from accounting.services.access import accessible_clients, accessible_obligations
     ClientQS = accessible_clients(request.user)
@@ -338,6 +342,7 @@ def dashboard_recent_activity(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_client_stats(request):
     from accounting.services.access import accessible_clients
     ClientQS = accessible_clients(request.user)

@@ -16,6 +16,7 @@ from datetime import timedelta
 from calendar import monthrange
 
 from .models import ClientProfile, MonthlyObligation
+from .services.access import require_model_perms
 from .utils.report_constants import (
     get_date_range,
     get_previous_period_range,
@@ -25,6 +26,7 @@ from .utils.report_constants import (
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def reports_stats(request):
     from accounting.services.access import accessible_clients, accessible_obligations
     ClientQS = accessible_clients(request.user)
@@ -213,6 +215,7 @@ def calculate_comparison(period: str, current_start, current_end, ClientQS=None,
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def reports_export(request):
     """
     GET /api/reports/export/
@@ -252,6 +255,7 @@ def reports_export(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def reports_export_download(request):
     from accounting.services.access import accessible_obligations
     ObligationQS = accessible_obligations(request.user)
@@ -430,6 +434,7 @@ def reports_export_download(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def client_statement(request, client_id):
     """
     GET /api/reports/client-statement/<client_id>/
@@ -553,6 +558,7 @@ def client_statement(request, client_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def vat_summary(request):
     from accounting.services.access import accessible_obligations, accessible_clients
     ObligationQS = accessible_obligations(request.user)

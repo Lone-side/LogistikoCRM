@@ -705,6 +705,12 @@ TASMOTA_DOOR_PULSE_DURATION = float(os.environ.get('TASMOTA_DOOR_PULSE_DURATION'
 # ==================== Fritz!Box VoIP Monitor Authentication ====================
 # SECURITY: Token for Fritz!Box monitor webhook authentication
 FRITZ_API_TOKEN = os.environ.get('FRITZ_API_TOKEN', 'change-this-token-in-production')
+# Localhost fallback για το VoIP service API (χωρίς X-API-Key). Πίσω από
+# reverse proxy το REMOTE_ADDR μπορεί να φαίνεται loopback για εξωτερικά
+# requests, οπότε σε production μένει κλειστό (default: DEBUG).
+VOIP_ALLOW_LOCALHOST = os.environ.get(
+    'VOIP_ALLOW_LOCALHOST', 'true' if DEBUG else 'false'
+).lower() in ('true', '1', 'yes')
 
 # ==============================================================================
 # 📦 CACHING CONFIGURATION
