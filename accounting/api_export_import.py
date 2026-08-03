@@ -5,6 +5,7 @@ Export/Import API for LogistikoCRM
 Handles Excel export and import for clients matching the admin template.
 """
 import io
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -27,6 +28,8 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
@@ -310,13 +313,23 @@ def import_clients_csv(request):
         skipped_count = 0
         errors = []
 
+        # Η εισαγωγή credentials είναι ρητή επιλογή — ΔΕΝ γίνεται σιωπηλά
+        import_credentials = str(
+            request.data.get('import_credentials', '')
+        ).lower() in ('true', '1', 'yes')
+        has_add_cred = request.user.has_perm('accounting.add_clientcredential')
+        has_change_cred = request.user.has_perm('accounting.change_clientcredential')
+        credentials_note_added = False
+
         # Determine start row (skip example rows with AFM starting with 123456)
         start_row = 2
         first_afm_cell = ws.cell(2, 1).value
         if first_afm_cell and str(first_afm_cell).startswith('123456'):
             start_row = 3
 
-        with transaction.atomic():
+        # Per-row transactions (μέσα στον βρόχο) — μια γραμμή είτε
+        # ολοκληρώνεται πλήρως (client + credentials) είτε καθόλου
+        if True:
             for row_num in range(start_row, ws.max_row + 1):
                 # Parse row
                 row_data = {}
@@ -356,13 +369,43 @@ def import_clients_csv(request):
                     row_data['eidos_ipoxreou'] = 'professional'
 
                 # Τα credential πεδία πάνε στο ClientCredential (κρυπτογραφημένα)
+                from accounting.models import ClientCredential
                 from accounting.services.credentials import (
                     extract_legacy_credentials, store_client_credentials,
                 )
                 credentials = extract_legacy_credentials(row_data)
 
+                if credentials and not import_credentials:
+                    # Χωρίς ρητό import_credentials=true τα secrets αγνοούνται
+                    credentials = {}
+                    if not credentials_note_added:
+                        errors.append(
+                            'Οι στήλες κωδικών αγνοήθηκαν — απαιτείται '
+                            'import_credentials=true για εισαγωγή credentials.'
+                        )
+                        credentials_note_added = True
+
                 # Check if client exists
                 existing = ClientProfile.objects.filter(afm=afm).first()
+
+                def _credential_perms_ok(client_obj):
+                    """add μόνο για νέα credentials, change μόνο για υπάρχοντα."""
+                    if not credentials:
+                        return True
+                    if client_obj is None:
+                        existing_services = set()
+                    else:
+                        existing_services = set(
+                            ClientCredential.objects.filter(
+                                client=client_obj, label=''
+                            ).values_list('service', flat=True)
+                        )
+                    needs_add = any(s not in existing_services for s in credentials)
+                    needs_change = any(s in existing_services for s in credentials)
+                    return not (
+                        (needs_add and not has_add_cred)
+                        or (needs_change and not has_change_cred)
+                    )
 
                 if existing:
                     # Scoped χρήστες δεν ενημερώνουν πελάτες εκτός ανάθεσης
@@ -371,27 +414,45 @@ def import_clients_csv(request):
                         skipped_count += 1
                         continue
                     if mode == 'update':
-                        # Update existing client
-                        for field, value in row_data.items():
-                            if field != 'afm' and value:
-                                setattr(existing, field, value)
-                        existing.save()
-                        if credentials:
-                            store_client_credentials(existing, credentials, updated_by=request.user)
+                        if not _credential_perms_ok(existing):
+                            errors.append(
+                                f'Γραμμή {row_num}: χωρίς δικαίωμα credentials — '
+                                f'η γραμμή παραλείφθηκε'
+                            )
+                            skipped_count += 1
+                            continue
+                        # Transactional γραμμή: client update + credentials μαζί
+                        with transaction.atomic():
+                            for field, value in row_data.items():
+                                if field != 'afm' and value:
+                                    setattr(existing, field, value)
+                            existing.save()
+                            if credentials:
+                                store_client_credentials(
+                                    existing, credentials, updated_by=request.user)
                         updated_count += 1
                     else:
                         skipped_count += 1
                 else:
-                    # Create new client
+                    if not _credential_perms_ok(None):
+                        errors.append(
+                            f'Γραμμή {row_num}: χωρίς δικαίωμα credentials — '
+                            f'η γραμμή παραλείφθηκε'
+                        )
+                        skipped_count += 1
+                        continue
+                    # Create new client (transactional γραμμή)
                     row_data['is_active'] = True
-                    new_client = ClientProfile.objects.create(**row_data)
-                    # Ο δημιουργός αναλαμβάνει αυτόματα τον νέο πελάτη —
-                    # αλλιώς scoped χρήστης δεν θα τον ξαναέβλεπε
-                    from accounting.mixins import user_sees_all_clients
-                    if not user_sees_all_clients(request.user):
-                        new_client.assigned_users.add(request.user)
-                    if credentials:
-                        store_client_credentials(new_client, credentials, updated_by=request.user)
+                    with transaction.atomic():
+                        new_client = ClientProfile.objects.create(**row_data)
+                        # Ο δημιουργός αναλαμβάνει αυτόματα τον νέο πελάτη —
+                        # αλλιώς scoped χρήστης δεν θα τον ξαναέβλεπε
+                        from accounting.mixins import user_sees_all_clients
+                        if not user_sees_all_clients(request.user):
+                            new_client.assigned_users.add(request.user)
+                        if credentials:
+                            store_client_credentials(
+                                new_client, credentials, updated_by=request.user)
                     created_count += 1
 
         return Response({
@@ -403,9 +464,12 @@ def import_clients_csv(request):
             'message': f'Δημιουργήθηκαν {created_count} πελάτες. Ενημερώθηκαν {updated_count}. Παραλείφθηκαν {skipped_count}.'
         })
 
-    except Exception as e:
+    except Exception:
+        # Χωρίς raw exception text στον χρήστη — μπορεί να περιέχει τιμές
+        # πεδίων (π.χ. από IntegrityError)
+        logger.exception('Σφάλμα κατά την εισαγωγή πελατών από Excel')
         return Response(
-            {'error': f'Σφάλμα κατά την ανάγνωση του αρχείου: {str(e)}'},
+            {'error': 'Σφάλμα κατά την ανάγνωση του αρχείου.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 

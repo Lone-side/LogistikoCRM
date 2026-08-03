@@ -108,15 +108,20 @@ class TicketSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'assigned_at', 'resolved_at', 'closed_at']
 
     def get_call(self, obj):
-        if obj.call:
-            return {
-                'id': obj.call.id,
-                'phone_number': obj.call.phone_number,
-                'direction': obj.call.direction,
-                'direction_display': obj.call.get_direction_display(),
-                'started_at': obj.call.started_at,
-            }
-        return None
+        if not obj.call:
+            return None
+        data = {
+            'id': obj.call.id,
+            'phone_number': obj.call.phone_number,
+            'direction': obj.call.direction,
+            'direction_display': obj.call.get_direction_display(),
+            'started_at': obj.call.started_at,
+        }
+        # Άμυνα σε βάθος: κλήση ξένου πελάτη (legacy inconsistency) δεν
+        # αποκαλύπτει το τηλέφωνό της μέσω του ticket
+        if obj.call.client_id and obj.call.client_id != obj.client_id:
+            data['phone_number'] = None
+        return data
 
     def get_status_display(self, obj):
         return obj.get_status_display()
@@ -234,8 +239,39 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_update(self, serializer):
+        from django.db import transaction
+        from rest_framework.exceptions import ValidationError
         self._validate_client_id(serializer)
-        serializer.save()
+        # Invariant κλήσης-ticket: αλλαγή πελάτη της κλήσης δεν επιτρέπεται
+        # να αφήσει το συνδεδεμένο ticket σε άλλον πελάτη — είτε απορρίπτεται
+        # (unassign) είτε ενημερώνονται και τα δύο ατομικά (ίδιο transaction,
+        # με κλείδωμα γραμμής στο ticket).
+        with transaction.atomic():
+            propagate_ticket = None
+            if 'client_id' in serializer.validated_data:
+                new_client_id = serializer.validated_data['client_id']
+                linked = Ticket.objects.select_for_update().filter(
+                    call=serializer.instance
+                ).first()
+                if linked is not None and linked.client_id is not None:
+                    if new_client_id is None:
+                        raise ValidationError({
+                            'client_id': 'Η κλήση έχει ticket αντιστοιχισμένο σε '
+                                         'πελάτη — η αφαίρεση πελάτη πρέπει να '
+                                         'γίνει και στα δύο μαζί.'
+                        })
+                    if new_client_id != linked.client_id:
+                        if not self.request.user.has_perm('accounting.change_ticket'):
+                            raise ValidationError({
+                                'client_id': 'Η αλλαγή πελάτη ενημερώνει και το '
+                                             'συνδεδεμένο ticket — απαιτείται '
+                                             'δικαίωμα αλλαγής ticket.'
+                            })
+                        propagate_ticket = linked
+            serializer.save()
+            if propagate_ticket is not None:
+                propagate_ticket.client_id = serializer.instance.client_id
+                propagate_ticket.save(update_fields=['client'])
 
     def get_queryset(self):
         queryset = _scope_by_client(super().get_queryset(), self.request.user)
@@ -381,7 +417,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error creating ticket: {e}", exc_info=True)
             return Response(
-                {'error': str(e)},
+                {'error': 'Σφάλμα κατά τη δημιουργία ticket'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -577,38 +613,73 @@ class TicketViewSet(viewsets.ModelViewSet):
             # Update χωρίς αλλαγή πελάτη: έλεγχος συνέπειας κλήσης με τον
             # υπάρχοντα πελάτη του ticket
             client = serializer.instance.client
-        self._check_call(serializer, client)
+        return self._check_call(serializer, client)
 
     def _check_call(self, serializer, client):
-        # Η κλήση στο payload πρέπει να είναι προσβάσιμη και να συμφωνεί
-        # με τον πελάτη του ticket. Unassigned κλήση επιτρέπεται (triage).
+        # Η κλήση (από payload Ή από το υπάρχον instance όταν λείπει από
+        # PATCH) πρέπει να είναι προσβάσιμη και να συμφωνεί με τον πελάτη
+        # του ticket. Unassigned κλήση επιτρέπεται (triage).
         from django.http import Http404
         from accounting.services.access import user_can_access_client
         from rest_framework.exceptions import ValidationError
-        call = serializer.validated_data.get('call')
+        data = serializer.validated_data
+        call = data.get('call')
         if call is None:
-            call_id = serializer.validated_data.get('call_id')
+            call_id = data.get('call_id')
             if call_id:
                 call = VoIPCall.objects.filter(pk=call_id).first()
                 if call is None:
                     raise Http404('VoIPCall not found')
+        if (
+            call is None
+            and 'call' not in data
+            and 'call_id' not in data
+            and serializer.instance is not None
+        ):
+            # PATCH χωρίς call field: το invariant ελέγχεται με την
+            # υπάρχουσα σχέση του instance
+            call = serializer.instance.call
         if call is None:
-            return
+            return None
         if call.client_id and not user_can_access_client(self.request.user, call.client):
             raise Http404('VoIPCall not found')
-        if client is not None and call.client_id and call.client_id != client.pk:
+        if call.client_id and client is not None and call.client_id != client.pk:
             raise ValidationError(
                 {'call': 'Η κλήση ανήκει σε διαφορετικό πελάτη από το ticket.'}
             )
+        if call.client_id and client is None and serializer.instance is not None:
+            # Σε update το ticket δεν μπορεί να μείνει unassigned όσο η
+            # κλήση του είναι αντιστοιχισμένη σε πελάτη — η αφαίρεση
+            # πρέπει να γίνει και στα δύο μαζί.
+            raise ValidationError(
+                {'client_id': 'Η συνδεδεμένη κλήση είναι αντιστοιχισμένη σε '
+                              'πελάτη — το ticket δεν μπορεί να μείνει χωρίς '
+                              'πελάτη.'}
+            )
+        return call
 
     def perform_create(self, serializer):
         """Auto-set status to open on create (μόνο για προσβάσιμο πελάτη)"""
-        self._check_client_id(serializer)
-        serializer.save(status='open')
+        from django.db import transaction
+        call = self._check_client_id(serializer)
+        extra = {'status': 'open'}
+        if (
+            call is not None
+            and call.client_id
+            and not serializer.validated_data.get('client')
+            and not serializer.validated_data.get('client_id')
+        ):
+            # Δημιουργία χωρίς πελάτη για client-bound κλήση: το ticket
+            # κληρονομεί τον πελάτη της κλήσης (διατήρηση invariant)
+            extra['client'] = call.client
+        with transaction.atomic():
+            serializer.save(**extra)
 
     def perform_update(self, serializer):
+        from django.db import transaction
         self._check_client_id(serializer)
-        serializer.save()
+        with transaction.atomic():
+            serializer.save()
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):

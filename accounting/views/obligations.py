@@ -33,6 +33,7 @@ import logging
 import json
 from accounting.services.access import (
     accessible_clients, accessible_documents, accessible_obligations,
+    mask_pii_value,
 )
 
 logger = logging.getLogger(__name__)
@@ -305,7 +306,7 @@ def advanced_bulk_complete(request):
             group_num = group_data.get('group', '0')
             obligation_ids = group_data.get('obligations', [])
 
-            logger.info(f"AFM: {client_afm}, Group: {group_num}, Obligations: {obligation_ids}")
+            logger.info(f"AFM: {mask_pii_value(client_afm)}, Group: {group_num}, Obligations: {obligation_ids}")
 
             # Get files for this group
             files_key = f"file_{client_afm}_{group_num}"
@@ -1054,7 +1055,7 @@ def wizard_bulk_process(request):
                         )
                         if success:
                             email_sent = True
-                            logger.info(f"Email sent for obligation {ob_id} to {obligation.client.email}")
+                            logger.info(f"Email sent for obligation {ob_id} to client id={obligation.client_id}")
                         else:
                             email_error_msg = str(result)
                             logger.warning(f"Could not send email for {ob_id}: {result}")

@@ -1451,6 +1451,34 @@ class VoIPCall(models.Model):
     def is_missed(self):
         return self.status == 'missed'
     
+    def clean(self):
+        """
+        Invariant κλήσης-ticket (κεντρικό σημείο για admin/forms):
+        όταν το συνδεδεμένο ticket είναι αντιστοιχισμένο σε πελάτη, η κλήση
+        δεν μπορεί ούτε να μείνει χωρίς πελάτη ούτε να δείχνει άλλον πελάτη.
+        Η ταυτόχρονη αλλαγή και των δύο γίνεται μόνο μέσω της atomic
+        διαδρομής του API (VoIPCallViewSet.perform_update).
+        """
+        super().clean()
+        if not self.pk:
+            return
+        linked = Ticket.objects.filter(call_id=self.pk).values_list(
+            'client_id', flat=True
+        ).first()
+        if linked is None:
+            return
+        from django.core.exceptions import ValidationError
+        if self.client_id is None:
+            raise ValidationError({
+                'client': 'Η κλήση έχει ticket αντιστοιχισμένο σε πελάτη — '
+                          'η αφαίρεση πελάτη πρέπει να γίνει και στα δύο μαζί.'
+            })
+        if self.client_id != linked:
+            raise ValidationError({
+                'client': 'Το συνδεδεμένο ticket ανήκει σε διαφορετικό πελάτη — '
+                          'η αλλαγή πρέπει να ενημερώσει και τα δύο μαζί.'
+            })
+
     def save(self, *args, **kwargs):
         if self.ended_at and self.started_at:
             delta = self.ended_at - self.started_at
@@ -1587,7 +1615,33 @@ class Ticket(models.Model):
     
     def __str__(self):
         return f"#{self.id} - {self.title}"
-    
+
+    def clean(self):
+        """
+        Invariant ticket-κλήσης (κεντρικό σημείο για admin/forms):
+        όταν η συνδεδεμένη κλήση είναι αντιστοιχισμένη σε πελάτη, το ticket
+        πρέπει να δείχνει στον ΙΔΙΟ πελάτη — ούτε άλλον, ούτε κανέναν.
+        Unassigned κλήση (triage) δεν περιορίζει το ticket.
+        """
+        super().clean()
+        if not self.call_id:
+            return
+        call_client_id = VoIPCall.objects.filter(pk=self.call_id).values_list(
+            'client_id', flat=True
+        ).first()
+        if not call_client_id:
+            return
+        from django.core.exceptions import ValidationError
+        if self.client_id is None:
+            raise ValidationError({
+                'client': 'Η συνδεδεμένη κλήση είναι αντιστοιχισμένη σε πελάτη — '
+                          'το ticket δεν μπορεί να μείνει χωρίς πελάτη.'
+            })
+        if self.client_id != call_client_id:
+            raise ValidationError({
+                'call': 'Η κλήση ανήκει σε διαφορετικό πελάτη από το ticket.'
+            })
+
     def mark_as_assigned(self, user):
         """Mark ticket as assigned"""
         self.status = 'assigned'
@@ -2383,21 +2437,59 @@ class SharedLink(models.Model):
         return check_password(password, self.password_hash)
 
     def record_access(self, is_download=False):
-        """Καταγραφή πρόσβασης"""
-        self.last_accessed_at = timezone.now()
-        self.view_count += 1
-        if is_download:
-            self.download_count += 1
-        self.save(update_fields=['last_accessed_at', 'view_count', 'download_count'])
-
-    def record_upload(self, count=1):
-        """Καταγραφή upload(s) από τον πελάτη — ατομική αύξηση (F expression)"""
+        """Καταγραφή προβολής — ατομική αύξηση (F expression)"""
         from django.db.models import F
-        SharedLink.objects.filter(pk=self.pk).update(
+        fields = {'last_accessed_at': timezone.now(), 'view_count': F('view_count') + 1}
+        if is_download:
+            fields['download_count'] = F('download_count') + 1
+        SharedLink.objects.filter(pk=self.pk).update(**fields)
+        self.refresh_from_db(fields=['last_accessed_at', 'view_count', 'download_count'])
+
+    def try_record_download(self):
+        """
+        Ατομική δέσμευση ενός download slot: conditional UPDATE στη βάση —
+        δύο ταυτόχρονα requests δεν μπορούν να ξεπεράσουν το max_downloads
+        (το δεύτερο γυρίζει 0 rows). Επιστρέφει True αν δεσμεύτηκε slot.
+        """
+        from django.db.models import F, Q
+        updated = SharedLink.objects.filter(
+            Q(max_downloads__isnull=True) | Q(download_count__lt=F('max_downloads')),
+            pk=self.pk,
+        ).update(
+            last_accessed_at=timezone.now(),
+            view_count=F('view_count') + 1,
+            download_count=F('download_count') + 1,
+        )
+        self.refresh_from_db(fields=['last_accessed_at', 'view_count', 'download_count'])
+        return bool(updated)
+
+    def try_reserve_uploads(self, count):
+        """
+        Ατομική δέσμευση `count` upload slots πριν την επεξεργασία αρχείων —
+        conditional UPDATE ώστε concurrent requests να μην υπερβούν το όριο.
+        Επιστρέφει True αν δεσμεύτηκαν όλα τα slots.
+        """
+        from django.db.models import F, Q
+        updated = SharedLink.objects.filter(
+            Q(max_uploads__isnull=True)
+            | Q(upload_count__lte=F('max_uploads') - count),
+            pk=self.pk,
+        ).update(
             last_accessed_at=timezone.now(),
             upload_count=F('upload_count') + count,
         )
         self.refresh_from_db(fields=['last_accessed_at', 'upload_count'])
+        return bool(updated)
+
+    def release_uploads(self, count):
+        """Αποδέσμευση slots για αρχεία που τελικά απέτυχαν (validation)."""
+        from django.db.models import F
+        if count <= 0:
+            return
+        SharedLink.objects.filter(pk=self.pk, upload_count__gte=count).update(
+            upload_count=F('upload_count') - count,
+        )
+        self.refresh_from_db(fields=['upload_count'])
 
     def get_public_url(self):
         """Δημιουργία public URL"""

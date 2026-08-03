@@ -875,5 +875,5 @@ class ObligationTypeViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ObligationType.objects.filter(is_active=True).order_by('priority', 'name')
     serializer_class = ObligationTypeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     pagination_class = None  # Return all types without pagination

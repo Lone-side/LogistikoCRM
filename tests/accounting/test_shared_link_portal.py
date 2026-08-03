@@ -100,12 +100,23 @@ class PortalUploadTest(SharedLinkPortalBase):
             'files': SimpleUploadedFile('a.pdf', b'%PDF-1.4'),
         })
         self.assertEqual(resp.status_code, 401)
-        # Με σωστό κωδικό στο body → OK
+        # Σκέτος κωδικός στο body ΔΕΝ αρκεί πλέον — απαιτείται access token
         resp2 = self.client.post(self._upload_url(link), {
             'files': SimpleUploadedFile('a.pdf', b'%PDF-1.4'),
             'password': 'μυστικό123',
         })
-        self.assertEqual(resp2.status_code, 201, resp2.content)
+        self.assertEqual(resp2.status_code, 401)
+        # Με token από το auth POST → OK
+        auth = self.client.post(
+            reverse('accounting:shared_link_access', args=[link.token]),
+            data='{"password": "μυστικό123"}',
+            content_type='application/json',
+        ).json()
+        resp3 = self.client.post(self._upload_url(link), {
+            'files': SimpleUploadedFile('a.pdf', b'%PDF-1.4'),
+            'auth': auth['access_token'],
+        })
+        self.assertEqual(resp3.status_code, 201, resp3.content)
 
     def test_access_token_flow(self):
         """GET με σωστό κωδικό εκδίδει token που δουλεύει για upload."""
@@ -125,15 +136,28 @@ class PortalUploadTest(SharedLinkPortalBase):
 
     def test_requires_email(self):
         link = self._make_link(requires_email=True)
+        # Χωρίς token → 401 (το requires_email καθιστά το link προστατευμένο)
         resp = self.client.post(self._upload_url(link), {
             'files': SimpleUploadedFile('a.pdf', b'%PDF-1.4'),
         })
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 401)
+        # Σκέτο email στο body ΔΕΝ αρκεί — θέλει token από το auth POST
         resp2 = self.client.post(self._upload_url(link), {
             'files': SimpleUploadedFile('a.pdf', b'%PDF-1.4'),
             'email': 'pelatis@example.com',
         })
-        self.assertEqual(resp2.status_code, 201)
+        self.assertEqual(resp2.status_code, 401)
+        auth = self.client.post(
+            reverse('accounting:shared_link_access', args=[link.token]),
+            data='{"email": "pelatis@example.com"}',
+            content_type='application/json',
+        ).json()
+        resp3 = self.client.post(self._upload_url(link), {
+            'files': SimpleUploadedFile('a.pdf', b'%PDF-1.4'),
+            'email': 'pelatis@example.com',
+            'auth': auth['access_token'],
+        })
+        self.assertEqual(resp3.status_code, 201, resp3.content)
         log = SharedLinkAccess.objects.get(shared_link=link, action='upload')
         self.assertEqual(log.email_provided, 'pelatis@example.com')
 

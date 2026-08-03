@@ -52,6 +52,8 @@ from .helpers import (
 # ============================================
 # LOGGER CONFIGURATION
 # ============================================
+from accounting.services.access import mask_pii_value
+
 logger = logging.getLogger(__name__)
 
 from accounting.api_voip import _scope_by_client
@@ -67,6 +69,10 @@ def voip_dashboard(request):
     """
     Modern VoIP Dashboard with real-time updates
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_voipcall'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     # Get recent calls with optimized query
     calls = _scope_by_client(
         VoIPCall.objects.select_related('client'), request.user
@@ -167,7 +173,7 @@ def fritz_webhook(request):
                            (f" - {client.eponimia}" if client else " - Άγνωστος")
             )
 
-            logger.info(f"VoIP: Created call {call.call_id} from {call.phone_number}")
+            logger.info(f"VoIP: Created call {call.call_id} from {mask_pii_value(call.phone_number)}")
 
             return JsonResponse({
                 'success': True,
@@ -233,7 +239,7 @@ def fritz_webhook(request):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         logger.error(f"Fritz webhook error: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': 'Παρουσιάστηκε σφάλμα'}, status=500)
 
 
 @staff_member_required
@@ -243,6 +249,9 @@ def voip_calls_api(request):
     """
     Real-time API for VoIP calls with AJAX support
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_voipcall'):
+        return JsonResponse({'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     try:
         # Get recent calls
         calls = _scope_by_client(
@@ -271,7 +280,7 @@ def voip_calls_api(request):
         logger.error(f"Error in voip_calls_api: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -434,7 +443,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
                     description=f'Auto-created ticket #{ticket.id} for missed call'
                 )
 
-                logger.info(f"Created ticket #{ticket.id} for missed call from {voip_call.phone_number}")
+                logger.info(f"Created ticket #{ticket.id} for missed call {voip_call.call_id}")
 
             except Exception as e:
                 logger.error(f"Failed to create ticket for call {voip_call.id}: {e}")
@@ -483,7 +492,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error ending call: {e}", exc_info=True)
             return Response(
-                {'error': str(e)},
+                {'error': 'Παρουσιάστηκε σφάλμα'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -567,6 +576,9 @@ def voip_statistics(request):
     """
     Advanced statistics για VoIP calls
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_voipcall'):
+        return JsonResponse({'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     try:
         today = timezone.now().date()
         week_ago = today - timedelta(days=7)
@@ -615,7 +627,7 @@ def voip_statistics(request):
 
     except Exception as e:
         logger.error(f"Error generating statistics: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': 'Παρουσιάστηκε σφάλμα'}, status=500)
 
 
 @staff_member_required
@@ -695,7 +707,7 @@ def voip_bulk_action(request):
         logger.error(f"Error in bulk action: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -781,4 +793,4 @@ def voip_export_csv(request):
 
     except Exception as e:
         logger.error(f"Error exporting CSV: {e}", exc_info=True)
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': 'Παρουσιάστηκε σφάλμα'}, status=500)

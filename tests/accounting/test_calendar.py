@@ -26,6 +26,11 @@ class CalendarViewTestCase(TestCase):
             password='testpass123',
             is_staff=True
         )
+        # Γύρος 13: το ημερολόγιο απαιτεί πλέον view_monthlyobligation
+        from django.contrib.auth.models import Permission
+        self.user.user_permissions.add(Permission.objects.get(
+            codename='view_monthlyobligation',
+            content_type__app_label='accounting'))
         self.client = Client()
         self.client.login(username='testadmin', password='testpass123')
 
@@ -154,6 +159,11 @@ class CalendarEventsAPITestCase(TestCase):
             password='testpass123',
             is_staff=True
         )
+        # Γύρος 13: το ημερολόγιο απαιτεί πλέον view_monthlyobligation
+        from django.contrib.auth.models import Permission
+        self.user.user_permissions.add(Permission.objects.get(
+            codename='view_monthlyobligation',
+            content_type__app_label='accounting'))
         self.client = Client()
         self.client.login(username='testadmin', password='testpass123')
 

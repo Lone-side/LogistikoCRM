@@ -392,10 +392,14 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
                 'message': out.getvalue(),
             })
 
-        except Exception as e:
-            logger.error(f"Sync error for {credentials.client.afm}: {e}")
+        except Exception:
+            # Client DB id αντί για πλήρες ΑΦΜ στα logs· χωρίς raw
+            # exception text στον χρήστη
+            logger.exception(
+                f"Sync error for client id={credentials.client_id}"
+            )
             return Response(
-                {'error': str(e)},
+                {'error': 'Σφάλμα συγχρονισμού myDATA'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -819,7 +823,10 @@ class ClientVATDetailView(APIView):
             return Response(response_data)
 
         except Exception:
-            logger.exception('Σφάλμα στο ClientVATDetailView για ΑΦΜ %s', afm)
+            from accounting.services.access import mask_pii_value
+            logger.exception(
+                'Σφάλμα στο ClientVATDetailView για ΑΦΜ %s', mask_pii_value(afm)
+            )
             return Response(
                 {'error': 'Εσωτερικό σφάλμα διακομιστή'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -1055,7 +1062,8 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                     )
                 except Exception as e:
                     logger.error(
-                        f"Sync failed for {period.client.afm} {month}/{period.year}: {e}"
+                        f"Sync failed for client id={period.client_id} "
+                        f"{month}/{period.year}: {e}"
                     )
                     continue
                 if month not in period.months_synced:

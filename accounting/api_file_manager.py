@@ -764,16 +764,42 @@ ACCESS_TOKEN_SALT = 'accounting.shared-link-access'
 ACCESS_TOKEN_MAX_AGE = 4 * 3600  # 4 ώρες
 
 
-def _password_fingerprint(shared_link):
-    """Σύντομο αποτύπωμα του password_hash — αλλαγή κωδικού ακυρώνει τα tokens"""
+def shared_link_is_protected(shared_link):
+    """Προστατευμένο link = απαιτεί κωδικό Ή email πριν από κάθε πρόσβαση."""
+    return bool(shared_link.password_hash) or shared_link.requires_email
+
+
+def _link_fingerprint(shared_link):
+    """
+    Αποτύπωμα της security-relevant διαμόρφωσης του link: αλλαγή κωδικού
+    ή εναλλαγή του requires_email ακυρώνει όλα τα εκδοθέντα tokens.
+    """
     import hashlib
-    return hashlib.sha256((shared_link.password_hash or '').encode()).hexdigest()[:16]
+    material = '|'.join([
+        shared_link.password_hash or '',
+        '1' if shared_link.requires_email else '0',
+    ])
+    return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
-def make_shared_access_token(shared_link):
+def _email_proof(email):
+    """Hash του normalized email — αποδεικνύει ότι δόθηκε email χωρίς να
+    μεταφέρεται το ίδιο το email μέσα στο token."""
+    import hashlib
+    normalized = (email or '').strip().lower()
+    if not normalized:
+        return ''
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+def make_shared_access_token(shared_link, email=''):
     from django.core import signing
     return signing.dumps(
-        {'t': shared_link.token, 'p': _password_fingerprint(shared_link)},
+        {
+            't': shared_link.token,
+            'p': _link_fingerprint(shared_link),
+            'e': _email_proof(email),
+        },
         salt=ACCESS_TOKEN_SALT,
     )
 
@@ -787,25 +813,30 @@ def verify_shared_access_token(shared_link, token_value):
                              max_age=ACCESS_TOKEN_MAX_AGE)
     except signing.BadSignature:
         return False
-    return (
-        data.get('t') == shared_link.token
-        and data.get('p') == _password_fingerprint(shared_link)
-    )
+    if data.get('t') != shared_link.token:
+        return False
+    if data.get('p') != _link_fingerprint(shared_link):
+        return False
+    # Για requires_email το token πρέπει να περιέχει απόδειξη email —
+    # tokens που εκδόθηκαν πριν ενεργοποιηθεί το requires_email
+    # απορρίπτονται ήδη από το fingerprint παραπάνω.
+    if shared_link.requires_email and not data.get('e'):
+        return False
+    return True
 
 
 def shared_link_auth_ok(shared_link, request):
     """
-    Έλεγχος εξουσιοδότησης για ενέργεια σε προστατευμένο link:
-    είτε έγκυρο υπογεγραμμένο access token, είτε σωστός κωδικός στο request.
-    Τα links χωρίς κωδικό είναι πάντα OK.
+    Έλεγχος εξουσιοδότησης για ενέργεια (download/upload) σε προστατευμένο
+    link: απαιτείται ΜΟΝΟ έγκυρο υπογεγραμμένο access token, το οποίο
+    εκδίδεται αποκλειστικά από το POST /share/{token}/ αφού περάσουν ΟΛΟΙ
+    οι απαιτούμενοι έλεγχοι (κωδικός ΚΑΙ email, όποιοι ισχύουν).
+    Τα μη προστατευμένα links είναι πάντα OK.
     """
-    if not shared_link.password_hash:
+    if not shared_link_is_protected(shared_link):
         return True
     token_value = request.query_params.get('auth') or request.data.get('auth')
-    if verify_shared_access_token(shared_link, token_value):
-        return True
-    password = request.data.get('password', '')
-    return bool(password) and shared_link.check_password(password)
+    return verify_shared_access_token(shared_link, token_value)
 
 
 class SharedLinkAuthThrottle(ScopedRateThrottle):
@@ -874,23 +905,30 @@ class PublicSharedLinkView(APIView):
                 return Response({'error': 'Λάθος κωδικός'}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Verify email if required
-        email = request.data.get('email', '')
-        if shared_link.requires_email and not email:
-            return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+        email = (request.data.get('email') or '').strip()
+        if shared_link.requires_email:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            from django.core.validators import validate_email
+            if not email:
+                return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                validate_email(email)
+            except DjangoValidationError:
+                return Response({'error': 'Μη έγκυρο email'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Log access
         self._log_access(request, shared_link, 'view', email)
         shared_link.record_access(is_download=False)
 
-        return self._get_content_response(request, shared_link)
+        return self._get_content_response(request, shared_link, email=email)
 
-    def _get_content_response(self, request, shared_link):
+    def _get_content_response(self, request, shared_link, email=''):
         """Get the content based on link type"""
         # Access token για επόμενες ενέργειες (download/upload) χωρίς
         # επανάληψη κωδικού — εκδίδεται μόνο εδώ, μετά τον έλεγχο
         common = {
             'access_level': shared_link.access_level,
-            'access_token': make_shared_access_token(shared_link),
+            'access_token': make_shared_access_token(shared_link, email=email),
             'allow_upload': shared_link.can_upload,
             'upload_note': shared_link.upload_note if shared_link.can_upload else '',
             'document_request': self._get_document_request(shared_link),
@@ -992,13 +1030,13 @@ class PublicSharedLinkDownloadView(APIView):
         if shared_link.access_level != 'download':
             return Response({'error': 'Δεν επιτρέπεται η λήψη'}, status=status.HTTP_403_FORBIDDEN)
 
-        # SECURITY: σε προστατευμένα links απαιτείται το access token που
-        # εκδόθηκε μετά τον έλεγχο κωδικού — πριν, το download δεν έλεγχε
-        # καθόλου τον κωδικό
-        if shared_link.password_hash and not verify_shared_access_token(
+        # SECURITY: προστατευμένο = κωδικός Ή requires_email — και στις δύο
+        # περιπτώσεις απαιτείται το access token που εκδόθηκε αφού πέρασαν
+        # όλοι οι έλεγχοι (πριν, το requires_email δεν ελεγχόταν καθόλου εδώ)
+        if shared_link_is_protected(shared_link) and not verify_shared_access_token(
             shared_link, request.query_params.get('auth')
         ):
-            return Response({'error': 'Απαιτείται έλεγχος κωδικού'},
+            return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
                             status=status.HTTP_401_UNAUTHORIZED)
 
         # Εύρεση αρχείου: document link ή folder link με ?doc_id=
@@ -1012,8 +1050,11 @@ class PublicSharedLinkDownloadView(APIView):
         if not doc or not doc.file:
             raise Http404("Το αρχείο δεν βρέθηκε")
 
-        # Record download
-        shared_link.record_access(is_download=True)
+        # Ατομική δέσμευση download slot — concurrent requests στο τελευταίο
+        # slot δεν μπορούν να υπερβούν το max_downloads
+        if not shared_link.try_record_download():
+            return Response({'error': 'Έχει φτάσει το όριο λήψεων'},
+                            status=status.HTTP_410_GONE)
 
         # Log access
         SharedLinkAccess.objects.create(
@@ -1066,13 +1107,14 @@ class PublicSharedLinkUploadView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # SECURITY: προστατευμένο link (κωδικός Ή requires_email) → μόνο με
+        # έγκυρο access token, που εκδίδεται αφού περάσουν όλοι οι έλεγχοι
         if not shared_link_auth_ok(shared_link, request):
-            return Response({'error': 'Απαιτείται έλεγχος κωδικού'},
+            return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
                             status=status.HTTP_401_UNAUTHORIZED)
 
-        email = request.data.get('email', '')
-        if shared_link.requires_email and not email:
-            return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+        # Το email (για το access log) — η απόδειξη ότι δόθηκε ζει στο token
+        email = (request.data.get('email') or '').strip()
 
         client = shared_link.upload_target_client
         if not client:
@@ -1087,14 +1129,16 @@ class PublicSharedLinkUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Σεβασμός του ορίου uploads και μέσα στο ίδιο αίτημα
-        if shared_link.max_uploads:
-            remaining = shared_link.max_uploads - shared_link.upload_count
-            if len(files) > remaining:
-                return Response(
-                    {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # Ατομική δέσμευση slots ΠΡΙΝ την επεξεργασία — conditional UPDATE
+        # στη βάση, ώστε concurrent requests να μην υπερβούν το max_uploads
+        if not shared_link.try_reserve_uploads(len(files)):
+            remaining = max(
+                0, (shared_link.max_uploads or 0) - shared_link.upload_count
+            )
+            return Response(
+                {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Προαιρετική αντιστοίχιση σε item αιτήματος εγγράφων
         request_item = None
@@ -1145,12 +1189,15 @@ class PublicSharedLinkUploadView(APIView):
             uploaded.append(entry)
             uploaded_docs.append(doc)
 
+        # Αποδέσμευση slots για αρχεία που απέτυχαν στο validation
+        if errors:
+            shared_link.release_uploads(len(errors))
+
         if uploaded and request_item:
             self._mark_item_received(request_item, uploaded_docs[0])
 
         if uploaded:
             self._dispatch_upload_notification(shared_link, uploaded_docs)
-            shared_link.record_upload(count=len(uploaded))
             x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
             ip_address = (
                 x_forwarded_for.split(',')[0].strip()
@@ -1304,6 +1351,17 @@ class CollectionViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return DocumentCollectionListSerializer
         return DocumentCollectionSerializer
+
+    def get_object(self):
+        # Shared collections είναι ορατές σε όλους, αλλά update/delete
+        # επιτρέπονται ΜΟΝΟ στον owner (πριν, κάθε authenticated χρήστης
+        # μπορούσε να μετονομάσει/διαγράψει ξένη shared collection)
+        obj = super().get_object()
+        if self.action in ('update', 'partial_update', 'destroy') and \
+                obj.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Δεν έχετε δικαίωμα επεξεργασίας')
+        return obj
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)

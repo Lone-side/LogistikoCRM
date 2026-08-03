@@ -48,6 +48,10 @@ def dashboard_view(request):
     Enhanced Dashboard with comprehensive filtering and statistics
     Features: Advanced filters, real-time stats, bulk operations support
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     now = timezone.now()
 
     # ========== FILTER PARAMETERS ==========
@@ -148,6 +152,10 @@ def reports_view(request):
     """
     Comprehensive analytics dashboard with charts and statistics
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     now = timezone.now()
     # Ασφαλής μετατροπή + clamp 1..36 (άκυρο input → default 6)
     months_back = _safe_int(request.GET.get('months')) or 6

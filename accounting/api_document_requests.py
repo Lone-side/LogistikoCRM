@@ -136,6 +136,12 @@ class DocumentRequestCreateSerializer(serializers.Serializer):
 # VIEWSET
 # ============================================
 
+class MarkItemInputSerializer(serializers.Serializer):
+    """Validated input για το mark_item — αυστηρό boolean parsing."""
+    item_id = serializers.IntegerField(min_value=1)
+    is_received = serializers.BooleanField(default=True)
+
+
 class DocumentRequestViewSet(viewsets.ModelViewSet):
     """
     /api/v1/document-requests/
@@ -260,12 +266,6 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
                 {'error': 'Δεν υπάρχουν εκκρεμή έγγραφα'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if (doc_request.last_reminder_sent_at and
-                timezone.now() - doc_request.last_reminder_sent_at < MANUAL_REMINDER_COOLDOWN):
-            return Response(
-                {'error': 'Στάλθηκε υπενθύμιση πριν από λιγότερο από 1 ώρα'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         if not (doc_request.client.email or '').strip():
             return Response(
                 {'error': 'Ο πελάτης δεν έχει email'},
@@ -279,31 +279,60 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Race-safe cooldown: ατομική ΔΕΣΜΕΥΣΗ του slot πριν την αποστολή
+        # (conditional UPDATE) — δύο ταυτόχρονα requests δεν στέλνουν δύο
+        # emails, γιατί μόνο το ένα κερδίζει το update.
+        from django.db.models import Q
+        now = timezone.now()
+        previous_sent_at = doc_request.last_reminder_sent_at
+        reserved = DocumentRequest.objects.filter(
+            Q(last_reminder_sent_at__isnull=True)
+            | Q(last_reminder_sent_at__lt=now - MANUAL_REMINDER_COOLDOWN),
+            pk=doc_request.pk,
+        ).update(
+            last_reminder_sent_at=now,
+            reminder_count=F('reminder_count') + 1,
+        )
+        if not reserved:
+            return Response(
+                {'error': 'Στάλθηκε υπενθύμιση πριν από λιγότερο από 1 ώρα'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        def _release_reservation():
+            # Σε αποτυχία email το cooldown/count επανέρχεται συνεπές
+            DocumentRequest.objects.filter(pk=doc_request.pk).update(
+                last_reminder_sent_at=previous_sent_at,
+                reminder_count=F('reminder_count') - 1,
+            )
+
         try:
             sent = _send_document_request_email(doc_request)
         except Exception as e:
+            _release_reservation()
             logger.error(f'Manual reminder failed for request {pk}: {e}')
             return Response(
                 {'error': 'Αποτυχία αποστολής email'},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         if not sent:
+            _release_reservation()
             return Response(
                 {'error': 'Το email δεν στάλθηκε — έλεγξε email πελάτη και σύνδεσμο'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        DocumentRequest.objects.filter(pk=doc_request.pk).update(
-            last_reminder_sent_at=timezone.now(),
-            reminder_count=F('reminder_count') + 1,
-        )
         return Response({'success': True, 'message': 'Η υπενθύμιση στάλθηκε'})
 
     @action(detail=True, methods=['post'], url_path='mark-item')
     def mark_item(self, request, pk=None):
         """Χειροκίνητο μαρκάρισμα item (π.χ. το έγγραφο ήρθε δια ζώσης)."""
         doc_request = self.get_object()
-        item_id = request.data.get('item_id')
-        is_received = bool(request.data.get('is_received', True))
+        # Πραγματικό BooleanField: "false"/"0"/false → False, άκυρη τιμή →
+        # 400 (πριν, το bool() σε raw τιμή έκανε το string "false" → True)
+        input_serializer = MarkItemInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        item_id = input_serializer.validated_data['item_id']
+        is_received = input_serializer.validated_data['is_received']
 
         item = doc_request.items.filter(pk=item_id).first()
         if item is None:

@@ -265,6 +265,18 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     delete_without_tickets.short_description = 'Διαγραφή χωρίς tickets'
 
     # Custom delete view
+    def save_model(self, request, obj, form, change):
+        from django.db import transaction
+        with transaction.atomic():
+            super().save_model(request, obj, form, change)
+            if change and obj.client_id:
+                # Atomic ενημέρωση ΚΑΙ των δύο: unassigned (triage) ticket
+                # της κλήσης παίρνει τον ίδιο πελάτη (invariant). Bound
+                # ticket σε άλλον πελάτη το έχει ήδη απορρίψει το clean().
+                Ticket.objects.filter(call=obj, client__isnull=True).update(
+                    client_id=obj.client_id
+                )
+
     def delete_view(self, request, object_id, extra_context=None):
         obj = self.get_object(request, object_id)
         extra_context = extra_context or {}
@@ -560,6 +572,20 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         return response
     export_tickets_csv.short_description = '📊 Export CSV'
     export_tickets_csv.allowed_permissions = ('export',)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Το call FK περιορίζεται σε κλήσεις προσβάσιμων πελατών ή
+        # unassigned — scoped χρήστης δεν βλέπει/επιλέγει ξένες κλήσεις
+        if db_field.name == 'call':
+            from django.db.models import Q
+            from accounting.mixins import user_sees_all_clients
+            from accounting.services.access import accessible_clients
+            if not user_sees_all_clients(request.user):
+                kwargs['queryset'] = VoIPCall.objects.filter(
+                    Q(client__isnull=True)
+                    | Q(client__in=accessible_clients(request.user))
+                )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         if not change and not obj.assigned_to:

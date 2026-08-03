@@ -490,6 +490,7 @@ REST_FRAMEWORK = {
         'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
         'shared_link_auth': '10/hour',    # Δοκιμές κωδικού σε προστατευμένα links (ανά IP)
         'credential_reveal': '10/hour',   # Αποκαλύψεις κωδικών πελατών (ανά χρήστη)
+        'afm_lookup': '60/hour',          # GSIS ΑΦΜ lookups (ανά χρήστη)
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',

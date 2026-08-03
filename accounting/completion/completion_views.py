@@ -40,6 +40,21 @@ from ..services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
 
+GENERIC_SERVER_ERROR = 'Παρουσιάστηκε σφάλμα — δοκιμάστε ξανά.'
+
+
+def _safe_int(value, default=None, minimum=None, maximum=None):
+    """Ασφαλές parsing int από query params — άκυρη τιμή → default."""
+    try:
+        result = int(str(value))
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None:
+        result = max(minimum, result)
+    if maximum is not None:
+        result = min(maximum, result)
+    return result
+
 
 # =============================================================================
 # OBLIGATION LIST VIEW
@@ -51,6 +66,10 @@ def obligation_list_view(request):
     """
     Κύρια οθόνη διαχείρισης υποχρεώσεων με φίλτρα και DataTables.
     """
+    from django.http import HttpResponseForbidden
+    # Το staff_member_required ΔΕΝ αρκεί — απαιτείται και model permission
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής υποχρεώσεων.')
     now = timezone.now()
     current_month = now.month
     current_year = now.year
@@ -70,17 +89,21 @@ def obligation_list_view(request):
         'client', 'obligation_type', 'completed_by'
     ).order_by('deadline', 'client__eponimia')
 
-    # Εφαρμογή φίλτρων
-    if filters['month']:
-        queryset = queryset.filter(month=int(filters['month']))
-    if filters['year']:
-        queryset = queryset.filter(year=int(filters['year']))
+    # Εφαρμογή φίλτρων (validated ints — άκυρη τιμή αγνοείται, όχι 500)
+    month = _safe_int(filters['month'])
+    if month:
+        queryset = queryset.filter(month=month)
+    year = _safe_int(filters['year'])
+    if year:
+        queryset = queryset.filter(year=year)
     if filters['status']:
         queryset = queryset.filter(status=filters['status'])
-    if filters['client_id']:
-        queryset = queryset.filter(client_id=int(filters['client_id']))
-    if filters['type_id']:
-        queryset = queryset.filter(obligation_type_id=int(filters['type_id']))
+    client_id = _safe_int(filters['client_id'])
+    if client_id:
+        queryset = queryset.filter(client_id=client_id)
+    type_id = _safe_int(filters['type_id'])
+    if type_id:
+        queryset = queryset.filter(obligation_type_id=type_id)
     if filters['search']:
         queryset = queryset.filter(
             Q(client__eponimia__icontains=filters['search']) |
@@ -137,10 +160,12 @@ def obligation_list_api(request):
     API endpoint για DataTables server-side processing.
     Επιστρέφει JSON με υποχρεώσεις.
     """
-    # DataTables parameters
-    draw = int(request.GET.get('draw', 1))
-    start = int(request.GET.get('start', 0))
-    length = int(request.GET.get('length', 25))
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    # DataTables parameters (validated + bounded — όχι raw int())
+    draw = _safe_int(request.GET.get('draw'), default=1, minimum=1)
+    start = _safe_int(request.GET.get('start'), default=0, minimum=0)
+    length = _safe_int(request.GET.get('length'), default=25, minimum=1, maximum=200)
     search_value = request.GET.get('search[value]', '')
 
     # Φίλτρα
@@ -155,17 +180,21 @@ def obligation_list_api(request):
         'client', 'obligation_type', 'completed_by'
     )
 
-    # Εφαρμογή φίλτρων
+    # Εφαρμογή φίλτρων (validated ints)
+    month = _safe_int(month)
     if month:
-        queryset = queryset.filter(month=int(month))
+        queryset = queryset.filter(month=month)
+    year = _safe_int(year)
     if year:
-        queryset = queryset.filter(year=int(year))
+        queryset = queryset.filter(year=year)
     if status:
         queryset = queryset.filter(status=status)
+    client_id = _safe_int(client_id)
     if client_id:
-        queryset = queryset.filter(client_id=int(client_id))
+        queryset = queryset.filter(client_id=client_id)
+    type_id = _safe_int(type_id)
     if type_id:
-        queryset = queryset.filter(obligation_type_id=int(type_id))
+        queryset = queryset.filter(obligation_type_id=type_id)
 
     # Search
     if search_value:
@@ -176,7 +205,7 @@ def obligation_list_api(request):
         )
 
     # Ordering
-    order_column = int(request.GET.get('order[0][column]', 0))
+    order_column = _safe_int(request.GET.get('order[0][column]'), default=0, minimum=0)
     order_dir = request.GET.get('order[0][dir]', 'asc')
 
     order_columns = ['id', 'client__eponimia', 'obligation_type__name', 'deadline', 'status']
@@ -203,15 +232,17 @@ def obligation_list_api(request):
             'overdue': '<span class="badge badge-overdue">Καθυστερεί</span>',
         }
 
-        # Attachment info
+        # Attachment info — escaped: filename/url είναι user-controlled τιμές
         attachment_html = ''
         if ob.attachment:
+            from django.utils.html import format_html
             filename = os.path.basename(ob.attachment.name)
-            attachment_html = f'''
-                <a href="{ob.attachment.url}" target="_blank" class="attachment-preview">
-                    <i class="bi bi-file-pdf text-danger"></i> {filename[:20]}...
-                </a>
-            '''
+            attachment_html = format_html(
+                '<a href="{}" target="_blank" class="attachment-preview">'
+                '<i class="bi bi-file-pdf text-danger"></i> {}...</a>',
+                ob.attachment.url,
+                filename[:20],
+            )
 
         # Days until deadline
         days = ob.days_until_deadline
@@ -326,7 +357,7 @@ def obligation_complete_single(request, obligation_id):
         logger.error(f"Error completing obligation {obligation_id}: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -369,7 +400,7 @@ def obligation_complete_bulk(request):
             try:
                 obligation = accessible_obligations(request.user).select_related(
                     'client', 'obligation_type'
-                ).get(id=int(ob_id))
+                ).get(id=_safe_int(ob_id, default=-1))
 
                 # Skip already completed
                 if obligation.status == 'completed':
@@ -409,7 +440,7 @@ def obligation_complete_bulk(request):
             except MonthlyObligation.DoesNotExist:
                 failed.append({'id': ob_id, 'error': 'Δεν βρέθηκε'})
             except Exception as e:
-                failed.append({'id': ob_id, 'error': str(e)})
+                failed.append({'id': ob_id, 'error': GENERIC_SERVER_ERROR})
 
         return JsonResponse({
             'success': True,
@@ -427,7 +458,7 @@ def obligation_complete_bulk(request):
         logger.error(f"Bulk complete error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -478,7 +509,7 @@ def obligation_upload_file(request, obligation_id):
         logger.error(f"File upload error for obligation {obligation_id}: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -491,6 +522,11 @@ def email_compose_view(request):
     """
     Οθόνη σύνταξης email με επιλογή υποχρεώσεων και attachments.
     """
+    from django.http import HttpResponseForbidden
+    # Ίδιο permission με την αποστολή — η οθόνη σύνταξης εκθέτει στοιχεία
+    # πελατών/υποχρεώσεων για τον σκοπό αυτόν
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα αποστολής email.')
     # Λήψη επιλεγμένων υποχρεώσεων
     obligation_ids = request.GET.getlist('ids')
     if not obligation_ids and request.method == 'POST':
@@ -636,16 +672,17 @@ def email_send_view(request):
                 'email_log_id': result.id if hasattr(result, 'id') else None,
             })
         else:
+            logger.error(f"Email send failed: {result}")
             return JsonResponse({
                 'success': False,
-                'error': str(result)
+                'error': 'Η αποστολή email απέτυχε.'
             }, status=500)
 
     except Exception as e:
         logger.error(f"Email send error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -748,15 +785,16 @@ def email_send_bulk_view(request):
                         'attachments_count': len(client_data['attachments']),
                     })
                 else:
+                    logger.error(f"Bulk email failed for client {client.pk}: {result}")
                     results['failed'].append({
                         'client': client.eponimia,
-                        'error': str(result)
+                        'error': 'Η αποστολή email απέτυχε.'
                     })
 
             except Exception as e:
                 results['failed'].append({
                     'client': client.eponimia,
-                    'error': str(e)
+                    'error': GENERIC_SERVER_ERROR
                 })
 
         return JsonResponse({
@@ -771,7 +809,7 @@ def email_send_bulk_view(request):
         logger.error(f"Bulk email error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -784,6 +822,13 @@ def client_files_view(request, client_id):
     """
     Προβολή αρχείων πελάτη με δενδρική δομή.
     """
+    from django.http import HttpResponseForbidden
+    # Εμφανίζει έγγραφα + υποχρεώσεις — απαιτούνται τα αντίστοιχα view perms
+    if not check_model_perms(
+        request, 'accounting.view_clientdocument',
+        'accounting.view_monthlyobligation',
+    ):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής αρχείων.')
     client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     # Βάση αρχειοθέτησης (από FilingSystemSettings)
@@ -859,6 +904,8 @@ def file_download(request, client_id, file_path):
     """
     Download αρχείου πελάτη.
     """
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return HttpResponse('Δεν έχετε δικαίωμα λήψης αρχείων.', status=403)
     client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     archive_root = filing.get_archive_root()
@@ -881,13 +928,24 @@ def file_download(request, client_id, file_path):
 
 @staff_member_required
 @require_POST
-def file_delete(request, client_id, file_path):
+def file_delete(request, client_id, file_path=None):
     """
-    Διαγραφή αρχείου πελάτη.
+    Διαγραφή αρχείου πελάτη. Το file_path έρχεται από το JSON body
+    (το URL δεν το περιλαμβάνει — πριν, το view σήκωνε TypeError/500).
     """
     if not check_model_perms(request, 'accounting.delete_clientdocument'):
         return JsonResponse(PERM_DENIED_JSON, status=403)
     client = get_object_or_404(accessible_clients(request.user), id=client_id)
+
+    if file_path is None:
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            body = {}
+        file_path = body.get('file_path') or request.POST.get('file_path', '')
+    if not file_path or not isinstance(file_path, str):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν καθορίστηκε αρχείο'}, status=400)
 
     archive_root = filing.get_archive_root()
     full_path = os.path.realpath(os.path.join(archive_root, file_path))
@@ -913,7 +971,7 @@ def file_delete(request, client_id, file_path):
         logger.error(f"File delete error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -931,6 +989,9 @@ def open_document_folder(request, document_id):
     χρησιμοποιηθεί JavaScript με file:// protocol (με περιορισμούς
     ασφαλείας του browser).
     """
+    from django.http import HttpResponseForbidden
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής εγγράφων.')
     document = get_object_or_404(accessible_documents(request.user), id=document_id)
 
     folder_path = document.folder_path
@@ -966,6 +1027,9 @@ def open_client_folder(request, client_id):
     """
     Άνοιγμα φακέλου πελάτη.
     """
+    from django.http import HttpResponseForbidden
+    if not check_model_perms(request, 'accounting.view_clientprofile'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής πελατών.')
     client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     folder_path = filing.get_client_folder_path(client)

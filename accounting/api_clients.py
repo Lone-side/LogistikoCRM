@@ -112,19 +112,32 @@ class ClientDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at', 'updated_at']
 
+    def _user_has_perm(self, perm):
+        # Απόφαση (γύρος 13): τα computed counts παιδικών μοντέλων
+        # επιστρέφονται ως null σε χρήστη χωρίς το αντίστοιχο view
+        # permission (conditional null, όχι 403 σε όλο το client detail).
+        request = self.context.get('request')
+        return bool(request and request.user.has_perm(perm))
+
     def get_obligations_count(self, obj):
+        if not self._user_has_perm('accounting.view_monthlyobligation'):
+            return None
         # Use annotated value if available (avoids N+1 queries)
         if hasattr(obj, '_obligations_count'):
             return obj._obligations_count
         return obj.monthly_obligations.count()
 
     def get_documents_count(self, obj):
+        if not self._user_has_perm('accounting.view_clientdocument'):
+            return None
         # Use annotated value if available (avoids N+1 queries)
         if hasattr(obj, '_documents_count'):
             return obj._documents_count
         return obj.documents.count()
 
     def get_pending_obligations_count(self, obj):
+        if not self._user_has_perm('accounting.view_monthlyobligation'):
+            return None
         # Use annotated value if available (avoids N+1 queries)
         if hasattr(obj, '_pending_obligations_count'):
             return obj._pending_obligations_count
@@ -179,9 +192,11 @@ class ClientCreateUpdateSerializer(serializers.ModelSerializer):
         check_digit = (total % 11) % 10
         if check_digit != int(value[8]):
             # Log warning but allow saving (some valid AFMs may fail checksum)
+            # — μασκαρισμένο ΑΦΜ, όχι πλήρες PII στα application logs
             import logging
+            from accounting.services.access import mask_pii_value
             logging.getLogger(__name__).warning(
-                f"AFM {value} failed checksum validation (expected {check_digit}, got {value[8]})"
+                f"AFM {mask_pii_value(value)} failed checksum validation"
             )
         return value
 
@@ -230,6 +245,23 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     action_perms = {
         'upload_document': ['accounting.add_clientdocument'],
         'delete_document': ['accounting.delete_clientdocument'],
+        # Nested child actions: απαιτείται και το view permission του
+        # πραγματικού child model, όχι μόνο του ClientProfile
+        'obligations': ['accounting.view_clientprofile',
+                        'accounting.view_monthlyobligation'],
+        'documents': ['accounting.view_clientprofile',
+                      'accounting.view_clientdocument'],
+        'emails': ['accounting.view_clientprofile', 'accounting.view_emaillog'],
+        'calls': ['accounting.view_clientprofile', 'accounting.view_voipcall'],
+        # GET tickets: view perms — το POST ελέγχει επιπλέον add perms
+        # μέσα στο action (ένα action, δύο methods)
+        'tickets': ['accounting.view_clientprofile', 'accounting.view_ticket'],
+        'full': ['accounting.view_clientprofile',
+                 'accounting.view_monthlyobligation',
+                 'accounting.view_clientdocument',
+                 'accounting.view_emaillog',
+                 'accounting.view_voipcall',
+                 'accounting.view_ticket'],
     }
 
     def perform_create(self, serializer):
@@ -613,6 +645,15 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         client = self.get_object()
 
         if request.method == 'POST':
+            # Το POST δημιουργεί Ticket + (dummy) VoIPCall — απαιτεί τα
+            # αντίστοιχα add permissions, όχι μόνο τα view του GET
+            if not request.user.has_perms(
+                ['accounting.add_ticket', 'accounting.add_voipcall']
+            ):
+                return Response(
+                    {'error': 'Δεν έχετε δικαίωμα δημιουργίας ticket.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             # Create new ticket (manual, not from missed call)
             title = request.data.get('title')
             description = request.data.get('description', '')

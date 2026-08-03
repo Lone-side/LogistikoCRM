@@ -36,6 +36,13 @@ def client_report_pdf(request, client_id):
             status=500
         )
 
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(
+        request, 'accounting.view_clientprofile',
+        'accounting.view_monthlyobligation',
+    ):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     # Get all obligations for stats calculation (before slicing)
@@ -74,11 +81,11 @@ def client_report_pdf(request, client_id):
         response = HttpResponse(pdf, content_type='application/pdf')
         safe_name = client.afm.replace(' ', '_')
         response['Content-Disposition'] = f'filename="client_{safe_name}.pdf"'
-        logger.info(f"PDF report generated for client {client.afm} by {request.user.username}")
+        logger.info(f"PDF report generated for client id={client.pk} by {request.user.username}")
         return response
     except Exception as e:
         logger.error(f"Error generating PDF for client {client_id}: {e}", exc_info=True)
-        return HttpResponse(f'Σφάλμα δημιουργίας PDF: {str(e)}', status=500)
+        return HttpResponse('Σφάλμα δημιουργίας PDF', status=500)
 
 
 @staff_member_required
@@ -87,6 +94,13 @@ def monthly_report_pdf(request, year, month):
     Generate PDF report for a specific month.
     Includes all obligations for that period.
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(
+        request, 'accounting.view_clientprofile',
+        'accounting.view_monthlyobligation',
+    ):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     from io import BytesIO
     try:
         from xhtml2pdf import pisa
@@ -151,4 +165,4 @@ def monthly_report_pdf(request, year, month):
         return response
     except Exception as e:
         logger.error(f"Error generating monthly PDF for {month}/{year}: {e}", exc_info=True)
-        return HttpResponse(f'Σφάλμα δημιουργίας PDF: {str(e)}', status=500)
+        return HttpResponse('Σφάλμα δημιουργίας PDF', status=500)

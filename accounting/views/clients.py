@@ -32,6 +32,10 @@ def client_detail_view(request, client_id):
     """
     Comprehensive client view with all obligations and analytics
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_clientprofile'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     client = get_object_or_404(accessible_clients(request.user), id=client_id)
     now = timezone.now()
 

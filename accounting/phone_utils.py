@@ -8,6 +8,7 @@ Description: Phone number normalization and client matching utilities
 import re
 import logging
 from django.db.models import Q
+from accounting.services.access import mask_pii_value
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ def find_client_by_phone(phone_number, clients_qs=None):
         # Too short to be a valid phone number
         return None
 
-    logger.debug(f"Searching for client with normalized phone: {normalized}")
+    logger.debug(f"Searching for client with normalized phone: {mask_pii_value(normalized)}")
 
     base_qs = clients_qs if clients_qs is not None else ClientProfile.objects.all()
     clients = base_qs.filter(is_active=True)
@@ -121,10 +122,10 @@ def find_client_by_phone(phone_number, clients_qs=None):
 
         for field_value in phone_fields:
             if field_value and phone_matches(field_value, phone_number):
-                logger.info(f"Found client {client.id} ({client.eponimia}) for phone {phone_number}")
+                logger.info(f"Found client {client.id} for phone {mask_pii_value(phone_number)}")
                 return client
 
-    logger.debug(f"No client found for phone: {phone_number}")
+    logger.debug(f"No client found for phone: {mask_pii_value(phone_number)}")
     return None
 
 

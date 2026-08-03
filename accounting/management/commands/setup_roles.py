@@ -18,6 +18,12 @@ ROLES = {
     'Διαχειριστής': {
         'app_all': ['accounting', 'mydata', 'inventory'],
         'extra': ['view_all_clients', 'view_client_credential_secret'],
+        # Backup: μόνο ο Διαχειριστής — το σκέτο is_staff ΔΕΝ αρκεί πλέον
+        # στα backup endpoints (πλήρες dump βάσης + media)
+        'settings_app': [
+            'view_backupsettings', 'change_backupsettings',
+            'can_create_backup', 'can_restore_backup', 'can_download_backup',
+        ],
     },
     'Λογιστής': {
         'codenames': [
@@ -97,6 +103,11 @@ class Command(BaseCommand):
                 perms = perms | Permission.objects.filter(
                     codename__in=spec['extra'],
                     content_type__app_label__in=role_apps,
+                )
+            if 'settings_app' in spec:
+                perms = perms | Permission.objects.filter(
+                    codename__in=spec['settings_app'],
+                    content_type__app_label='settings',
                 )
 
             group.permissions.set(perms.distinct())

@@ -38,6 +38,10 @@ def calendar_view(request):
     Προβολή ημερολογίου υποχρεώσεων με FullCalendar
     Features: Month/Week/List views, filters, color-coded status
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     today = timezone.now().date()
 
     # Get all clients for filter dropdown
@@ -85,6 +89,9 @@ def calendar_events_api(request):
     API endpoint for FullCalendar events
     Returns JSON with obligations formatted for FullCalendar
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse({'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     # Get date range from FullCalendar
     start_str = request.GET.get('start', '')
     end_str = request.GET.get('end', '')

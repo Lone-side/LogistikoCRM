@@ -212,4 +212,5 @@ jobs:
             tests.accounting.test_rbac_enforcement \
             tests.accounting.test_final_hardening \
             tests.accounting.test_rbac_round12 \
+            tests.accounting.test_rbac_round13 \
             -v 2

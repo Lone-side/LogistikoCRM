@@ -250,7 +250,7 @@ def ensure_folders(client, year=None):
         return base_path
 
     except OSError as e:
-        logger.error(f"Αποτυχία δημιουργίας φακέλων πελάτη {client.afm}: {e}")
+        logger.error(f"Αποτυχία δημιουργίας φακέλων πελάτη id={client.pk}: {e}")
         return None
 
 

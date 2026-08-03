@@ -274,7 +274,9 @@ class SetupRolesAppLabelTest(TestCase):
 
     def test_role_permissions_scoped_to_role_apps(self):
         call_command('setup_roles', verbosity=0)
-        allowed = {'accounting', 'mydata', 'inventory'}
+        # Γύρος 13: ο Διαχειριστής παίρνει και τα backup permissions
+        # του settings app (view/change_backupsettings, can_*_backup)
+        allowed = {'accounting', 'mydata', 'inventory', 'settings'}
         for role in ('Διαχειριστής', 'Λογιστής', 'Βοηθός'):
             group = Group.objects.get(name=role)
             labels = set(

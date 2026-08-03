@@ -6,14 +6,21 @@ Description: REST API endpoints για GSIS (αναζήτηση στοιχείω
 """
 
 import logging
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.throttling import UserRateThrottle
 
 from .gsis_client import lookup_afm, get_gsis_client, GSISError
+from accounting.services.access import mask_pii_value, require_model_perms
 
 logger = logging.getLogger(__name__)
+
+
+class AfmLookupThrottle(UserRateThrottle):
+    """Όριο στα GSIS lookups — μοιραζόμαστε τα credentials του γραφείου."""
+    scope = 'afm_lookup'
 
 
 def _require_settings_admin(request):
@@ -32,6 +39,8 @@ def _require_settings_admin(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([AfmLookupThrottle])
+@require_model_perms('accounting.view_clientprofile')
 def afm_lookup(request):
     """
     POST /api/v1/afm-lookup/
@@ -93,7 +102,7 @@ def afm_lookup(request):
         }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
     try:
-        logger.info(f"AFM lookup requested for: {afm} by user: {request.user}")
+        logger.info(f"AFM lookup requested for: {mask_pii_value(afm)} by user: {request.user}")
         info = lookup_afm(afm)
 
         return Response({
@@ -102,14 +111,14 @@ def afm_lookup(request):
         })
 
     except GSISError as e:
-        logger.warning(f"GSIS lookup failed for AFM {afm}: {e}")
+        logger.warning(f"GSIS lookup failed for AFM {mask_pii_value(afm)}: {e}")
         return Response({
             'success': False,
             'error': str(e)
         }, status=status.HTTP_400_BAD_REQUEST)
 
     except Exception as e:
-        logger.error(f"Unexpected error during AFM lookup for {afm}: {e}")
+        logger.error(f"Unexpected error during AFM lookup for {mask_pii_value(afm)}: {e}")
         return Response({
             'success': False,
             'error': 'Απρόσμενο σφάλμα κατά την αναζήτηση.'

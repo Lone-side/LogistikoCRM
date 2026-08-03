@@ -15,6 +15,8 @@ from datetime import timedelta
 from .models import VoIPCall, Ticket, VoIPCallLog, MonthlyObligation, EmailTemplate, ScheduledEmail
 import logging
 
+from accounting.services.access import mask_pii_value
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,7 +50,7 @@ def create_or_update_ticket_for_missed_call(self, call_id):
         
         if existing_ticket:
             # ========== UPDATE EXISTING TICKET ==========
-            logger.info(f"Found existing ticket #{existing_ticket.id} for {call.phone_number}")
+            logger.info(f"Found existing ticket #{existing_ticket.id} for call {call.call_id}")
             
             missed_count = VoIPCall.objects.filter(
                 phone_number=call.phone_number,
@@ -86,7 +88,7 @@ def create_or_update_ticket_for_missed_call(self, call_id):
             
         else:
             # ========== CREATE NEW TICKET ==========
-            logger.info(f"Creating new ticket for {call.phone_number}")
+            logger.info(f"Creating new ticket for {mask_pii_value(call.phone_number)}")
             
             ticket = Ticket.objects.create(
                 call=call,
@@ -108,7 +110,7 @@ def create_or_update_ticket_for_missed_call(self, call_id):
                 description=f"New ticket #{ticket.id} for missed call"
             )
             
-            logger.info(f"✅ Ticket #{ticket.id} created for {call.phone_number}")
+            logger.info(f"✅ Ticket #{ticket.id} created for {mask_pii_value(call.phone_number)}")
             return ticket.id
             
     except VoIPCall.DoesNotExist:
@@ -242,7 +244,7 @@ def send_obligation_reminders():
 
                 # Skip if no email
                 if not client.email:
-                    logger.warning(f"Client {client.afm} has no email - skipping")
+                    logger.warning(f"Client id={client.pk} has no email - skipping")
                     continue
 
                 template = get_reminder_template(obligation.obligation_type)
@@ -311,7 +313,7 @@ def send_obligation_reminders():
                 log_entry.obligations.add(obligation)
 
                 sent_count += 1
-                logger.info(f"✅ Reminder sent to {client.email} for obligation {obligation.obligation_type.name}")
+                logger.info(f"✅ Reminder sent to client id={client.pk} for obligation {obligation.obligation_type.name}")
 
             except Exception as e:
                 logger.error(f"❌ Error sending reminder for obligation #{obligation.id}: {e}")
@@ -465,9 +467,9 @@ def send_daily_summary():
                     fail_silently=False,
                 )
                 sent_count += 1
-                logger.info(f"✅ Daily summary sent to {user.email}")
+                logger.info(f"✅ Daily summary sent to user id={user.pk}")
             except Exception as e:
-                logger.error(f"❌ Error sending summary to {user.email}: {e}")
+                logger.error(f"❌ Error sending summary to user id={user.pk}: {e}")
                 continue
         
         logger.info(f"✅ Daily summary sent to {sent_count}/{team_users.count()} team members")
