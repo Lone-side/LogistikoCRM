@@ -244,6 +244,7 @@ def email_template_detail(request, template_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_emailtemplate', 'accounting.view_clientprofile')
 def preview_email(request):
     """
     POST /api/v1/email/preview/

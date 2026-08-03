@@ -80,10 +80,19 @@ class Command(BaseCommand):
                 perms = Permission.objects.filter(
                     content_type__app_label__in=spec['app_all']
                 )
+            # Πάντα με app_label — σκέτο codename μπορεί μελλοντικά να
+            # ταιριάξει ομώνυμο permission άλλου app (π.χ. view_invoice)
+            role_apps = ('accounting', 'mydata', 'inventory')
             if 'codenames' in spec:
-                perms = Permission.objects.filter(codename__in=spec['codenames'])
+                perms = Permission.objects.filter(
+                    codename__in=spec['codenames'],
+                    content_type__app_label__in=role_apps,
+                )
             if 'extra' in spec:
-                perms = perms | Permission.objects.filter(codename__in=spec['extra'])
+                perms = perms | Permission.objects.filter(
+                    codename__in=spec['extra'],
+                    content_type__app_label__in=role_apps,
+                )
 
             group.permissions.set(perms.distinct())
             verb = 'Δημιουργήθηκε' if created else 'Ενημερώθηκε'

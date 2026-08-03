@@ -50,11 +50,27 @@ def global_search(request):
         })
 
     try:
+        # RBAC: κάθε κατηγορία απαιτεί το αντίστοιχο view_* permission —
+        # χρήστης χωρίς ρόλο (κανένα view perm) παίρνει κενά αποτελέσματα
+        # αντί να διαβάζει ΑΦΜ/emails/κλήσεις από εναλλακτική διαδρομή.
+        user = request.user
         results = {
-            'clients': search_clients(query, user=request.user),
-            'obligations': search_obligations(query, user=request.user),
-            'tickets': search_tickets(query, user=request.user),
-            'calls': search_calls(query, user=request.user)
+            'clients': (
+                search_clients(query, user=user)
+                if user.has_perm('accounting.view_clientprofile') else []
+            ),
+            'obligations': (
+                search_obligations(query, user=user)
+                if user.has_perm('accounting.view_monthlyobligation') else []
+            ),
+            'tickets': (
+                search_tickets(query, user=user)
+                if user.has_perm('accounting.view_ticket') else []
+            ),
+            'calls': (
+                search_calls(query, user=user)
+                if user.has_perm('accounting.view_voipcall') else []
+            ),
         }
 
         total = sum(len(v) for v in results.values())

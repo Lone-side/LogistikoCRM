@@ -647,7 +647,8 @@ def vat_summary(request):
         vat_periods = VATPeriodResult.objects.filter(
             client__in=ClientQS,
             year=year,
-            period_type='M' if period_type == 'month' else 'Q'
+            # Το VATPeriodResult αποθηκεύει 'monthly'/'quarterly' (όχι 'M'/'Q')
+            period_type='monthly' if period_type == 'month' else 'quarterly'
         )
         if period_type == 'month':
             vat_periods = vat_periods.filter(period__in=months)

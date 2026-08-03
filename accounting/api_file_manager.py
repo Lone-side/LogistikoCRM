@@ -69,7 +69,7 @@ from .models import (
     DocumentFavorite, DocumentCollection, get_client_folder
 )
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient, ClientModelPermissions
+from .permissions import CanAccessClient, ClientModelPermissions, RequiredModelPerms
 
 logger = logging.getLogger(__name__)
 
@@ -1331,7 +1331,8 @@ class CollectionViewSet(viewsets.ModelViewSet):
 
 class FileManagerStatsView(APIView):
     """Get file manager statistics"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequiredModelPerms]
+    required_perms = ['accounting.view_clientdocument']
 
     def get(self, request):
         from accounting.services.access import accessible_documents
@@ -1390,7 +1391,8 @@ class FileManagerStatsView(APIView):
 
 class RecentDocumentsView(APIView):
     """Get recent documents"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequiredModelPerms]
+    required_perms = ['accounting.view_clientdocument']
 
     def get(self, request):
         try:
@@ -1410,7 +1412,8 @@ class RecentDocumentsView(APIView):
 
 class BrowseFoldersView(APIView):
     """Browse folder structure"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequiredModelPerms]
+    required_perms = ['accounting.view_clientdocument', 'accounting.view_clientprofile']
 
     def get(self, request):
         from accounting.services.access import (

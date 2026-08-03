@@ -83,8 +83,14 @@ class DestroyRequiresAdminTest(TestCase):
         self.staff = grant_accounting_model_perms(User.objects.create_user(
             'plain-staff', 'staff@office.gr', 'pass12345', is_staff=False
         ))
+        # Γύρος 9: το σκέτο is_staff δεν αρκεί πλέον για διαγραφές —
+        # απαιτείται delete_* permission + see-all (superuser/Διαχειριστής)
         self.admin = User.objects.create_user(
-            'admin-staff', 'admin@office.gr', 'pass12345', is_staff=True
+            'admin-staff', 'admin@office.gr', 'pass12345',
+            is_staff=True, is_superuser=True,
+        )
+        self.plain_staff = User.objects.create_user(
+            'staff-no-role', 'staff2@office.gr', 'pass12345', is_staff=True
         )
         self.crm_client = ClientProfile.objects.create(
             afm='123456783', eponimia='ΠΕΛΑΤΗΣ ΑΕ', eidos_ipoxreou='company',
@@ -99,6 +105,13 @@ class DestroyRequiresAdminTest(TestCase):
 
     def test_non_admin_cannot_delete_client(self):
         self.client.force_login(self.staff)
+        resp = self.client.delete(f'/accounting/api/v1/clients/{self.crm_client.pk}/')
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(ClientProfile.objects.filter(pk=self.crm_client.pk).exists())
+
+    def test_plain_staff_cannot_delete_client(self):
+        # Εύρημα review γύρου 9: is_staff χωρίς delete perm + see-all → 403
+        self.client.force_login(self.plain_staff)
         resp = self.client.delete(f'/accounting/api/v1/clients/{self.crm_client.pk}/')
         self.assertEqual(resp.status_code, 403)
         self.assertTrue(ClientProfile.objects.filter(pk=self.crm_client.pk).exists())

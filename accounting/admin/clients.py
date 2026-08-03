@@ -780,6 +780,22 @@ class DocumentRequestItemInline(admin.TabularInline):
     fields = ['label', 'category', 'is_received', 'received_document', 'received_at']
     readonly_fields = ['received_at']
 
+    def get_formset(self, request, obj=None, **kwargs):
+        # Κρατάμε το parent DocumentRequest για να περιορίσουμε το
+        # received_document στα έγγραφα του πελάτη του αιτήματος
+        self._parent_request = obj
+        return super().get_formset(request, obj, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'received_document':
+            from accounting.services.access import accessible_documents
+            qs = accessible_documents(request.user)
+            parent = getattr(self, '_parent_request', None)
+            if parent is not None:
+                qs = qs.filter(client=parent.client)
+            kwargs['queryset'] = qs.select_related('client')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 @admin.register(DocumentRequest)
 class DocumentRequestAdmin(admin.ModelAdmin):

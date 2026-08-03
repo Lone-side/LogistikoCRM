@@ -201,9 +201,24 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
 
     def _validate_client_id(self, serializer):
         # Το client_id στο payload μόνο για προσβάσιμο πελάτη
+        from accounting.mixins import user_sees_all_clients
         from accounting.services.access import get_accessible_client_or_404
         client_id = serializer.validated_data.get('client_id')
         if client_id is None:
+            # Ρητό client_id=None σε assigned κλήση = μετατροπή σε
+            # "unassigned", που την κάνει ορατή σε ΟΛΟΥΣ τους χρήστες με
+            # view_voipcall. Επιτρέπεται μόνο σε see-all χρήστες.
+            if (
+                'client_id' in serializer.validated_data
+                and serializer.instance is not None
+                and serializer.instance.client_id is not None
+                and getattr(self.request.user, 'is_authenticated', False)
+                and not user_sees_all_clients(self.request.user)
+            ):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied(
+                    'Η αφαίρεση πελάτη από κλήση επιτρέπεται μόνο σε διαχειριστές.'
+                )
             return
         if not getattr(self.request.user, 'is_authenticated', False):
             # Service caller (Fritz monitor / localhost): δεν επιτρέπεται να
@@ -529,8 +544,22 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     def _check_client_id(self, serializer):
         # Το client/client_id στο payload πρέπει να δείχνει σε προσβάσιμο πελάτη
+        from accounting.mixins import user_sees_all_clients
         from accounting.services.access import get_accessible_client_or_404, user_can_access_client
         from django.http import Http404
+        # Ρητό client_id=None σε assigned ticket = μετατροπή σε "unassigned"
+        # (ορατό σε όλους με view_ticket) — μόνο για see-all χρήστες.
+        if (
+            'client_id' in serializer.validated_data
+            and serializer.validated_data['client_id'] is None
+            and serializer.instance is not None
+            and serializer.instance.client_id is not None
+            and not user_sees_all_clients(self.request.user)
+        ):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                'Η αφαίρεση πελάτη από ticket επιτρέπεται μόνο σε διαχειριστές.'
+            )
         client = serializer.validated_data.get('client')
         if client is not None and not user_can_access_client(self.request.user, client):
             raise Http404('ClientProfile not found')

@@ -1095,8 +1095,13 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Only admin can unlock
-        if not request.user.is_staff:
+        # Μόνο Διαχειριστής (superuser ή view_all_clients) — το σκέτο
+        # is_staff θα επέτρεπε σε staff Λογιστή με change_vatperiodresult
+        # να ξεκλειδώνει κλειδωμένες περιόδους
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm('accounting.view_all_clients')
+        ):
             return Response(
                 {'error': 'Μόνο διαχειριστές μπορούν να ξεκλειδώσουν περιόδους'},
                 status=status.HTTP_403_FORBIDDEN

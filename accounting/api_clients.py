@@ -8,7 +8,7 @@ Description: REST API ViewSet for ClientProfile management
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter, BooleanFilter
 from django.db.models import Count, Q
@@ -16,7 +16,7 @@ from django.db.models import Count, Q
 from .models import ClientProfile, MonthlyObligation, ClientDocument
 from .serializers import ClientDocumentSerializer
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient, ClientModelPermissions
+from .permissions import CanAccessClient, ClientModelPermissions, IsSeeAllAdmin
 
 
 class ClientPagination(PageNumberPagination):
@@ -275,9 +275,15 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             )
 
     def get_permissions(self):
-        # Διαγραφή πελάτη (και όλου του ιστορικού του) μόνο από admins
+        # Διαγραφή πελάτη (και όλου του ιστορικού του): απαιτείται το model
+        # permission delete_clientprofile (μέσω ClientModelPermissions) ΚΑΙ
+        # ρόλος Διαχειριστή (superuser ή view_all_clients) — το σκέτο
+        # is_staff θα επέτρεπε σε staff Λογιστή να διαγράφει πελάτες.
         if self.action == 'destroy':
-            return [IsAuthenticated(), IsAdminUser()]
+            return [
+                IsAuthenticated(), ClientModelPermissions(),
+                CanAccessClient(), IsSeeAllAdmin(),
+            ]
         return super().get_permissions()
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ClientFilter

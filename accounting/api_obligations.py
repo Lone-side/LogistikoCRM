@@ -8,7 +8,7 @@ Description: REST API ViewSet for MonthlyObligation management
 from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import (
     DjangoFilterBackend, FilterSet, CharFilter,
@@ -233,7 +233,7 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
 # ============================================
 
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient, ClientModelPermissions
+from .permissions import CanAccessClient, ClientModelPermissions, IsSeeAllAdmin
 
 
 class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
@@ -260,10 +260,14 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     pagination_class = ObligationPagination
 
     def get_permissions(self):
-        # Διαγραφή υποχρέωσης μόνο από admins — οι υπόλοιποι τη σημειώνουν
-        # ως «Ακυρώθηκε» αντί να σβήνουν ιστορικό
+        # Διαγραφή υποχρέωσης μόνο από Διαχειριστή (όχι σκέτο is_staff) και
+        # με delete_monthlyobligation — οι υπόλοιποι τη σημειώνουν ως
+        # «Ακυρώθηκε» αντί να σβήνουν ιστορικό
         if self.action == 'destroy':
-            return [IsAuthenticated(), IsAdminUser()]
+            return [
+                IsAuthenticated(), ClientModelPermissions(),
+                CanAccessClient(), IsSeeAllAdmin(),
+            ]
         return super().get_permissions()
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ObligationFilter

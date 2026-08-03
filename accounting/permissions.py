@@ -153,6 +153,44 @@ class CanAccessClient(BasePermission):
         return client.assigned_users.filter(pk=request.user.pk).exists()
 
 
+class RequiredModelPerms(BasePermission):
+    """
+    Για APIViews χωρίς queryset (stats, browse, recent): επιβάλλει τα
+    Django model permissions που δηλώνει το view στο `required_perms`,
+    π.χ. required_perms = ['accounting.view_clientdocument'].
+    """
+
+    def has_permission(self, request, view):
+        perms = getattr(view, 'required_perms', [])
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.has_perms(perms):
+            return True
+        from accounting.services.access import _audit_deny
+        _audit_deny(
+            request.user, request,
+            f'{request.method} {request.path}: λείπουν δικαιώματα {sorted(perms)}',
+        )
+        return False
+
+
+class IsSeeAllAdmin(BasePermission):
+    """
+    Superuser ή κάτοχος accounting.view_all_clients (ρόλος Διαχειριστή).
+
+    Για ενέργειες που δεν επιτρέπονται σε scoped ρόλους (π.χ. διαγραφή
+    πελάτη με όλο το ιστορικό του) — το σκέτο is_staff ΔΕΝ αρκεί, γιατί
+    ένας staff Λογιστής παραμένει scoped χρήστης χωρίς δικαίωμα διαγραφής.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user and user.is_authenticated
+            and (user.is_superuser or user.has_perm('accounting.view_all_clients'))
+        )
+
+
 class ClientModelPermissions(DjangoModelPermissions):
     """
     DjangoModelPermissions με απαίτηση view_* και στα GET/HEAD.

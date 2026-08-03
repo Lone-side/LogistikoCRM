@@ -46,6 +46,13 @@ def check_existing_document(request):
     Returns:
         JSON με πληροφορίες για υπάρχον έγγραφο ή null
     """
+    # RBAC: ανάγνωση στοιχείων εγγράφου απαιτεί view_clientdocument
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
+
     client_id = request.GET.get('client_id')
     obligation_id = request.GET.get('obligation_id')
     category = request.GET.get('category')
@@ -263,7 +270,11 @@ def document_preview(request, document_id):
     Returns:
         JSON με URL και metadata για preview
     """
-    from accounting.services.access import get_accessible_document_or_404
+    from accounting.services.access import check_model_perms, get_accessible_document_or_404
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
     document = get_accessible_document_or_404(request.user, document_id, request=request)
 
     # Determine preview type
@@ -339,6 +350,14 @@ def suggest_document_metadata(request):
     from settings.models import FilingSystemSettings
     from .services import filing, text_extraction
 
+    # RBAC: το suggest τρέχει μόνο ως προετοιμασία upload — απαιτεί το
+    # ίδιο permission με το upload (add_clientdocument)
+    from accounting.services.access import accessible_clients, check_model_perms
+    if not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
+
     if 'file' not in request.FILES:
         return JsonResponse({'error': 'Δεν επιλέχθηκε αρχείο'}, status=400)
 
@@ -351,7 +370,9 @@ def suggest_document_metadata(request):
     client = None
     client_id = request.POST.get('client_id')
     if client_id:
-        client = ClientProfile.objects.filter(id=client_id).first()
+        # Μόνο προσβάσιμος πελάτης — όχι global lookup (θα αποκάλυπτε
+        # ΑΦΜ match/όνομα ξένου πελάτη μέσω του suggested_filename)
+        client = accessible_clients(request.user).filter(id=client_id).first()
 
     # Εξαγωγή in-memory, μόνο πρώτες σελίδες
     text, _status = text_extraction.extract_text_from_file(

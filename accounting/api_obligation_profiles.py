@@ -71,7 +71,14 @@ class ClientObligationProfileSerializer(serializers.Serializer):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def clients_obligation_status(request):
-    from accounting.services.access import accessible_clients
+    from accounting.services.access import accessible_clients, check_model_perms
+    if not check_model_perms(
+        request, 'accounting.view_clientprofile', 'accounting.view_clientobligation'
+    ):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     GET /api/v1/clients/obligation-status/
     Returns all clients with their obligation profile status
@@ -178,7 +185,12 @@ def client_obligation_profile(request, client_id):
     Updates the client's obligation profile
     Body: { obligation_type_ids: [1,2,3], obligation_profile_ids: [1] }
     """
-    from accounting.services.access import get_accessible_client_or_404
+    from accounting.services.access import check_model_perms, get_accessible_client_or_404
+    if not check_model_perms(request, 'accounting.view_clientobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     client = get_accessible_client_or_404(request.user, client_id, request=request)
 
     if request.method == 'GET':

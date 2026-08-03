@@ -27,6 +27,15 @@ def global_search_api(request):
     Searches by client name (eponimia), AFM, email, and obligation type.
     Returns max 5 results per category.
     """
+    # RBAC: εκτός από staff, απαιτούνται και τα view_* model permissions
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(
+        request, 'accounting.view_clientprofile', 'accounting.view_monthlyobligation'
+    ):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
+
     query = request.GET.get('q', '').strip()
 
     if len(query) < 2:
