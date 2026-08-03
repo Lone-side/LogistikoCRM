@@ -13,7 +13,7 @@ from django.contrib.auth.models import Group, User
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
+from tests.accounting.secure_client import SecureAPIClient as APIClient
 
 from accounting.models import (
     ClientCredential, ClientDocument, ClientProfile, MonthlyObligation,

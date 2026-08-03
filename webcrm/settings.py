@@ -801,10 +801,16 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-    # HTTPS redirect — όχι όμως στο test runner (CI security-smoke τρέχει τα
-    # RBAC tests με production settings· ο Django test client μιλάει http
-    # και το 301 θα έκρυβε τα πραγματικά αποτελέσματα των tests)
-    SECURE_SSL_REDIRECT = not TESTING
+    # HTTPS redirect — πάντα ενεργό σε production. Στο CI security-smoke
+    # (DJANGO_ENV=production) μένει ενεργό ΚΑΙ στο test runner: τα RBAC smoke
+    # tests στέλνουν secure=True requests ώστε να ελέγχουν τα πραγματικά
+    # status codes χωρίς να απενεργοποιείται το redirect. Στο απλό CI test
+    # job (DEBUG=False χωρίς DJANGO_ENV=production) η υπόλοιπη σουίτα μιλάει
+    # http, οπότε εκεί μόνο ισχύει η εξαίρεση του TESTING.
+    if os.getenv('DJANGO_ENV', '').lower() == 'production':
+        SECURE_SSL_REDIRECT = True
+    else:
+        SECURE_SSL_REDIRECT = not TESTING
 
     # Secure cookies
     SESSION_COOKIE_SECURE = True

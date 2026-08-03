@@ -22,7 +22,7 @@ from .permissions import ClientModelPermissions
 from rest_framework.response import Response
 
 from .models import (
-    ClientDocument, ClientProfile, DocumentRequest, DocumentRequestItem,
+    ClientDocument, DocumentRequest, DocumentRequestItem,
     SharedLink,
 )
 
@@ -113,10 +113,10 @@ class DocumentRequestCreateSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True, default='')
     send_email = serializers.BooleanField(required=False, default=True)
 
-    def validate_client_id(self, value):
-        if not ClientProfile.objects.filter(pk=value).exists():
-            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε')
-        return value
+    # ΟΧΙ validate_client_id με global existence check: θα επέτρεπε
+    # enumeration (400 «δεν βρέθηκε» vs 404 «δεν έχεις πρόσβαση»). Η ύπαρξη
+    # ΚΑΙ η πρόσβαση ελέγχονται μαζί στο view με get_accessible_client_or_404
+    # — ανύπαρκτος και μη προσβάσιμος πελάτης δίνουν πανομοιότυπο 404.
 
     def validate_items(self, value):
         valid_categories = dict(ClientDocument.CATEGORY_CHOICES)

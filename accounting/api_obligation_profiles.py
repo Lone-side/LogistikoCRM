@@ -269,6 +269,12 @@ def client_obligation_profile(request, client_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def obligation_types_grouped(request):
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_obligationtype'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     GET /api/v1/obligation-types/grouped/
     Returns obligation types grouped by their exclusion_group (category)
@@ -331,6 +337,12 @@ def obligation_profiles_list(request):
     GET /api/v1/obligation-profiles/
     Returns all reusable obligation profiles
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_obligationprofile'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     profiles = ObligationProfile.objects.all().prefetch_related('obligation_types')
     serializer = ObligationProfileSerializer(profiles, many=True)
     return Response(serializer.data)

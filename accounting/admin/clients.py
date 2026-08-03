@@ -119,6 +119,16 @@ class ClientProfileAdmin(admin.ModelAdmin):
             readonly.append('assigned_users')
         return readonly
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Όπως στο API: scoped χρήστης που δημιουργεί πελάτη τον παίρνει
+        # αυτόματα ως ανάθεση, αλλιώς δεν θα τον έβλεπε καν μετά το save.
+        # (Το assigned_users είναι readonly για scoped χρήστες, οπότε δεν
+        # μπορεί να οριστεί αυθαίρετα από τη φόρμα.)
+        from accounting.mixins import user_sees_all_clients
+        if not change and not user_sees_all_clients(request.user):
+            obj.assigned_users.add(request.user)
+
     @admin.display(description='Υποχρεώσεις')
     def obligations_status(self, obj):
         """Εμφάνιση κατάστασης υποχρεώσεων πελάτη"""

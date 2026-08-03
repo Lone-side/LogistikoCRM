@@ -33,6 +33,9 @@ ROLES = {
             'view_client_credential_secret',
             # Υποχρεώσεις: προφίλ/τύποι/αναθέσεις
             'view_obligationprofile', 'view_obligationtype', 'view_obligationgroup',
+            # Global ρυθμίσεις αρχειοθέτησης: μόνο view — create/change/delete
+            # μόνο ο Διαχειριστής (επηρεάζουν όλο το γραφείο)
+            'view_archiveconfiguration',
             'add_clientobligation', 'change_clientobligation', 'view_clientobligation',
             # Email: templates + αποστολή σε πελάτες
             'add_emailtemplate', 'change_emailtemplate', 'view_emailtemplate',

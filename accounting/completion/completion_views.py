@@ -997,7 +997,16 @@ def open_client_folder(request, client_id):
 def archive_settings_view(request):
     """
     Προβολή και επεξεργασία ρυθμίσεων αρχειοθέτησης.
+    Global ρυθμίσεις όλου του γραφείου — model permissions πέρα από staff.
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_archiveconfiguration'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα για αυτή την ενέργεια.')
+    if request.method == 'POST' and not check_model_perms(
+        request, 'accounting.change_archiveconfiguration'
+    ):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα για αυτή την ενέργεια.')
     # Current settings
     archive_root = getattr(settings, 'ARCHIVE_ROOT', settings.MEDIA_ROOT)
     media_root = settings.MEDIA_ROOT
@@ -1059,6 +1068,12 @@ def archive_config_create(request):
     """
     Δημιουργία νέας ρύθμισης αρχειοθέτησης.
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.add_archiveconfiguration'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
     obligation_type_id = request.POST.get('obligation_type_id')
     if not obligation_type_id:
         return JsonResponse({'success': False, 'error': 'Δεν επιλέχθηκε τύπος'}, status=400)

@@ -16,7 +16,8 @@ from pathlib import Path
 from django.contrib.auth.models import Group, Permission, User
 from django.core.management import call_command
 from django.test import RequestFactory, TestCase, override_settings
-from rest_framework.test import APIClient
+from tests.accounting.secure_client import SecureAPIClient as APIClient
+from tests.accounting.secure_client import SecureClient
 
 from accounting.models import ClientProfile, MonthlyObligation, ObligationType
 from common.models import AuditLog
@@ -33,6 +34,9 @@ def make_role_user(username, role, clients=(), **extra):
 
 
 class HardeningBase(TestCase):
+    # HTTPS client — το production SECURE_SSL_REDIRECT μένει ενεργό στο smoke
+    client_class = SecureClient
+
     @classmethod
     def setUpTestData(cls):
         call_command('setup_roles', verbosity=0)
@@ -343,3 +347,154 @@ class ScrubAuditPiiTest(TestCase):
         out = io.StringIO()
         call_command('scrub_audit_pii', '--apply', stdout=out)
         self.assertIn('με αλλαγές=0', out.getvalue())
+
+
+# =============================================================================
+# Γύρος 11 — τελικό hardening
+# =============================================================================
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class HttpsRedirectRegressionTest(HardeningBase):
+    """Με ενεργό SECURE_SSL_REDIRECT τα http requests παίρνουν 301 — τα RBAC
+    tests πρέπει να μιλούν https για να ελέγχουν πραγματικά status codes."""
+
+    @override_settings(SECURE_SSL_REDIRECT=True)
+    def test_plain_http_is_redirected_but_https_reaches_view(self):
+        from rest_framework.test import APIClient as PlainAPIClient
+        plain = PlainAPIClient()
+        plain.force_authenticate(self.assistant)
+        resp = plain.get('/accounting/api/v1/clients/', secure=False)
+        self.assertEqual(resp.status_code, 301)
+        secure_resp = self.api(self.assistant).get('/accounting/api/v1/clients/')
+        self.assertEqual(secure_resp.status_code, 200)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class ArchiveSettingsPermissionTest(HardeningBase):
+    """Global archive settings: staff δεν αρκεί — model permissions."""
+
+    ARCHIVE_URL = '/accounting/settings/archive/'
+    CREATE_URL = '/accounting/settings/archive/create/'
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.manager = make_role_user(
+            'dioikitis_h', 'Διαχειριστής', is_staff=True,
+        )
+        cls.staff_accountant = make_role_user(
+            'logistis_staff_h', 'Λογιστής', [cls.client_a], is_staff=True,
+        )
+        cls.staff_assistant = make_role_user(
+            'voithos_staff_arch', 'Βοηθός', [cls.client_a], is_staff=True,
+        )
+
+    def test_manager_can_view_and_change(self):
+        self.client.force_login(self.manager)
+        self.assertEqual(self.client.get(self.ARCHIVE_URL).status_code, 200)
+        resp = self.client.post(self.CREATE_URL, {'obligation_type_id': ''})
+        # Περνάει το permission gate (400 = validation, όχι 403)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_staff_accountant_can_view_but_not_change(self):
+        self.client.force_login(self.staff_accountant)
+        self.assertEqual(self.client.get(self.ARCHIVE_URL).status_code, 200)
+        self.assertEqual(
+            self.client.post(self.ARCHIVE_URL, {'config_id': '1'}).status_code, 403,
+        )
+        self.assertEqual(
+            self.client.post(self.CREATE_URL, {'obligation_type_id': '1'}).status_code,
+            403,
+        )
+
+    def test_staff_assistant_has_no_write_access(self):
+        self.client.force_login(self.staff_assistant)
+        # Ο Βοηθός δεν έχει καν view_archiveconfiguration
+        self.assertEqual(self.client.get(self.ARCHIVE_URL).status_code, 403)
+        self.assertEqual(
+            self.client.post(self.CREATE_URL, {'obligation_type_id': '1'}).status_code,
+            403,
+        )
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class DocumentRequestEnumerationTest(HardeningBase):
+    """Υπαρκτός-μη-προσβάσιμος και ανύπαρκτος πελάτης: πανομοιότυπο 404."""
+
+    URL = '/accounting/api/v1/document-requests/'
+
+    def _payload(self, client_id):
+        return {
+            'client_id': client_id,
+            'title': 'Δικαιολογητικά ΦΠΑ',
+            'items': [{'label': 'Τιμολόγια εξόδων'}],
+            'send_email': False,
+        }
+
+    def test_foreign_client_returns_404_not_400(self):
+        resp = self.api(self.accountant).post(
+            self.URL, self._payload(self.client_b.pk), format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_nonexistent_client_indistinguishable_from_foreign(self):
+        foreign = self.api(self.accountant).post(
+            self.URL, self._payload(self.client_b.pk), format='json',
+        )
+        missing = self.api(self.accountant).post(
+            self.URL, self._payload(999999), format='json',
+        )
+        self.assertEqual(foreign.status_code, 404)
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(foreign.json(), missing.json())
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class ObligationConfigEndpointPermissionTest(HardeningBase):
+    """obligation_types_grouped / obligation_profiles_list: view perms, όχι
+    σκέτο authentication."""
+
+    TYPES_URL = '/accounting/api/v1/obligation-types/grouped/'
+    PROFILES_URL = '/accounting/api/v1/obligation-profiles/'
+
+    def test_authenticated_user_without_perms_403(self):
+        nobody = User.objects.create_user(username='xoris_perms_h', password='x')
+        api = self.api(nobody)
+        self.assertEqual(api.get(self.TYPES_URL).status_code, 403)
+        self.assertEqual(api.get(self.PROFILES_URL).status_code, 403)
+
+    def test_user_with_view_perms_200(self):
+        api = self.api(self.assistant)  # Βοηθός: view_obligationtype/profile
+        self.assertEqual(api.get(self.TYPES_URL).status_code, 200)
+        self.assertEqual(api.get(self.PROFILES_URL).status_code, 200)
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class AdminAutoAssignTest(HardeningBase):
+    """Νέος πελάτης από scoped χρήστη στο admin: αυτόματη ανάθεση."""
+
+    def _save_via_admin(self, user, afm, eponimia):
+        from django.contrib import admin as django_admin
+        model_admin = django_admin.site._registry[ClientProfile]
+        request = RequestFactory().post('/456-admin/accounting/clientprofile/add/')
+        request.user = user
+        obj = ClientProfile(afm=afm, eponimia=eponimia)
+        model_admin.save_model(request, obj, form=None, change=False)
+        return obj
+
+    def test_scoped_accountant_sees_client_immediately(self):
+        staff_accountant = make_role_user(
+            'logistis_admin_aa', 'Λογιστής', [self.client_a], is_staff=True,
+        )
+        obj = self._save_via_admin(staff_accountant, '111111110', 'ΝΕΟΣ ΑΕ')
+        self.assertIn(staff_accountant, obj.assigned_users.all())
+        from django.contrib import admin as django_admin
+        model_admin = django_admin.site._registry[ClientProfile]
+        request = RequestFactory().get('/456-admin/accounting/clientprofile/')
+        request.user = staff_accountant
+        self.assertIn(obj, model_admin.get_queryset(request))
+
+    def test_see_all_manager_not_auto_assigned(self):
+        manager = make_role_user('dioikitis_aa', 'Διαχειριστής', is_staff=True)
+        obj = self._save_via_admin(manager, '111111129', 'ΑΛΛΟΣ ΝΕΟΣ ΑΕ')
+        self.assertEqual(obj.assigned_users.count(), 0)
