@@ -19,6 +19,7 @@ from .phone_utils import auto_match_call, batch_auto_match_calls, find_client_by
 from .permissions import (
     ClientModelPermissions, IsVoIPMonitor, IsLocalRequest, ServiceWriteOnly,
 )
+from .services.access import require_model_perms
 
 import logging
 
@@ -81,16 +82,6 @@ class VoIPCallFullSerializer(serializers.ModelSerializer):
     def get_status_display(self, obj):
         return obj.get_status_display()
 
-    def to_representation(self, instance):
-        """
-        Auto-match call to client if not already matched.
-        This runs when serializing calls for display.
-        """
-        # Try to auto-match if client is not set
-        if instance.client is None:
-            auto_match_call(instance, save=True)
-
-        return super().to_representation(instance)
 
 
 class TicketSerializer(serializers.ModelSerializer):
@@ -422,7 +413,14 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
                 'client': ClientMiniSerializer(call.client).data
             })
 
-        client = auto_match_call(call, save=True)
+        # Scoped χρήστες αντιστοιχίζουν μόνο σε ανατεθειμένους πελάτες τους
+        from accounting.mixins import user_sees_all_clients
+        from accounting.services.access import accessible_clients
+        clients_qs = None
+        if not user_sees_all_clients(request.user):
+            clients_qs = accessible_clients(request.user)
+
+        client = auto_match_call(call, save=True, clients_qs=clients_qs)
 
         if client:
             return Response({
@@ -643,6 +641,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@require_model_perms('accounting.view_voipcall')
 def calls_stats(request):
     """Get call statistics"""
     today = timezone.now().date()
@@ -674,6 +673,7 @@ def calls_stats(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@require_model_perms('accounting.view_ticket')
 def tickets_stats(request):
     """Get ticket statistics"""
     tickets = _scope_by_client(Ticket.objects.all(), request.user)
@@ -701,6 +701,7 @@ def tickets_stats(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile')
 def search_clients_for_match(request):
     """Search clients for matching to a call"""
     query = request.query_params.get('q', '')

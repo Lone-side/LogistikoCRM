@@ -79,7 +79,7 @@ def phone_matches(phone1, phone2):
     return norm1 == norm2
 
 
-def find_client_by_phone(phone_number):
+def find_client_by_phone(phone_number, clients_qs=None):
     """
     Find a ClientProfile by phone number.
 
@@ -90,6 +90,8 @@ def find_client_by_phone(phone_number):
 
     Args:
         phone_number: Phone number to search for
+        clients_qs: Optional queryset περιορισμού (π.χ. accessible_clients(user))
+            — αν δεν δοθεί, ψάχνει σε όλους τους ενεργούς πελάτες
 
     Returns:
         ClientProfile instance if found, None otherwise
@@ -104,8 +106,8 @@ def find_client_by_phone(phone_number):
 
     logger.debug(f"Searching for client with normalized phone: {normalized}")
 
-    # Get all active clients
-    clients = ClientProfile.objects.filter(is_active=True)
+    base_qs = clients_qs if clients_qs is not None else ClientProfile.objects.all()
+    clients = base_qs.filter(is_active=True)
 
     # Check each client's phone numbers
     for client in clients:
@@ -160,13 +162,15 @@ def find_clients_by_phone_query(phone_number):
     )
 
 
-def auto_match_call(call, save=True):
+def auto_match_call(call, save=True, clients_qs=None):
     """
     Attempt to auto-match a VoIP call to a client by phone number.
 
     Args:
         call: VoIPCall instance
         save: If True, save the call after matching
+        clients_qs: Optional queryset περιορισμού της αναζήτησης
+            (π.χ. accessible_clients(user) για scoped χρήστες)
 
     Returns:
         ClientProfile if matched, None otherwise
@@ -177,7 +181,7 @@ def auto_match_call(call, save=True):
         # Already matched
         return call.client
 
-    client = find_client_by_phone(call.phone_number)
+    client = find_client_by_phone(call.phone_number, clients_qs=clients_qs)
 
     if client:
         call.client = client

@@ -39,7 +39,9 @@ class InvoiceAPITest(TestCase):
         from django.contrib.auth.models import Permission
         self.user.user_permissions.add(
             Permission.objects.get(codename='change_invoice',
-                                   content_type__app_label='inventory')
+                                   content_type__app_label='inventory'),
+            Permission.objects.get(codename='view_invoice',
+                                   content_type__app_label='inventory'),
         )
         self.user = User.objects.get(pk=self.user.pk)
         self.client.force_login(self.user)
@@ -114,12 +116,18 @@ class InvoiceAPITest(TestCase):
         self.assertEqual(results[0]['id'], self.invoice.pk)
 
     def test_send_requires_staff(self):
+        from django.contrib.auth.models import Permission
         plain = User.objects.create_user('plain', 'p@test.com', 'pass12345')
+        plain.user_permissions.add(
+            Permission.objects.get(codename='view_invoice',
+                                   content_type__app_label='inventory')
+        )
+        plain = User.objects.get(pk=plain.pk)
         self.client.force_login(plain)
         with patch('mydata.services.MyDataClient'):
             resp = self.client.post(f'{BASE}{self.invoice.pk}/send/')
         self.assertEqual(resp.status_code, 403)
-        # Το list παραμένει διαθέσιμο σε authenticated χρήστες
+        # Το list παραμένει διαθέσιμο σε χρήστες με view_invoice
         resp = self.client.get(BASE)
         self.assertEqual(resp.status_code, 200)
 

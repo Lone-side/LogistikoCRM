@@ -784,3 +784,174 @@ class Round5Test(SurfaceBase):
         admin_user = make_role_user('dioikitis5', 'Διαχειριστής', is_staff=True)
         self.assertTrue(admin_user.has_perm('inventory.change_invoice'))
         self.assertTrue(admin_user.has_perm('inventory.view_invoice'))
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class Round7Test(SurfaceBase):
+    """Γύρος 7: auto-match χωρίς GET-writes, doc perms σε completion,
+    legacy POST perm, bulk delete perm, view perms σε read endpoints."""
+
+    def _make_call(self, phone, call_id):
+        from django.utils import timezone
+        from accounting.models import VoIPCall
+        return VoIPCall.objects.create(
+            call_id=call_id, phone_number=phone, direction='incoming',
+            status='missed', started_at=timezone.now(),
+        )
+
+    def test_call_detail_get_does_not_auto_match(self):
+        # GET δεν γράφει στη βάση και δεν διαρρέει ξένο πελάτη μέσω auto-match
+        self.client_b.kinito_tilefono = '2109990001'
+        self.client_b.save(update_fields=['kinito_tilefono'])
+        call = self._make_call('2109990001', 'r7-get')
+        resp = self.api(self.accountant).get(f'/accounting/api/v1/calls/{call.pk}/')
+        self.assertEqual(resp.status_code, 200)
+        call.refresh_from_db()
+        self.assertIsNone(call.client_id)
+        self.assertNotIn('987654321', resp.content.decode())
+
+    def test_auto_match_action_scoped_no_foreign_match(self):
+        # Scoped χρήστης δεν αντιστοιχίζει κλήση σε μη ανατεθειμένο πελάτη
+        self.client_b.kinito_tilefono = '2109990002'
+        self.client_b.save(update_fields=['kinito_tilefono'])
+        call = self._make_call('2109990002', 'r7-am-b')
+        resp = self.api(self.accountant).post(
+            f'/accounting/api/v1/calls/{call.pk}/auto_match/'
+        )
+        self.assertEqual(resp.status_code, 404)
+        call.refresh_from_db()
+        self.assertIsNone(call.client_id)
+
+    def test_auto_match_action_matches_accessible_client(self):
+        self.client_a.kinito_tilefono = '2109990003'
+        self.client_a.save(update_fields=['kinito_tilefono'])
+        call = self._make_call('2109990003', 'r7-am-a')
+        resp = self.api(self.accountant).post(
+            f'/accounting/api/v1/calls/{call.pk}/auto_match/'
+        )
+        self.assertEqual(resp.status_code, 200)
+        call.refresh_from_db()
+        self.assertEqual(call.client_id, self.client_a.pk)
+
+    def _completion_user(self, username):
+        # change_monthlyobligation + views, ΧΩΡΙΣ add/change_clientdocument
+        from django.contrib.auth.models import Permission
+        user = User.objects.create_user(username, password='x', is_staff=True)
+        user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label='accounting',
+            codename__in=['change_monthlyobligation', 'view_monthlyobligation'],
+        ))
+        self.client_a.assigned_users.add(user)
+        return User.objects.get(pk=user.pk)
+
+    def _obligation_a(self, month=9):
+        return MonthlyObligation.objects.create(
+            client=self.client_a, obligation_type=self.otype, year=2026,
+            month=month, deadline=date(2026, month, 20),
+        )
+
+    def test_complete_and_notify_upload_requires_add_document(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from accounting.models import ClientDocument
+        user = self._completion_user('r7compl1')
+        obl = self._obligation_a(month=9)
+        resp = self.api(user).post(
+            f'/accounting/api/v1/obligations/{obl.pk}/complete-and-notify/',
+            {'file': SimpleUploadedFile('a.pdf', b'%PDF-1.4')},
+        )
+        self.assertEqual(resp.status_code, 403)
+        obl.refresh_from_db()
+        self.assertNotEqual(obl.status, 'completed')
+        self.assertFalse(ClientDocument.objects.filter(obligation=obl).exists())
+
+    def test_complete_and_notify_document_id_requires_change_document(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from accounting.models import ClientDocument
+        user = self._completion_user('r7compl2')
+        obl = self._obligation_a(month=10)
+        doc = ClientDocument.objects.create(
+            client=self.client_a,
+            file=SimpleUploadedFile('b.pdf', b'%PDF-1.4'),
+        )
+        resp = self.api(user).post(
+            f'/accounting/api/v1/obligations/{obl.pk}/complete-and-notify/',
+            {'document_id': doc.pk},
+        )
+        self.assertEqual(resp.status_code, 403)
+        doc.refresh_from_db()
+        self.assertIsNone(doc.obligation_id)
+
+    def test_bulk_complete_upload_requires_add_document(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from accounting.models import ClientDocument
+        user = self._completion_user('r7compl3')
+        obl = self._obligation_a(month=11)
+        resp = self.api(user).post(
+            '/accounting/api/v1/obligations/bulk-complete-with-documents/',
+            {
+                'obligation_ids': f'[{obl.pk}]',
+                f'file_{obl.pk}': SimpleUploadedFile('c.pdf', b'%PDF-1.4'),
+            },
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(ClientDocument.objects.filter(obligation=obl).exists())
+
+    def test_legacy_obligation_detail_post_requires_change_perm(self):
+        # Staff «Βοηθός» με ανατεθειμένο πελάτη δεν αλλάζει την υποχρέωση
+        assistant_staff = make_role_user(
+            'voithos_staff7', 'Βοηθός', [self.client_a], is_staff=True,
+        )
+        obl = self._obligation_a(month=12)
+        obl.notes = 'αρχικό'
+        obl.save(update_fields=['notes'])
+        self.client.force_login(assistant_staff)
+        resp = self.client.post(
+            f'/accounting/obligation/{obl.pk}/', {'notes': 'πειραγμένο'},
+        )
+        self.assertIn(resp.status_code, (302, 403))
+        obl.refresh_from_db()
+        self.assertEqual(obl.notes, 'αρχικό')
+
+    def test_voip_bulk_delete_requires_delete_perm(self):
+        import json as jsonlib
+        from accounting.models import VoIPCall
+        call = self._make_call('2109990004', 'r7-del')
+        self.client.force_login(self.accountant)  # Λογιστής: change, όχι delete
+        resp = self.client.post(
+            '/accounting/voip/api/bulk-action/',
+            jsonlib.dumps({'call_ids': [call.pk], 'action': 'delete'}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
+        # Το change-based action εξακολουθεί να δουλεύει
+        resp = self.client.post(
+            '/accounting/voip/api/bulk-action/',
+            jsonlib.dumps({'call_ids': [call.pk], 'action': 'resolution',
+                           'value': 'closed'}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_read_endpoints_require_view_perms(self):
+        # Assigned χρήστης χωρίς model perms δεν διαβάζει stats/search/mydata
+        bare = User.objects.create_user('r7bare', password='x')
+        self.client_a.assigned_users.add(bare)
+        api = self.api(bare)
+        for url in [
+            '/accounting/api/v1/calls/stats/',
+            '/accounting/api/v1/tickets/stats/',
+            '/accounting/api/v1/clients/search-for-match/?q=ΠΕΛΑΤΗΣ',
+            '/accounting/api/mydata/dashboard/',
+            '/accounting/api/mydata/client/123456789/',
+            '/accounting/api/mydata/trend/',
+            '/accounting/api/mydata/invoices/',
+        ]:
+            resp = api.get(url)
+            self.assertEqual(resp.status_code, 403, f'{url} -> {resp.status_code}')
+
+    def test_accountant_still_reads_stats_and_invoices(self):
+        api = self.api(self.accountant)
+        self.assertEqual(api.get('/accounting/api/v1/calls/stats/').status_code, 200)
+        self.assertEqual(api.get('/accounting/api/mydata/invoices/').status_code, 200)
+        self.assertEqual(api.get('/accounting/api/mydata/dashboard/').status_code, 200)

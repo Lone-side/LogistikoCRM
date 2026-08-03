@@ -27,7 +27,11 @@ from rest_framework.views import APIView
 from accounting.models import ClientProfile
 from accounting.mixins import ClientScopedQuerysetMixin
 from accounting.permissions import CanAccessClient, ClientModelPermissions
-from accounting.services.access import accessible_clients, user_can_access_client
+from accounting.services.access import (
+    accessible_clients, check_model_perms, user_can_access_client,
+)
+
+_PERM_DENIED = {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
 from .models import MyDataCredentials, VATRecord, VATSyncLog
 from .serializers import (
     MyDataCredentialsSerializer,
@@ -615,6 +619,8 @@ class MyDataDashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        if not check_model_perms(request, 'mydata.view_vatrecord'):
+            return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         today = date.today()
         year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
         month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
@@ -706,6 +712,8 @@ class ClientVATDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, afm):
+        if not check_model_perms(request, 'mydata.view_vatrecord'):
+            return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         try:
             client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
@@ -837,6 +845,8 @@ class MonthlyTrendView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        if not check_model_perms(request, 'mydata.view_vatrecord'):
+            return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         afm = request.query_params.get('afm')
         months_count = _parse_int(request.query_params.get('months'), 'months', default=6)
         # Clamp σε λογικά όρια 1..36
@@ -1269,6 +1279,13 @@ class _CanSubmitInvoices(permissions.BasePermission):
         return request.user.has_perm('inventory.change_invoice')
 
 
+class _CanViewInvoices(permissions.BasePermission):
+    """Απαιτεί inventory.view_invoice για ανάγνωση τιμολογίων."""
+
+    def has_permission(self, request, view):
+        return request.user.has_perm('inventory.view_invoice')
+
+
 class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Τιμολόγια (inventory.Invoice) με actions αποστολής/ακύρωσης στο myDATA.
@@ -1285,7 +1302,8 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action in ('send', 'cancel'):
             return [permissions.IsAuthenticated(), permissions.IsAdminUser(),
                     _CanSubmitInvoices()]
-        return super().get_permissions()
+        # list/retrieve: όχι μόνο authenticated — και view permission
+        return [permissions.IsAuthenticated(), _CanViewInvoices()]
 
     def get_queryset(self):
         from inventory.models import Invoice

@@ -766,6 +766,11 @@ def obligation_detail_view(request, obligation_id):
 
         # Handle POST (edit obligation)
         if request.method == 'POST':
+            from accounting.services.access import check_model_perms
+            if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+                messages.error(request, 'Δεν έχετε δικαίωμα επεξεργασίας υποχρεώσεων.')
+                return redirect('accounting:obligation_detail', obligation_id=obligation.id)
+
             # Update obligation fields
             obligation.notes = request.POST.get('notes', '')
 

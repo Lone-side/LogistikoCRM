@@ -329,6 +329,12 @@ urlpatterns = [
         name="client_credentials_reveal",
     ),
 
+    # Standalone endpoints ΠΡΙΝ από τα router includes — αλλιώς τα detail
+    # routes των viewsets (calls/<pk>/, clients/<pk>/) τα σκιάζουν με 404
+    path("api/v1/calls/stats/", calls_stats, name="api_calls_stats"),
+    path("api/v1/tickets/stats/", tickets_stats, name="api_tickets_stats"),
+    path("api/v1/clients/search-for-match/", search_clients_for_match, name="search_clients_for_match"),
+
     # REST ROUTER
     path("api/", include(router.urls)),
     path("api/v1/", include(router.urls)),  # Versioned API endpoint
@@ -337,9 +343,6 @@ urlpatterns = [
     # ENHANCED VOIP/TICKETS API (v2)
     # ============================================
     path("api/v1/", include(router_v2.urls)),  # New calls/tickets endpoints
-    path("api/v1/calls/stats/", calls_stats, name="api_calls_stats"),
-    path("api/v1/tickets/stats/", tickets_stats, name="api_tickets_stats"),
-    path("api/v1/clients/search-for-match/", search_clients_for_match, name="search_clients_for_match"),
 
     # ==================================================
     # JWT AUTHENTICATION ENDPOINTS

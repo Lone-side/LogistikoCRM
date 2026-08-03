@@ -663,6 +663,12 @@ def voip_bulk_action(request):
                 }, status=400)
 
         elif action == 'delete':
+            # Η διαγραφή απαιτεί delete_voipcall (όχι μόνο change)
+            if not check_model_perms(request, 'accounting.delete_voipcall'):
+                return JsonResponse(
+                    {'success': False, 'error': 'Δεν έχετε δικαίωμα διαγραφής κλήσεων.'},
+                    status=403,
+                )
             updated = _scope_by_client(VoIPCall.objects.all(), request.user).filter(id__in=call_ids).delete()[0]
 
         else:

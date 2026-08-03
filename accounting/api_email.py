@@ -533,8 +533,14 @@ def complete_and_notify(request, obligation_id):
     if isinstance(attach_to_email, str):
         attach_to_email = attach_to_email.lower() == 'true'
 
-    # Handle document attachment from existing document
+    # Έλεγχοι permissions εγγράφων ΠΡΙΝ από οποιαδήποτε μεταβολή
     document_id = request.data.get('document_id')
+    if document_id and not check_model_perms(request, 'accounting.change_clientdocument'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+    if 'file' in request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
+    # Handle document attachment from existing document
     if document_id:
         try:
             document = ClientDocument.objects.get(id=document_id, client=client)
@@ -843,6 +849,11 @@ def bulk_complete_with_documents(request):
     attach_to_emails = request.data.get('attach_to_emails', 'false')
     if isinstance(attach_to_emails, str):
         attach_to_emails = attach_to_emails.lower() == 'true'
+
+    # Uploads εγγράφων απαιτούν add_clientdocument — έλεγχος πριν από
+    # οποιαδήποτε μεταβολή
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
     # Parse optional template_id for email
     template_id = request.data.get('template_id')
