@@ -42,7 +42,7 @@ class SharedLinkGatesBase(TestCase):
             uploaded_file=SimpleUploadedFile('έγγραφο.pdf', b'%PDF-1.4'),
             category='vat', year=2026, month=1, on_existing='keep',
             # Γύρος 20: ανώνυμο 'keep' απαιτεί explicit portal capability
-            portal_capability=filing.PortalUploadCapability(1),
+            portal_capability=filing.PortalUploadCapability(1, self.client_profile.pk),
         )
 
     def _make_link(self, **kwargs):

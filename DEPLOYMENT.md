@@ -88,6 +88,85 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build   # τρέχει migrations αυτόματα
 ```
 
+## Migrations 10020/10021 (slot + document invariants) — runbook
+
+Τα migrations `10020_clientdocument_slot_and_current_constraints` και
+`10021_fix_legacy_slot_chains` αγγίζουν ιστορικά `ClientDocument` rows.
+
+**1. Backup πριν από οτιδήποτε**
+
+```bash
+pg_dump -Fc -f pre_10020_$(date +%F_%H%M).dump "$DATABASE_URL"
+tar czf archive_root_$(date +%F).tar.gz "$ARCHIVE_ROOT"
+```
+
+**2. Rehearsal σε αντίγραφο της πραγματικής βάσης** (μέγεθος + χρόνος)
+
+```bash
+psql "$STAGING_URL" -c "SELECT COUNT(*) FROM accounting_clientdocument;"
+time python manage.py migrate --noinput
+python manage.py audit_clientdocument_invariants > audit_after.txt
+```
+
+**3. Ερμηνεία του audit**
+
+| Περιβάλλον | Εντολή | Blocking; |
+|---|---|---|
+| CI (φρέσκια/κενή βάση) | `audit_clientdocument_invariants --fail-on-findings` | **ΝΑΙ** |
+| Production rehearsal / deploy | `audit_clientdocument_invariants` (**χωρίς** flag) | **ΟΧΙ** — αποθήκευση output + χειροκίνητη αξιολόγηση |
+
+Τα findings `legacy-slot-needs-review` είναι **αναμενόμενα** μετά τα
+10020/10021 σε βάση με ιστορικά duplicates: το migration μετέφερε τις
+αμφίβολες chains σε legacy slot και άφησε το κύριο slot (`''`) ελεύθερο.
+Απαιτούν χειροκίνητη επιβεβαίωση, **δεν** μπλοκάρουν το deployment.
+
+Blocking είναι μόνο: αποτυχία του ίδιου του `migrate`, ή **απρόσμενες**
+κατηγορίες findings — `cross-client-obligation`,
+`cross-client-previous-version`, `version-graph-cycle`,
+`duplicate-current-for-key`, `missing-storage-file`.
+
+**4. Components με πολλαπλά current**
+
+Το `10021` **δεν αγγίζει** connected component που περιέχει πάνω από ένα
+`is_current=True` row (branching chain): διατηρεί την constraint-safe
+κατάσταση του `10020` και το αναφέρει ως `branching-chain` /
+`multiple-current-in-chain`. Ποιο branch είναι το «σωστό» δεν μπορεί να
+προκύψει αυτόματα — απαιτείται χειροκίνητη απόφαση από το γραφείο.
+
+**4β. Βάσεις όπου το 10021 έχει ΗΔΗ εφαρμοστεί**
+
+Το `10021` είναι `RunPython`: μια βάση που το έχει ήδη applied **δεν
+ξανατρέχει** τη διορθωμένη λογική. Γι' αυτό υπάρχει το
+`10023_repair_legacy_slot_chains`, που εκτελεί ακόμη μία φορά την ίδια
+(idempotent) διορθωμένη συνάρτηση. Σε βάση που τρέχει πρώτη φορά την
+αλυσίδα, το 10023 είναι no-op.
+
+**4γ. `10022_sharedlink_target_invariant` — data mutation**
+
+Κανονικοποιεί legacy `SharedLink` rows **χωρίς διαγραφές**:
+
+| Κατάσταση | Ενέργεια |
+|---|---|
+| document + client, **ίδιος** πελάτης | canonical το document, καθαρίζεται το `client` |
+| document + client, **διαφορετικοί** πελάτες | **απενεργοποίηση**, κρατά και τα δύο για χειροκίνητο έλεγχο |
+| ενεργό link χωρίς στόχο (orphan) | **απενεργοποίηση** |
+
+Μετά το deploy, έλεγξε τα warnings του migration (μόνο internal IDs) και
+επιβεβαίωσε ποια links απενεργοποιήθηκαν:
+
+```bash
+python manage.py shell -c "
+from accounting.models import SharedLink
+qs = SharedLink.objects.filter(is_active=False)
+print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
+```
+
+**5. Rollback criteria**
+
+* `migrate` exit ≠ 0 → επαναφορά από το dump, **όχι** χειροκίνητο fix-forward.
+* Νέα κατηγορία findings στο `audit_after.txt` πέρα από τα legacy.
+* Οποιοδήποτε 500 στα document endpoints κατά το smoke test.
+
 ## Β. Χειροκίνητη εγκατάσταση (χωρίς Docker)
 
 <details>

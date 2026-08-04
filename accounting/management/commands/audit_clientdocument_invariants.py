@@ -16,6 +16,8 @@ operations ή direct SQL — αυτό το command σαρώνει τη βάση 
 6. Invalid version progression (doc.version != prev.version + 1)
 7. Duplicate current rows στο ίδιο exact logical conflict key
    (client, document_category, year, month, obligation)
+8. Current documents των οποίων το φυσικό αρχείο λείπει από το storage
+   (missing-storage-file)
 
 Report-only by design: ΔΕΝ γίνεται αυτόματη επανάθεση/διόρθωση — η
 διόρθωση είναι χειροκίνητη (fail closed). Στα ευρήματα μπαίνουν ΜΟΝΟ
@@ -250,6 +252,46 @@ class Command(BaseCommand):
                 f"σωστό (migration 10020/10021 μετέφερε αμφίβολα duplicate "
                 f"currents σε legacy slot· το κύριο slot παραμένει ελεύθερο)"
             )
+
+        # 10β. Branching legacy chains: component με >1 current row. Το
+        # migration 10021 ΔΕΝ τα αγγίζει (θα παραβίαζε το unique
+        # constraint) — μένουν προσβάσιμα με τα διακριτά slots του 10020
+        # και απαιτούν χειροκίνητη απόφαση για το ποιο branch είναι το
+        # πραγματικό τρέχον έγγραφο. Μία deterministic γραμμή ανά
+        # component, μόνο internal IDs.
+        branching_components = defaultdict(list)
+        for r in rows:
+            if r['is_current']:
+                branching_components[find(r['id'])].append(r['id'])
+        for comp, ids in sorted(
+                ((c, i) for c, i in branching_components.items()
+                 if len(i) > 1), key=lambda kv: min(kv[1])):
+            members = sorted(comp_members.get(comp, ids))
+            findings.append(
+                f"legacy-branching-chain-needs-review: chain ids={members} "
+                f"με πολλαπλά τρέχοντα ids={sorted(ids)} — το migration "
+                f"10021 δεν ενοποίησε το slot (θα παραβίαζε το unique "
+                f"constraint)· απαιτείται χειροκίνητη επιλογή του "
+                f"πραγματικού τρέχοντος εγγράφου"
+            )
+
+        # 11. Current documents χωρίς φυσικό αρχείο στο storage. Το row
+        # υπάρχει αλλά το αρχείο λείπει (filesystem-only διαγραφή, αποτυχία
+        # backup restore, χειροκίνητο caretaking) — τα email attachments
+        # και τα downloads σπάνε σιωπηλά. Μόνο internal IDs στο output.
+        for doc in ClientDocument.objects.filter(
+                is_current=True).only('id', 'client_id', 'file'):
+            try:
+                missing = not doc.file or not doc.file.storage.exists(
+                    doc.file.name)
+            except Exception:
+                # Μη προσβάσιμο storage → fail closed, το αναφέρουμε
+                missing = True
+            if missing:
+                findings.append(
+                    f"missing-storage-file: document id={doc.id} "
+                    f"client id={doc.client_id}"
+                )
 
         if not findings:
             self.stdout.write(self.style.SUCCESS(

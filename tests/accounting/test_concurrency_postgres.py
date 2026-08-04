@@ -22,6 +22,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection, connections
 from django.test import TransactionTestCase, override_settings
+from django.utils import timezone
 
 from accounting.models import ClientDocument, ClientProfile
 from accounting.services import filing
@@ -365,3 +366,194 @@ class ConcurrentStructuralMutationTest(TransactionTestCase):
             set(results.values()) <= {'ok', 'gone', 'conflict', 'invalid'},
             results)
         self._assert_consistent(doc.pk)
+
+
+# ===========================================================================
+# Γύρος 22 — SharedLink: πραγματικά concurrency tests σε PostgreSQL
+# ===========================================================================
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class SharedLinkConcurrencyTest(TransactionTestCase):
+    """
+    Πραγματικά ταυτόχρονα threads/connections πάνω στο ίδιο SharedLink.
+
+    Αποδεικνύει ότι ο conditional-UPDATE guard (`_revocation_guard_q`)
+    σειριοποιεί τις μεταβολές quota και ότι μια ταυτόχρονη ανάκληση/
+    λήξη/αλλαγή ασφαλείας ακυρώνει την ενέργεια χωρίς download, counter
+    mutation ή success access log.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL — τρέχει blocking στο CI.')
+        from accounting.models import SharedLink
+        self.client_profile = ClientProfile.objects.create(
+            afm='123456783', eponimia='PG SHARE ΑΕ', eidos_ipoxreou='company')
+        self.user = User.objects.create_user('pg_share_user', password='x')
+        for codename in ('add_clientdocument', 'view_clientprofile'):
+            self.user.user_permissions.add(Permission.objects.get(
+                codename=codename, content_type__app_label='accounting'))
+        self.user = User.objects.get(pk=self.user.pk)
+        self.doc = filing.create_client_document(
+            client=self.client_profile,
+            uploaded_file=SimpleUploadedFile('share.pdf', b'%PDF-1.4 share'),
+            category='vat', year=2026, month=3, user=self.user)
+        self.link = SharedLink.objects.create(
+            document=self.doc, access_level='download', allow_upload=True,
+            max_downloads=1, max_uploads=1)
+
+    def _fresh(self):
+        from accounting.models import SharedLink
+        return SharedLink.objects.get(pk=self.link.pk)
+
+    def _run_pair(self, fn_a, fn_b):
+        barrier = threading.Barrier(2)
+        results = {}
+
+        def wrap(name, fn):
+            def runner():
+                try:
+                    barrier.wait(timeout=10)
+                    results[name] = fn()
+                except Exception as e:      # pragma: no cover - διαγνωστικό
+                    results[name] = f'error:{type(e).__name__}'
+                finally:
+                    connections.close_all()
+            return runner
+
+        threads = [threading.Thread(target=wrap('a', fn_a)),
+                   threading.Thread(target=wrap('b', fn_b))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        return results
+
+    def _counters(self):
+        link = self._fresh()
+        return link.download_count, link.upload_count
+
+    def test_two_downloads_on_last_quota_slot(self):
+        """Ακριβώς ένας κερδίζει το τελευταίο slot· counter δεν ξεπερνά το όριο."""
+        link_a, link_b = self._fresh(), self._fresh()
+        results = self._run_pair(link_a.try_record_download,
+                                 link_b.try_record_download)
+        self.assertCountEqual(list(results.values()), [True, False], results)
+        downloads, _ = self._counters()
+        self.assertEqual(downloads, 1)
+
+    def test_download_concurrent_with_revoke(self):
+        """Ταυτόχρονο revoke: είτε κερδίζει το download είτε ακυρώνεται."""
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def revoke():
+            SharedLink.objects.filter(pk=self.link.pk).update(is_active=False)
+            return 'revoked'
+
+        results = self._run_pair(link_a.try_record_download, revoke)
+        downloads, _ = self._counters()
+        if results.get('a') is True:
+            self.assertEqual(downloads, 1)
+        else:
+            # Ακυρώθηκε → ΚΑΝΕΝΑ slot δεν καταναλώθηκε
+            self.assertEqual(downloads, 0)
+        self.assertLessEqual(downloads, 1)
+
+    def test_download_concurrent_with_expiry_change(self):
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def expire():
+            SharedLink.objects.filter(pk=self.link.pk).update(
+                expires_at=timezone.now() - timezone.timedelta(minutes=5))
+            return 'expired'
+
+        results = self._run_pair(link_a.try_record_download, expire)
+        downloads, _ = self._counters()
+        self.assertIn(results.get('a'), (True, False))
+        self.assertEqual(downloads, 1 if results.get('a') else 0)
+
+    def test_download_concurrent_with_security_change(self):
+        """Αλλαγή password fingerprint ταυτόχρονα με το download."""
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def change_password():
+            SharedLink.objects.filter(pk=self.link.pk).update(
+                password_hash='pbkdf2_sha256$αλλαγμένο')
+            return 'changed'
+
+        results = self._run_pair(link_a.try_record_download, change_password)
+        downloads, _ = self._counters()
+        self.assertEqual(downloads, 1 if results.get('a') else 0)
+
+    def test_storage_failure_compensation_does_not_steal_other_download(self):
+        """
+        Δύο ταυτόχρονα downloads σε link με 2 slots· το ένα αποτυγχάνει
+        στο storage και κάνει compensation. Το ΕΠΙΤΥΧΗΜΕΝΟ download δεν
+        πρέπει να χάσει το slot του και ο counter δεν γίνεται αρνητικός.
+        """
+        from accounting.models import SharedLink
+        SharedLink.objects.filter(pk=self.link.pk).update(max_downloads=2)
+        link_ok, link_fail = self._fresh(), self._fresh()
+
+        def ok_download():
+            return link_ok.try_record_download()
+
+        def failing_download():
+            reserved = link_fail.try_record_download()
+            if reserved:
+                link_fail.release_download()   # compensation
+            return f'reserved={reserved}'
+
+        self._run_pair(ok_download, failing_download)
+        downloads, _ = self._counters()
+        # Ένα επιτυχημένο download παραμένει μετρημένο, ποτέ αρνητικό
+        self.assertEqual(downloads, 1)
+        self.assertGreaterEqual(downloads, 0)
+
+    def test_concurrent_release_cannot_drive_counter_negative(self):
+        link_a, link_b = self._fresh(), self._fresh()
+        self.assertTrue(self._fresh().try_record_download())
+        self._run_pair(link_a.release_download, link_b.release_download)
+        downloads, _ = self._counters()
+        self.assertGreaterEqual(downloads, 0)
+        self.assertEqual(downloads, 0)
+
+    def test_two_upload_reservations_on_last_slot(self):
+        link_a, link_b = self._fresh(), self._fresh()
+        results = self._run_pair(lambda: link_a.try_reserve_uploads(1),
+                                 lambda: link_b.try_reserve_uploads(1))
+        self.assertCountEqual(list(results.values()), [True, False], results)
+        _, uploads = self._counters()
+        self.assertEqual(uploads, 1)
+
+    def test_upload_concurrent_with_allow_upload_revoke(self):
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def revoke_upload():
+            SharedLink.objects.filter(pk=self.link.pk).update(
+                allow_upload=False)
+            return 'revoked'
+
+        results = self._run_pair(lambda: link_a.try_reserve_uploads(1),
+                                 revoke_upload)
+        _, uploads = self._counters()
+        self.assertEqual(uploads, 1 if results.get('a') else 0)
+
+    def test_no_extra_access_logs_on_rejected_download(self):
+        """Απορριφθέν download → ΚΑΝΕΝΑ access log, κανένας counter."""
+        from accounting.models import SharedLink, SharedLinkAccess
+        link_a = self._fresh()
+        SharedLink.objects.filter(pk=self.link.pk).update(is_active=False)
+        self.assertFalse(link_a.try_record_download())
+        self.assertEqual(
+            SharedLinkAccess.objects.filter(shared_link=self.link).count(), 0)
+        downloads, _ = self._counters()
+        self.assertEqual(downloads, 0)

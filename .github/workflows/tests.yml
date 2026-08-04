@@ -76,9 +76,10 @@ jobs:
         run: |
           python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata --keepdb -v 2
 
-      # PostgreSQL concurrency proof (Γύρος 18 — F2): πραγματικό race test
-      # με δύο threads/connections. BLOCKING — το test αποτυγχάνει (όχι
-      # skip) αν δεν τρέχει σε PostgreSQL.
+      # PostgreSQL concurrency proof (Γύρος 18 — F2, Γύρος 22): πραγματικά
+      # race tests με δύο threads/connections — filing services ΚΑΙ
+      # SharedLink quota/revocation (SharedLinkConcurrencyTest). BLOCKING:
+      # το test αποτυγχάνει (όχι skip) αν δεν τρέχει σε PostgreSQL.
       - name: PostgreSQL concurrency tests (blocking)
         env:
           REQUIRE_POSTGRES_TESTS: '1'
@@ -229,6 +230,8 @@ jobs:
             tests.accounting.test_rbac_round18 \
             tests.accounting.test_rbac_round19 \
             tests.accounting.test_rbac_round20 \
+            tests.accounting.test_rbac_round21 \
+            tests.accounting.test_rbac_round22 \
             -v 2
 
       # Blocking production-mode έλεγχοι (Γύρος 20): fail-closed libmagic
@@ -243,8 +246,18 @@ jobs:
             tests.accounting.test_rbac_round20.PermissionsBeforeLocksTest \
             tests.accounting.test_rbac_round19.DbConstraintTest \
             tests.accounting.test_rbac_round19.KeepSlotTest \
+            tests.accounting.test_rbac_round21.PermissionBeforeParsingTest \
+            tests.accounting.test_rbac_round21.CapabilityClientBindingTest \
+            tests.accounting.test_rbac_round22.SharedLinkTargetInvariantTest \
+            tests.accounting.test_rbac_round22.SharedLinkAtomicRevocationTest \
             -v 2
 
-      # Το audit command πρέπει να τρέχει καθαρά σε φρέσκια βάση
-      - name: ClientDocument invariant audit (blocking)
+      # Το audit command πρέπει να τρέχει καθαρά σε ΦΡΕΣΚΙΑ (κενή) βάση.
+      # ΠΡΟΣΟΧΗ — ΜΟΝΟ για CI: σε πραγματική production βάση τα findings
+      # `legacy-slot-needs-review` είναι ΑΝΑΜΕΝΟΜΕΝΑ μετά τα migrations
+      # 10020/10021, οπότε το --fail-on-findings ΔΕΝ πρέπει να μπει ως
+      # blocking deploy gate. Στο production runbook: εκτέλεση ΧΩΡΙΣ το
+      # flag, αποθήκευση του output και χειροκίνητη αξιολόγηση· blocking
+      # μόνο για απρόσμενες κατηγορίες findings (βλ. DEPLOYMENT.md).
+      - name: ClientDocument invariant audit (blocking — CI only)
         run: python manage.py audit_clientdocument_invariants --fail-on-findings

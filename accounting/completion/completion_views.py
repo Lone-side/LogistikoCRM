@@ -17,13 +17,14 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.db import transaction
 
 import os
 import json
 import logging
 from datetime import datetime
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 
 from ..models import (
     MonthlyObligation, ClientProfile, ObligationType,
@@ -311,11 +312,11 @@ def obligation_complete_single(request, obligation_id):
                     user=request.user,
                 )
             except ValidationError as e:
-                return JsonResponse({
-                    'success': False,
-                    'error': '; '.join(e.messages)
-                }, status=400)
-            logger.info(f"Archived file for obligation {obligation_id}: {document.file.name}")
+                message, code = filing.document_error_status(e)
+                return JsonResponse({'success': False, 'error': message},
+                                    status=code)
+            logger.info('Αρχειοθετήθηκε document id=%s για obligation id=%s',
+                        document.pk, obligation_id)
 
         # Update obligation
         old_status = obligation.status
@@ -410,26 +411,33 @@ def obligation_complete_bulk(request):
                     })
                     continue
 
-                # Check for file
+                # Check for file.
+                # ΠΟΛΙΤΙΚΗ BULK (Γύρος 21): αποτυχία αρχειοθέτησης ΔΕΝ
+                # καταπίνεται — η υποχρέωση δεν ολοκληρώνεται και το item
+                # αναφέρεται ρητά ως αποτυχία.
                 file_key = f'file_{ob_id}'
-                if file_key in request.FILES:
-                    try:
-                        filing.create_client_document(
-                            client=obligation.client,
-                            uploaded_file=request.FILES[file_key],
-                            obligation=obligation,
-                            user=request.user,
-                        )
-                    except ValidationError as e:
-                        logger.warning(
-                            f"Invalid file for obligation {ob_id}: {'; '.join(e.messages)}"
-                        )
+                with transaction.atomic():
+                    if file_key in request.FILES:
+                        try:
+                            filing.create_client_document(
+                                client=obligation.client,
+                                uploaded_file=request.FILES[file_key],
+                                obligation=obligation,
+                                user=request.user,
+                            )
+                        except ValidationError as e:
+                            message = filing.document_error_status(e)[0]
+                            failed.append({
+                                'id': ob_id,
+                                'error': f'Αποτυχία αρχειοθέτησης: {message}',
+                            })
+                            continue
 
-                # Complete
-                obligation.status = 'completed'
-                obligation.completed_date = timezone.now().date()
-                obligation.completed_by = request.user
-                obligation.save()
+                    # Complete
+                    obligation.status = 'completed'
+                    obligation.completed_date = timezone.now().date()
+                    obligation.completed_by = request.user
+                    obligation.save()
 
                 completed.append({
                     'id': ob_id,
@@ -440,10 +448,18 @@ def obligation_complete_bulk(request):
             except MonthlyObligation.DoesNotExist:
                 failed.append({'id': ob_id, 'error': 'Δεν βρέθηκε'})
             except Exception as e:
-                failed.append({'id': ob_id, 'error': GENERIC_SERVER_ERROR})
+                mapped = filing.document_error_status(e)
+                failed.append({
+                    'id': ob_id,
+                    'error': mapped[0] if mapped else GENERIC_SERVER_ERROR,
+                })
+                if mapped is None:
+                    logger.exception(
+                        'Σφάλμα μαζικής ολοκλήρωσης υποχρέωσης id=%s', ob_id)
 
+        # Ποτέ ψευδής συνολική επιτυχία όταν δεν ολοκληρώθηκε καμία
         return JsonResponse({
-            'success': True,
+            'success': bool(completed),
             'completed': len(completed),
             'failed': len(failed),
             'skipped': len(skipped),
@@ -989,6 +1005,40 @@ def file_download(request, client_id, file_path):
     )
 
 
+def _find_managed_document(client, full_path):
+    """
+    Βρίσκει το ClientDocument του πελάτη που αντιστοιχεί στο συγκεκριμένο
+    ΑΠΟΛΥΤΟ path (canonicalized), ή None αν το αρχείο δεν είναι managed.
+
+    Η αντιστοίχιση γίνεται με σύγκριση realpath και όχι με string
+    manipulation, ώστε symlinks/`..`/διαφορετικά storage roots να μην
+    μπορούν να «κρύψουν» ένα managed document. Ο υποψήφιος πληθυσμός
+    περιορίζεται στα έγγραφα του πελάτη με το ίδιο basename.
+
+    ΠΡΟΣΟΧΗ: το φιλτράρισμα γίνεται στο `file` (πραγματική διαδρομή
+    storage) και ΟΧΙ στο `filename`. Όταν το storage αποφύγει σύγκρουση
+    ονόματος προσθέτοντας suffix (π.χ. `x_a1b2c3.pdf`), το `filename`
+    κρατά το ΑΙΤΟΥΜΕΝΟ όνομα ενώ το αρχείο στον δίσκο έχει το νέο — ένα
+    match στο `filename` θα έχανε το document και θα επέτρεπε
+    filesystem-only διαγραφή.
+    """
+    target = os.path.realpath(full_path)
+    basename = os.path.basename(target)
+    candidates = ClientDocument.objects.filter(
+        client=client, file__endswith=basename)
+    for doc in candidates:
+        if not doc.file:
+            continue
+        try:
+            doc_path = os.path.realpath(doc.file.path)
+        except (NotImplementedError, ValueError, AttributeError):
+            # Non-local storage: δεν υπάρχει filesystem path να συγκριθεί
+            continue
+        if doc_path == target:
+            return doc
+    return None
+
+
 @staff_member_required
 @require_POST
 def file_delete(request, client_id, file_path=None):
@@ -1021,17 +1071,52 @@ def file_delete(request, client_id, file_path=None):
     if not os.path.exists(full_path):
         return JsonResponse({'success': False, 'error': 'File not found'}, status=404)
 
+    # Γύρος 21 — P2: managed ClientDocument ΔΕΝ διαγράφεται ποτέ
+    # filesystem-only. Θα έμενε committed row χωρίς φυσικό αρχείο
+    # (invisible corruption: τα email attachments/downloads σπάνε και το
+    # audit δεν το έβλεπε). Δρομολόγηση στο canonical service, που
+    # επιβάλλει την πολιτική versioned deletion και διαγράφει το αρχείο
+    # μόνο μετά το commit.
+    managed = _find_managed_document(client, full_path)
+    if managed is not None:
+        try:
+            filing.delete_document_service(request.user, managed)
+        except PermissionDenied:
+            return JsonResponse(PERM_DENIED_JSON, status=403)
+        except Exception as exc:
+            mapped = filing.document_error_status(exc)
+            if mapped is None:
+                logger.exception('Αποτυχία διαγραφής εγγράφου id=%s',
+                                 managed.pk)
+                return JsonResponse(
+                    {'success': False, 'error': GENERIC_SERVER_ERROR},
+                    status=500)
+            message, code = mapped
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
+        logger.info('Managed document deleted: document id=%s client id=%s '
+                    'by user id=%s', managed.pk, client.pk, request.user.pk)
+        return JsonResponse({
+            'success': True,
+            'message': 'Το έγγραφο διαγράφηκε επιτυχώς'
+        })
+
+    # Unmanaged αρχείο (δεν αντιστοιχεί σε ClientDocument row) — ασφαλής
+    # φυσική διαγραφή μέσα στον ήδη επικυρωμένο φάκελο του πελάτη
     try:
         os.remove(full_path)
-        logger.info(f"File deleted: {full_path} by {request.user.username}")
+        # Χωρίς path/filename/ΑΦΜ/επωνυμία στα logs — μόνο internal IDs
+        logger.info('File deleted for client id=%s by user id=%s',
+                    client.pk, request.user.pk)
 
         return JsonResponse({
             'success': True,
             'message': 'Το αρχείο διαγράφηκε επιτυχώς'
         })
 
-    except Exception as e:
-        logger.error(f"File delete error: {e}", exc_info=True)
+    except Exception:
+        logger.exception('Αποτυχία διαγραφής αρχείου για client id=%s',
+                         client.pk)
         return JsonResponse({
             'success': False,
             'error': GENERIC_SERVER_ERROR

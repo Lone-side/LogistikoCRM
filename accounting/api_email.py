@@ -675,17 +675,24 @@ def complete_and_notify(request, obligation_id):
                     category = 'payroll'
                 elif 'Ε1' in type_code or 'Ε3' in type_code:
                     category = 'tax'
-            document = _filing.create_client_document(
-                client=client,
-                uploaded_file=uploaded_file,
-                category=category,
-                obligation=obligation,
-                user=request.user,
-                description=(
-                    f'Υποχρέωση {obligation.obligation_type.name} '
-                    f'{obligation.month:02d}/{obligation.year}'
-                ),
-            )
+            try:
+                document = _filing.create_client_document(
+                    client=client,
+                    uploaded_file=uploaded_file,
+                    category=category,
+                    obligation=obligation,
+                    user=request.user,
+                    description=(
+                        f'Υποχρέωση {obligation.obligation_type.name} '
+                        f'{obligation.month:02d}/{obligation.year}'
+                    ),
+                )
+            except (_filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict, _filing.DocumentGone,
+                    _DjangoValidationError) as e:
+                # Κοινό contract — ποτέ 500, ποτέ ολοκλήρωση χωρίς αρχείο
+                message, code = _filing.document_error_status(e)
+                return Response({'error': message}, status=code)
 
         # Mark obligation as completed
         obligation.status = 'completed'
@@ -1018,29 +1025,40 @@ def bulk_complete_with_documents(request):
                 category = 'tax'
         return category
 
-    # Ολοκλήρωση + document creation atomic (μέσω filing service)
+    # Ολοκλήρωση + document creation atomic (μέσω filing service).
+    # ΠΟΛΙΤΙΚΗ BULK: atomic rollback ολόκληρου του request — controlled
+    # document exception → κοινό status (409/404/400), ποτέ 500, και καμία
+    # υποχρέωση δεν μένει «ολοκληρωμένη» χωρίς το αρχείο της.
     documents_by_ob = {}
-    with transaction.atomic():
-        for obligation in obligations:
-            client = obligation.client
-            uploaded_file = request.FILES.get(f'file_{obligation.id}')
-            if uploaded_file and save_to_folders:
-                documents_by_ob[obligation.id] = _filing.create_client_document(
-                    client=client,
-                    uploaded_file=uploaded_file,
-                    category=_category_for(obligation),
-                    obligation=obligation,
-                    user=request.user,
-                    description=(
-                        f'Υποχρέωση {obligation.obligation_type.name} '
-                        f'{obligation.month:02d}/{obligation.year}'
-                    ),
-                )
-            obligation.status = 'completed'
-            obligation.completed_date = timezone.now().date()
-            obligation.completed_by = request.user
-            obligation.save()
-            completed_count += 1
+    try:
+        with transaction.atomic():
+            for obligation in obligations:
+                client = obligation.client
+                uploaded_file = request.FILES.get(f'file_{obligation.id}')
+                if uploaded_file and save_to_folders:
+                    documents_by_ob[obligation.id] = \
+                        _filing.create_client_document(
+                            client=client,
+                            uploaded_file=uploaded_file,
+                            category=_category_for(obligation),
+                            obligation=obligation,
+                            user=request.user,
+                            description=(
+                                f'Υποχρέωση {obligation.obligation_type.name} '
+                                f'{obligation.month:02d}/{obligation.year}'
+                            ),
+                        )
+                obligation.status = 'completed'
+                obligation.completed_date = timezone.now().date()
+                obligation.completed_by = request.user
+                obligation.save()
+                completed_count += 1
+    except Exception as exc:
+        mapped = _filing.document_error_status(exc)
+        if mapped is None:
+            raise
+        message, code = mapped
+        return Response({'error': message}, status=code)
 
     for obligation in obligations:
         client = obligation.client

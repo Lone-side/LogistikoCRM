@@ -458,13 +458,18 @@ MUTATION_PERMS = {
 }
 
 
-def require_document_mutation_perms(user, mutation, portal_capability=None):
+def require_document_mutation_perms(user, mutation, portal_capability=None,
+                                    client=None):
     """
     Fail-closed έλεγχος του permission matrix.
 
     user=None επιτρέπεται ΜΟΝΟ για 'create' ΚΑΙ μόνο με έγκυρο
     PortalUploadCapability — το σκέτο user=None ΔΕΝ αποτελεί
     εξουσιοδότηση (δεν μπορεί να παραχθεί από request input).
+
+    Το capability είναι ΔΕΣΜΕΥΜΕΝΟ στον πελάτη του shared link: αν το
+    `client` του upload δεν ταιριάζει με το `client_id` του capability,
+    η μεταφόρτωση απορρίπτεται (confused-deputy protection).
     Raises django PermissionDenied (→ 403 σε DRF και Django views).
     """
     from django.core.exceptions import PermissionDenied
@@ -477,6 +482,15 @@ def require_document_mutation_perms(user, mutation, portal_capability=None):
             raise PermissionDenied(
                 'Ανώνυμη μεταφόρτωση επιτρέπεται μόνο μέσω έγκυρου '
                 'συνδέσμου πελάτη.')
+        # Binding capability ↔ πελάτης: το token ενός shared link δεν
+        # μπορεί να χρησιμοποιηθεί για έγγραφο άλλου πελάτη
+        capability_client = portal_capability.client_id
+        target_client = getattr(client, 'pk', None)
+        if capability_client is None or target_client is None \
+                or capability_client != target_client:
+            raise PermissionDenied(
+                'Ο σύνδεσμος μεταφόρτωσης δεν αντιστοιχεί σε αυτόν τον '
+                'πελάτη.')
         return
     if not all(user.has_perm(p) for p in required):
         raise PermissionDenied(
@@ -530,12 +544,17 @@ class PortalUploadCapability:
     με user=None). ΔΕΝ μπορεί να παραχθεί από request input — μόνο ο
     portal/shared-link κώδικας που έχει ήδη επικυρώσει το link το
     κατασκευάζει. Έτσι το σκέτο user=None δεν αποτελεί εξουσιοδότηση.
+
+    Δεσμεύεται ΚΑΙ στον πελάτη του link (`client_id`): το capability ενός
+    shared link δεν εξουσιοδοτεί upload σε άλλον πελάτη (βλ.
+    require_document_mutation_perms).
     """
 
-    __slots__ = ('shared_link_id',)
+    __slots__ = ('shared_link_id', 'client_id')
 
-    def __init__(self, shared_link_id):
+    def __init__(self, shared_link_id, client_id):
         self.shared_link_id = shared_link_id
+        self.client_id = client_id
 
 
 def validate_document_key_inputs(category, year, month):
@@ -609,10 +628,13 @@ def create_client_document(client, uploaded_file, category='general', obligation
     """
     Το μοναδικό σημείο δημιουργίας ClientDocument από upload.
 
-    Σειρά (κανένα lock/storage side effect πριν από τα βασικά permissions):
-    1. Input validation (request/key/file) — χωρίς μόνιμα side effects
-    2. BASIC permission (add_clientdocument) ΠΡΙΝ από κάθε DB lock — ο
-       denied caller δεν κρατά ποτέ parent lock
+    Σειρά (κανένα parsing/lock/storage side effect πριν από τα βασικά
+    permissions — Γύρος 21):
+    1. Φθηνά input checks (on_existing) — καμία ανάγνωση αρχείου
+    2. BASIC permission (add_clientdocument) ΠΡΙΝ από κάθε content parsing
+       (libmagic/ZIP/Pillow), settings lookup, DB lookup ή lock — ο denied
+       caller δεν πυροδοτεί κανέναν parser και δεν κρατά ποτέ parent lock
+    2β. Επικύρωση περιεχομένου + key inputs (fail closed)
     3. transaction + deterministic parent locks (ClientProfile →
        MonthlyObligation) — σειριοποιεί και τα ταυτόχρονα ΠΡΩΤΑ uploads
        του ίδιου key, όπου δεν υπάρχει ακόμη conflict row
@@ -644,11 +666,20 @@ def create_client_document(client, uploaded_file, category='general', obligation
     from django.db import transaction
     from accounting.models import ClientDocument, ClientProfile, MonthlyObligation
 
-    # === 1. Input validation — κανένα μόνιμο side effect ===
+    # === 1. Φθηνά input checks — καμία ανάγνωση/parsing περιεχομένου ===
     if on_existing not in VALID_ON_EXISTING:
         raise ValidationError(
             f"Μη έγκυρη τιμή on_existing — επιτρέπονται: "
             f"{', '.join(VALID_ON_EXISTING)}")
+
+    # === 2. BASIC permission ΠΡΙΝ από parsing, DB lookup ή lock ===
+    # (Γύρος 21 — P2) Ο denied caller δεν πυροδοτεί ΠΟΤΕ libmagic, ZIP ή
+    # Pillow parsing, ούτε FilingSystemSettings lookup, ούτε lock/storage.
+    require_document_mutation_perms(user, 'create', portal_capability,
+                                    client=client)
+
+    # === 3. Επικύρωση περιεχομένου (fail closed) — μόνο για
+    # εξουσιοδοτημένο caller ===
     validate_upload(uploaded_file)
     original_name = os.path.basename(uploaded_file.name or '') or 'unnamed_file'
 
@@ -673,10 +704,6 @@ def create_client_document(client, uploaded_file, category='general', obligation
     if on_existing == 'keep':
         import uuid
         slot = uuid.uuid4().hex[:32]
-
-    # === 2. BASIC permission ΠΡΙΝ από κάθε DB lock ===
-    # (ο denied caller δεν αποκτά ποτέ parent lock, δεν γράφει dirs/INFO.txt)
-    require_document_mutation_perms(user, 'create', portal_capability)
 
     new_file_ref = {'storage': None, 'name': None, 'pk': None}
     try:
@@ -703,7 +730,8 @@ def create_client_document(client, uploaded_file, category='general', obligation
             # version/replace — ΠΡΙΝ από κάθε αλλαγή/file I/O ===
             if mutation != 'create':
                 require_document_mutation_perms(user, mutation,
-                                                portal_capability)
+                                                portal_capability,
+                                                client=client)
 
             # === 7. Naming/folders/storage — μόνο μετά τα permissions ===
             apply_naming(uploaded_file, client, category=category,

@@ -374,7 +374,7 @@ class PermissionsBeforeLocksTest(Round20Base):
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
             on_existing='keep',
-            portal_capability=filing.PortalUploadCapability(42))
+            portal_capability=filing.PortalUploadCapability(42, self.client_a.pk))
         self.assertTrue(doc.pk)
         self.assertNotEqual(doc.slot, '')
 
@@ -394,7 +394,7 @@ class PermissionsBeforeLocksTest(Round20Base):
                 client=self.client_a, uploaded_file=pdf_upload(),
                 category='vat', year=2026, month=3, user=None,
                 on_existing='version',
-                portal_capability=filing.PortalUploadCapability(1))
+                portal_capability=filing.PortalUploadCapability(1, self.client_a.pk))
 
 
 # ---------------------------------------------------------------------------
@@ -406,7 +406,7 @@ class DeletionServiceTest(Round20Base):
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
             on_existing='keep',
-            portal_capability=filing.PortalUploadCapability(1))
+            portal_capability=filing.PortalUploadCapability(1, self.client_a.pk))
         ClientDocument.objects.filter(pk=v1.pk).update(slot='legacy-1')
         v1.refresh_from_db()
         v2 = v1.create_new_version(new_file=pdf_upload(), user=self.full)

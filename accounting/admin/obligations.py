@@ -11,6 +11,7 @@ Contains:
 """
 import os
 import csv
+import logging
 from datetime import datetime
 
 from django.urls import reverse, path
@@ -37,6 +38,8 @@ from ..forms import (
     ObligationProfileForm,
 )
 from .mixins import ClientDocumentInline
+
+logger = logging.getLogger(__name__)
 
 
 @admin.register(ObligationGroup)
@@ -682,7 +685,15 @@ class MonthlyObligationAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
                 )
                 self.message_user(request, f'📁 Το αρχείο αρχειοθετήθηκε: {document.filename}', messages.SUCCESS)
             except Exception as e:
-                self.message_user(request, f'⚠️ Σφάλμα αρχειοθέτησης: {e}', messages.WARNING)
+                # Κοινό contract: ελεγχόμενο μήνυμα, ποτέ raw exception text
+                mapped = filing.document_error_status(e)
+                if mapped is None:
+                    logger.exception(
+                        'Αποτυχία αρχειοθέτησης για obligation id=%s', obj.pk)
+                    message = 'Παρουσιάστηκε σφάλμα κατά την αρχειοθέτηση.'
+                else:
+                    message = mapped[0]
+                self.message_user(request, f'⚠️ {message}', messages.WARNING)
         else:
             super().save_model(request, obj, form, change)
 

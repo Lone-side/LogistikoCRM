@@ -134,12 +134,23 @@ class ClientDocumentInvariantTest(TestCase):
         self.assertEqual(doc.obligation_id, ob_a.id)
 
     def test_filing_service_rejects_mismatch(self):
+        """
+        Ο cross-client έλεγχος ισχύει ΚΑΙ για πλήρως εξουσιοδοτημένο
+        χρήστη — δεν είναι υποπροϊόν του permission check.
+        (Γύρος 21: το permission προηγείται πλέον του parsing, οπότε το
+        σενάριο τρέχει με χρήστη που έχει add_clientdocument· η ουσία του
+        test — ValidationError + κανένα νέο row — μένει ίδια.)
+        """
         from accounting.services import filing
+        user = make_perm_user(
+            'r16_invariant', ['add_clientdocument', 'change_clientdocument'],
+            [self.client_a, self.client_b])
         before = ClientDocument.objects.count()
         upload = SimpleUploadedFile('r.pdf', b'%PDF-1', content_type='application/pdf')
         with self.assertRaises(ValidationError):
             filing.create_client_document(
-                client=self.client_a, uploaded_file=upload, obligation=self.ob_b)
+                client=self.client_a, uploaded_file=upload,
+                obligation=self.ob_b, user=user)
         self.assertEqual(ClientDocument.objects.count(), before)
 
 

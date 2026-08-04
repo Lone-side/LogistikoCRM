@@ -459,15 +459,49 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Σύνδεση με υποχρέωση αν δόθηκε
+        # Σύνδεση με υποχρέωση αν δόθηκε.
+        # Γύρος 22 (P2): ΠΟΤΕ σιωπηλή αγνόηση άκυρου/ξένου obligation_id —
+        # το έγγραφο θα αρχειοθετούνταν χωρίς τη ζητούμενη σύνδεση. Ο
+        # canonical scoped helper επιβάλλει και το view_monthlyobligation
+        # και το scoping· ξένο ή ανύπαρκτο id → ουδέτερο 404 (καμία
+        # αποκάλυψη ύπαρξης), άκυρο format → 400. Ο έλεγχος γίνεται ΠΡΙΝ
+        # από κάθε parsing/εγγραφή αρχείου (το filing service καλείται
+        # μόνο αφού περάσει).
         obligation = None
         obligation_id = request.data.get('obligation_id')
-        if obligation_id:
+        if obligation_id not in (None, ''):
+            from django.http import Http404
+            from accounting.services.access import (
+                check_model_perms, get_accessible_obligation_or_404,
+            )
+            if not check_model_perms(request,
+                                     'accounting.view_monthlyobligation'):
+                return Response(
+                    {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             try:
-                from .models import MonthlyObligation
-                obligation = MonthlyObligation.objects.get(id=obligation_id, client=client)
-            except MonthlyObligation.DoesNotExist:
-                pass
+                obligation_pk = int(obligation_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'Μη έγκυρο obligation_id.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                obligation = get_accessible_obligation_or_404(
+                    request.user, obligation_pk, request=request)
+            except Http404:
+                return Response(
+                    {'error': 'Η υποχρέωση δεν βρέθηκε.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            # Η υποχρέωση πρέπει να ανήκει στον ΙΔΙΟ πελάτη — ασυμφωνία
+            # δίνει το ΙΔΙΟ ουδέτερο 404 (χωρίς διάκριση από «δεν βρέθηκε»)
+            if obligation.client_id != client.id:
+                return Response(
+                    {'error': 'Η υποχρέωση δεν βρέθηκε.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
 
         # Ενιαία διαδρομή: validation βάσει ρυθμίσεων + versioning + φάκελοι
         try:

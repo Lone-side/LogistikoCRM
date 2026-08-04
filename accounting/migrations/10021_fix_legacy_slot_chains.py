@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Γύρος 20 — διόρθωση του αποτελέσματος του 10020 για legacy duplicates.
+Γύρος 20/21 — διόρθωση του αποτελέσματος του 10020 για legacy duplicates.
 
 Το 10020 έδωσε `legacy-{id}` slot ΜΟΝΟ στο duplicate current row. Οι
 προηγούμενες εκδόσεις της ίδιας version chain έμειναν σε slot='' — άρα η
@@ -8,17 +8,33 @@
 current με προαγωγή της προηγούμενης θα συγκρουόταν με το κύριο slot=''.
 
 Αυτό το migration:
-1. Εντοπίζει κάθε chain που περιέχει row με slot που αρχίζει από 'legacy-'.
-2. Διατρέχει ΟΛΟΚΛΗΡΗ τη chain (και προς τα πίσω μέσω previous_version και
-   προς τα εμπρός μέσω των children) με ΑΣΦΑΛΗ iterative traversal και
-   visited-set cycle guard — καμία recursion.
+1. Εντοπίζει (με στοχευμένα queries, ΟΧΙ full table scan) τα «αμφίβολα»
+   rows: όσα έχουν ήδη slot `legacy-%` από το 10020, και τα current rows
+   των logical keys που έχουν >1 current (GROUP BY ... HAVING στη βάση).
+2. Διατρέχει ΜΟΝΟ τα components αυτών των seeds (πίσω μέσω
+   previous_version και εμπρός μέσω των children) με ΑΣΦΑΛΗ iterative
+   BFS και visited-set cycle guard — καμία recursion, κανένα φόρτωμα
+   ολόκληρου του πίνακα στη μνήμη.
 3. Εφαρμόζει το ΙΔΙΟ slot σε όλα τα μέλη της chain (deterministic: το slot
    που αντιστοιχεί στο μικρότερο id της chain, `legacy-{min_id}`).
 4. Δεν ακολουθεί ποτέ ακμή προς άλλον client (malformed cross-client edge):
    η διάσχιση σταματά εκεί και η chain σημειώνεται ως «αμφίβολη».
-5. Malformed/cyclic/cross-client chains ΔΕΝ «διορθώνονται» σιωπηλά —
-   παίρνουν και αυτές legacy slot (ώστε να μην παραβιάζουν το constraint)
-   αλλά αναφέρονται από το audit command ως legacy-slot-needs-review.
+
+ΑΣΦΑΛΕΙΑ ΕΝΑΝΤΙ CONSTRAINT VIOLATION (Γύρος 21 — P0):
+Ένα component μπορεί να περιέχει ΠΑΝΩ ΑΠΟ ΕΝΑ `is_current=True` row —
+π.χ. branching chain όπου δύο παιδιά του ίδιου root είναι και τα δύο
+current, ή ancestor+descendant που έμειναν και οι δύο current. Το 10020
+έχει ήδη δώσει σε αυτά ΔΙΑΦΟΡΕΤΙΚΑ slots, ώστε να ισχύουν τα unique
+constraints. Αν το 10021 τους έδινε κοινό slot θα παραβίαζε το
+`uniq_current_doc_*` και το migrate θα σταματούσε με IntegrityError στη
+μέση του deployment.
+
+Πολιτική: **component με >1 current ΔΕΝ αγγίζεται καθόλου.** Δεν
+μαντεύουμε ποιο branch είναι το σωστό — διατηρείται η constraint-safe
+κατάσταση του 10020 και η χειροκίνητη διόρθωση καθοδηγείται από τα
+findings του `audit_clientdocument_invariants` (`branching-chain`,
+`multiple-current-in-chain`, `cross-key-previous-version`,
+`legacy-slot-needs-review`).
 
 ΠΟΛΙΤΙΚΗ ΕΠΙΛΟΓΗΣ ΚΥΡΙΟΥ SLOT (trade-off, τεκμηριωμένο):
 Το migration ΔΕΝ μπορεί να γνωρίζει ποιο legacy document είναι το
@@ -33,84 +49,121 @@ legacy document. Κόστος: το πρώτο νέο upload στο key δημι
 επιβεβαιωθεί χειροκίνητα (βλ. audit finding legacy-slot-needs-review).
 """
 from django.db import migrations
+from django.db.models import Count
+
+# Πόσα ids ανά query κατά τη διάσχιση (bounded memory/SQL size)
+_CHUNK = 500
+
+_FIELDS = ('id', 'previous_version_id', 'client_id', 'slot', 'is_current')
+
+
+def _rows_by_ids(manager, ids):
+    """Φόρτωση συγκεκριμένων rows σε chunks."""
+    out = {}
+    ids = list(ids)
+    for i in range(0, len(ids), _CHUNK):
+        for r in manager.filter(pk__in=ids[i:i + _CHUNK]).values(*_FIELDS):
+            out[r['id']] = r
+    return out
+
+
+def _children_of(manager, ids):
+    """Τα rows που δείχνουν (previous_version) σε κάποιο από τα ids."""
+    out = {}
+    ids = list(ids)
+    for i in range(0, len(ids), _CHUNK):
+        for r in manager.filter(
+                previous_version_id__in=ids[i:i + _CHUNK]).values(*_FIELDS):
+            out[r['id']] = r
+    return out
+
+
+def _collect_seed_ids(manager):
+    """
+    Στοχευμένος εντοπισμός αμφίβολων rows — ΧΩΡΙΣ full table load:
+    (α) ό,τι έχει ήδη legacy slot από το 10020,
+    (β) τα current rows των logical keys με >1 current (GROUP BY στη βάση).
+    """
+    seeds = set(manager.filter(slot__startswith='legacy-')
+                .values_list('id', flat=True))
+
+    dup_keys = (manager.filter(is_current=True)
+                .values('client_id', 'document_category', 'year', 'month',
+                        'obligation_id')
+                .annotate(n=Count('id')).filter(n__gt=1))
+    for key in dup_keys:
+        seeds.update(
+            manager.filter(
+                is_current=True,
+                client_id=key['client_id'],
+                document_category=key['document_category'],
+                year=key['year'], month=key['month'],
+                obligation_id=key['obligation_id'],
+            ).values_list('id', flat=True)
+        )
+    return seeds
 
 
 def _fix_legacy_chains(apps, schema_editor):
     ClientDocument = apps.get_model('accounting', 'ClientDocument')
+    manager = ClientDocument.objects
 
-    rows = {
-        r['id']: r
-        for r in ClientDocument.objects.values(
-            'id', 'previous_version_id', 'client_id', 'slot',
-            'document_category', 'year', 'month', 'obligation_id',
-            'is_current').order_by('id')
-    }
-    if not rows:
-        return
-
-    children = {}
-    for doc_id, r in rows.items():
-        prev = r['previous_version_id']
-        if prev is not None:
-            children.setdefault(prev, []).append(doc_id)
-
-    # 1) Κάθε logical key (αγνοώντας slot) με >1 current rows είναι
-    # «αμφίβολο»: ΟΛΕΣ οι chains του παίρνουν legacy slot, το '' μένει
-    # ελεύθερο (βλ. πολιτική στο docstring).
-    key_currents = {}
-    for r in rows.values():
-        if r['is_current']:
-            key = (r['client_id'], r['document_category'], r['year'],
-                   r['month'], r['obligation_id'])
-            key_currents.setdefault(key, []).append(r['id'])
-
-    seed_ids = set()
-    for key, ids in key_currents.items():
-        if len(ids) > 1:
-            seed_ids.update(ids)
-    # Επιπλέον seeds: ό,τι ήδη έχει legacy slot από το 10020
-    for r in rows.values():
-        if (r['slot'] or '').startswith('legacy-'):
-            seed_ids.add(r['id'])
-
+    seed_ids = _collect_seed_ids(manager)
     if not seed_ids:
         return
 
-    # 2) Iterative traversal ΟΛΟΚΛΗΡΗΣ της chain κάθε seed (πίσω+εμπρός),
-    # με visited guard (cycle safe) και χωρίς cross-client ακμές.
+    known = _rows_by_ids(manager, seed_ids)
     assigned = {}          # doc_id -> slot
     globally_seen = set()
+
     for seed in sorted(seed_ids):
         if seed in globally_seen:
             continue
-        component = set()
-        stack = [seed]
-        client_id = rows[seed]['client_id']
-        while stack:
-            node = stack.pop()
-            if node in component:
-                continue          # cycle guard
-            component.add(node)
-            prev = rows[node]['previous_version_id']
-            if prev is not None and prev in rows \
-                    and prev not in component \
-                    and rows[prev]['client_id'] == client_id:
-                stack.append(prev)
-            for child in children.get(node, []):
-                if child in rows and child not in component \
-                        and rows[child]['client_id'] == client_id:
-                    stack.append(child)
+        client_id = known[seed]['client_id']
+        component = {seed}
+        frontier = {seed}
+        # Iterative BFS (cycle safe μέσω του `component` visited set),
+        # bounded στα rows του συγκεκριμένου component
+        while frontier:
+            prev_ids = {known[n]['previous_version_id'] for n in frontier
+                        if known[n]['previous_version_id'] is not None}
+            prev_ids -= component
+            parents = _rows_by_ids(manager, prev_ids) if prev_ids else {}
+            kids = _children_of(manager, frontier)
+
+            next_frontier = set()
+            for row in list(parents.values()) + list(kids.values()):
+                node = row['id']
+                if node in component:
+                    continue
+                # ΠΟΤΕ cross-client traversal
+                if row['client_id'] != client_id:
+                    continue
+                known[node] = row
+                component.add(node)
+                next_frontier.add(node)
+            frontier = next_frontier
+
         globally_seen |= component
+
+        # === Γύρος 21 (P0): component με >1 current ΔΕΝ αγγίζεται ===
+        # Το 10020 του έχει ήδη δώσει constraint-safe διαφορετικά slots·
+        # κοινό slot εδώ θα παραβίαζε το uniq_current_doc_* και θα
+        # τερμάτιζε το migrate με IntegrityError. Ποιο branch είναι το
+        # σωστό δεν είναι γνωστό — το αναφέρει το audit command.
+        currents = [n for n in component if known[n]['is_current']]
+        if len(currents) > 1:
+            continue
+
         slot_value = f'legacy-{min(component)}'
         for node in component:
             assigned[node] = slot_value
 
-    # 3) Deterministic εφαρμογή (ταξινομημένα ids· idempotent ως προς το
+    # Deterministic εφαρμογή (ταξινομημένα ids· idempotent ως προς το
     # τελικό αποτέλεσμα — δεύτερη εκτέλεση δίνει τα ίδια slots)
     for doc_id in sorted(assigned):
-        if rows[doc_id]['slot'] != assigned[doc_id]:
-            ClientDocument.objects.filter(pk=doc_id).update(
-                slot=assigned[doc_id])
+        if known[doc_id]['slot'] != assigned[doc_id]:
+            manager.filter(pk=doc_id).update(slot=assigned[doc_id])
 
 
 class Migration(migrations.Migration):

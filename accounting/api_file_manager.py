@@ -278,6 +278,40 @@ class SharedLinkSerializer(serializers.ModelSerializer):
         read_only_fields = ['token', 'download_count', 'view_count', 'upload_count',
                             'last_accessed_at', 'created_at', 'created_by']
 
+    def validate(self, attrs):
+        """
+        Invariant στόχου σε create/PUT/PATCH (Γύρος 22).
+
+        Στο partial update συνδυάζονται οι ΝΕΕΣ τιμές με την τρέχουσα
+        κατάσταση της instance — αλλιώς ένα PATCH που προσθέτει το δεύτερο
+        target θα περνούσε (το άλλο πεδίο απλώς λείπει από το payload).
+        """
+        attrs = super().validate(attrs)
+        instance = self.instance
+
+        def _resolved(field):
+            if field in attrs:
+                return attrs[field]
+            return getattr(instance, field, None) if instance else None
+
+        document = _resolved('document')
+        client = _resolved('client')
+        is_active = _resolved('is_active')
+        if is_active is None:
+            is_active = True
+
+        if not is_active:
+            # Ανενεργά links επιτρέπεται να διατηρούν legacy κατάσταση
+            return attrs
+        if document and client:
+            raise serializers.ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει ΕΝΑΝ στόχο: είτε έγγραφο είτε '
+                'πελάτη — όχι και τα δύο.')
+        if not document and not client:
+            raise serializers.ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει έναν στόχο (έγγραφο ή πελάτη).')
+        return attrs
+
     def get_public_url(self, obj):
         request = self.context.get('request')
         if request:
@@ -319,6 +353,14 @@ class SharedLinkCreateSerializer(serializers.Serializer):
     max_uploads = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
     def validate(self, data):
+        # Invariant στόχου (Γύρος 22): ΑΚΡΙΒΩΣ ένας στόχος. Το payload με
+        # ΚΑΙ τα δύο απορρίπτεται ρητά — δεν αγνοείται σιωπηλά το ένα
+        # (θα οδηγούσε σε link που δείχνει έγγραφο πελάτη Α αλλά
+        # αποθηκεύει uploads στον πελάτη Β).
+        if data.get('document_id') and data.get('client_id'):
+            raise serializers.ValidationError(
+                'Δώστε ΕΝΑΝ στόχο: είτε document_id είτε client_id — '
+                'όχι και τα δύο.')
         if not data.get('document_id') and not data.get('client_id'):
             raise serializers.ValidationError("Πρέπει να δοθεί document_id ή client_id")
         from .models import ClientDocument
@@ -482,18 +524,24 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                     user=request.user,
                     description=description,
                 )
-            except ValidationError as e:
-                errors.append(f'{f.name}: {"; ".join(e.messages)}')
+            except (ValidationError, filing.DocumentKeyConflict,
+                    filing.DocumentGone) as e:
+                # Κοινό contract: το μήνυμα προκύπτει από τον mapper
+                # (MultipleCurrentDocumentsError → conflict, όχι 400)
+                message = filing.document_error_status(e)[0]
+                errors.append(f'{f.name}: {message}')
                 continue
             uploaded_docs.append(doc)
 
         result_serializer = DocumentSerializer(uploaded_docs, many=True, context={'request': request})
+        # ΠΟΤΕ 201 όταν δεν μεταφορτώθηκε κανένα αρχείο
         return Response({
             'message': f'Μεταφορτώθηκαν {len(uploaded_docs)} αρχεία',
             'uploaded': len(uploaded_docs),
             'errors': errors,
             'documents': result_serializer.data
-        }, status=status.HTTP_201_CREATED)
+        }, status=status.HTTP_201_CREATED if uploaded_docs
+           else status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], url_path='bulk-delete')
     def bulk_delete(self, request):
@@ -1088,12 +1136,28 @@ class PublicSharedLinkDownloadView(APIView):
             raise Http404("Το αρχείο δεν βρέθηκε")
 
         # Ατομική δέσμευση download slot — concurrent requests στο τελευταίο
-        # slot δεν μπορούν να υπερβούν το max_downloads
+        # slot δεν μπορούν να υπερβούν το max_downloads. Ο guard του
+        # try_record_download ξαναελέγχει active/expiry/token/password/
+        # target/access_level, οπότε ταυτόχρονη ανάκληση ακυρώνει τη λήψη.
         if not shared_link.try_record_download():
-            return Response({'error': 'Έχει φτάσει το όριο λήψεων'},
+            return Response({'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
                             status=status.HTTP_410_GONE)
 
-        # Log access
+        # Γύρος 22 (P3): το αρχείο ανοίγει ΠΡΙΝ γραφτεί success access log.
+        # Αποτυχία storage.open() → αποδέσμευση του slot (compensation με
+        # conditional UPDATE, χωρίς δυνατότητα underflow) και ΚΑΝΕΝΑ
+        # success log. Κανένα DB lock δεν κρατιέται κατά το streaming: το
+        # FileResponse επιστρέφεται αφού ολοκληρωθούν όλες οι εγγραφές.
+        try:
+            file_handle = doc.file.open('rb')
+        except Exception:
+            shared_link.release_download()
+            logger.warning(
+                'Αποτυχία ανοίγματος αρχείου για shared link id=%s '
+                'document id=%s', shared_link.pk, doc.pk)
+            raise Http404("Σφάλμα κατά τη λήψη")
+
+        # Log access ΜΟΝΟ αφού το αρχείο άνοιξε επιτυχώς
         SharedLinkAccess.objects.create(
             shared_link=shared_link,
             ip_address=request.META.get('REMOTE_ADDR'),
@@ -1101,15 +1165,12 @@ class PublicSharedLinkDownloadView(APIView):
             action='download'
         )
 
-        try:
-            file_handle = doc.file.open('rb')
-            response = FileResponse(file_handle, as_attachment=True, filename=doc.filename)
-            content_type, _ = mimetypes.guess_type(doc.filename)
-            if content_type:
-                response['Content-Type'] = content_type
-            return response
-        except Exception:
-            raise Http404("Σφάλμα κατά τη λήψη")
+        response = FileResponse(file_handle, as_attachment=True,
+                                filename=doc.filename)
+        content_type, _ = mimetypes.guess_type(doc.filename)
+        if content_type:
+            response['Content-Type'] = content_type
+        return response
 
 
 class PublicSharedLinkPreviewView(APIView):
@@ -1150,12 +1211,27 @@ class PublicSharedLinkPreviewView(APIView):
         # Το preview ΔΕΝ παρακάμπτει το max_downloads: όταν υπάρχει όριο
         # λήψεων, κάθε preview δεσμεύει ατομικά ένα slot (streams ολόκληρο
         # το αρχείο — ισοδύναμο με λήψη)
+        quota_reserved = False
         if shared_link.max_downloads is not None:
             if not shared_link.try_record_download():
-                return Response({'error': 'Έχει φτάσει το όριο λήψεων'},
-                                status=status.HTTP_410_GONE)
+                return Response(
+                    {'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                    status=status.HTTP_410_GONE)
+            quota_reserved = True
         else:
             shared_link.record_access(is_download=False)
+
+        # Γύρος 22 (P3): άνοιγμα ΠΡΙΝ το success log· αποτυχία storage →
+        # αποδέσμευση slot και κανένα log επιτυχίας
+        try:
+            file_handle = doc.file.open('rb')
+        except Exception:
+            if quota_reserved:
+                shared_link.release_download()
+            logger.warning(
+                'Αποτυχία ανοίγματος αρχείου (preview) για shared link '
+                'id=%s document id=%s', shared_link.pk, doc.pk)
+            raise Http404('Σφάλμα κατά την προβολή')
 
         SharedLinkAccess.objects.create(
             shared_link=shared_link,
@@ -1164,10 +1240,6 @@ class PublicSharedLinkPreviewView(APIView):
             action='view',
         )
 
-        try:
-            file_handle = doc.file.open('rb')
-        except Exception:
-            raise Http404('Σφάλμα κατά την προβολή')
         content_type, _ = mimetypes.guess_type(doc.filename)
         response = FileResponse(
             file_handle,
@@ -1292,9 +1364,10 @@ class PublicSharedLinkUploadView(APIView):
                         on_existing='keep',
                         # Explicit capability: το σκέτο user=None ΔΕΝ
                         # εξουσιοδοτεί — το token κατασκευάζεται μόνο εδώ,
-                        # αφού έχει ήδη επικυρωθεί το shared link
+                        # αφού έχει ήδη επικυρωθεί το shared link, και
+                        # δεσμεύεται στον πελάτη του link (confused-deputy)
                         portal_capability=filing.PortalUploadCapability(
-                            shared_link.pk),
+                            shared_link.pk, client.pk),
                     )
                 except DjangoValidationError as e:
                     errors.append(

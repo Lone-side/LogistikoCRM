@@ -2466,16 +2466,70 @@ class SharedLink(models.Model):
             models.Index(fields=['token']),
             models.Index(fields=['is_active', 'expires_at']),
         ]
+        # Κεντρικό invariant στόχου (Γύρος 22): ένα ΕΝΕΡΓΟ link έχει
+        # ΑΚΡΙΒΩΣ έναν στόχο — document XOR client. Διαφορετικά το public
+        # περιεχόμενο (document) και ο προορισμός των uploads
+        # (upload_target_client, που προτιμά το client) μπορούν να
+        # δείχνουν σε ΔΙΑΦΟΡΕΤΙΚΟΥΣ πελάτες.
+        # Τα ΑΝΕΝΕΡΓΑ links εξαιρούνται ώστε legacy orphan rows να
+        # διατηρούνται (απενεργοποιημένα) αντί να διαγράφονται.
+        constraints = [
+            models.CheckConstraint(
+                name='sharedlink_active_exactly_one_target',
+                check=(
+                    models.Q(is_active=False)
+                    | models.Q(document__isnull=False, client__isnull=True)
+                    | models.Q(document__isnull=True, client__isnull=False)
+                ),
+            ),
+        ]
 
     def __str__(self):
-        target = self.document.filename if self.document else f"Φάκελος: {self.client.eponimia}"
-        return f"{self.name or target} ({self.token[:8]}...)"
+        # Ασφαλές ακόμη και για legacy orphan rows (χωρίς κανέναν στόχο)
+        # ή για row με σβησμένο target — ποτέ AttributeError.
+        if self.document_id and self.document:
+            target = self.document.filename
+        elif self.client_id and self.client:
+            target = f"Φάκελος: {self.client.eponimia}"
+        else:
+            target = f"(χωρίς στόχο #{self.pk})"
+        token_part = (self.token or '')[:8]
+        return f"{self.name or target} ({token_part}...)"
+
+    def clean(self):
+        """
+        Invariant στόχου — ισχύει σε admin/forms/serializers/services που
+        καλούν full_clean.
+        """
+        super().clean()
+        from django.core.exceptions import ValidationError
+        if not self.is_active:
+            return
+        if self.document_id and self.client_id:
+            raise ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει ΕΝΑΝ στόχο: είτε έγγραφο είτε '
+                'πελάτη — όχι και τα δύο.')
+        if not self.document_id and not self.client_id:
+            raise ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει έναν στόχο (έγγραφο ή πελάτη).')
 
     def save(self, *args, **kwargs):
+        # Consistency guard ΚΑΙ όταν ο caller δεν κάλεσε full_clean
+        # (π.χ. objects.create, admin action, management command)
+        if self.is_active:
+            from django.core.exceptions import ValidationError
+            if self.document_id and self.client_id:
+                raise ValidationError(
+                    'Ο σύνδεσμος πρέπει να έχει ΕΝΑΝ στόχο: είτε έγγραφο '
+                    'είτε πελάτη — όχι και τα δύο.')
+            if not self.document_id and not self.client_id:
+                raise ValidationError(
+                    'Ο σύνδεσμος πρέπει να έχει έναν στόχο (έγγραφο ή '
+                    'πελάτη).')
         if not self.name:
-            if self.document:
+            if self.document_id and self.document:
                 self.name = self.document.filename
-            elif self.client:
+            elif self.client_id and self.client:
                 self.name = f"Φάκελος: {self.client.eponimia}"
         super().save(*args, **kwargs)
 
@@ -2552,40 +2606,95 @@ class SharedLink(models.Model):
         SharedLink.objects.filter(pk=self.pk).update(**fields)
         self.refresh_from_db(fields=['last_accessed_at', 'view_count', 'download_count'])
 
+    def _revocation_guard_q(self):
+        """
+        Γύρος 22 — atomic revocation guard.
+
+        Κλείνει το TOCTOU παράθυρο ανάμεσα στον αρχικό έλεγχο του link
+        (auth/validity) και στην πραγματική μεταβολή (quota reservation):
+        ΚΑΘΕ ιδιότητα ασφαλείας ξαναελέγχεται μέσα στο ΙΔΙΟ conditional
+        UPDATE, πάνω στις τιμές που είδε ο caller. Αν κάποια άλλαξε
+        ταυτόχρονα (revoke, expire, αλλαγή κωδικού/requires_email,
+        regenerate token, αλλαγή στόχου, αλλαγή access_level), το UPDATE
+        επιστρέφει 0 rows και η ενέργεια απορρίπτεται — χωρίς download,
+        upload, quota mutation ή success access log.
+        """
+        from django.db.models import Q
+        guard = Q(
+            pk=self.pk,
+            is_active=True,
+            # ίδιο token (δεν έγινε regenerate ενδιάμεσα)
+            token=self.token,
+            # αμετάβλητο password/requires_email fingerprint
+            password_hash=self.password_hash,
+            requires_email=self.requires_email,
+            # αμετάβλητος στόχος
+            document_id=self.document_id,
+            client_id=self.client_id,
+            access_level=self.access_level,
+        )
+        # Μη ληγμένο (το NULL σημαίνει «δεν λήγει»)
+        guard &= (Q(expires_at__isnull=True)
+                  | Q(expires_at__gt=timezone.now()))
+        return guard
+
     def try_record_download(self):
         """
         Ατομική δέσμευση ενός download slot: conditional UPDATE στη βάση —
         δύο ταυτόχρονα requests δεν μπορούν να ξεπεράσουν το max_downloads
         (το δεύτερο γυρίζει 0 rows). Επιστρέφει True αν δεσμεύτηκε slot.
+
+        Περιλαμβάνει τον revocation guard: ταυτόχρονη ανάκληση/λήξη/
+        αλλαγή ρυθμίσεων ακυρώνει τη δέσμευση (Γύρος 22).
         """
         from django.db.models import F, Q
         updated = SharedLink.objects.filter(
             Q(max_downloads__isnull=True) | Q(download_count__lt=F('max_downloads')),
-            pk=self.pk,
+            # Το download απαιτεί ρητά access_level='download'
+            self._revocation_guard_q() & Q(access_level='download'),
         ).update(
             last_accessed_at=timezone.now(),
             view_count=F('view_count') + 1,
             download_count=F('download_count') + 1,
         )
-        self.refresh_from_db(fields=['last_accessed_at', 'view_count', 'download_count'])
+        if updated:
+            self.refresh_from_db(
+                fields=['last_accessed_at', 'view_count', 'download_count'])
         return bool(updated)
+
+    def release_download(self):
+        """
+        Compensation για download slot που δεσμεύτηκε αλλά η μετάδοση
+        απέτυχε (π.χ. storage.open()). Το conditional
+        `download_count__gte=1` αποκλείει underflow.
+        """
+        from django.db.models import F
+        SharedLink.objects.filter(pk=self.pk, download_count__gte=1).update(
+            download_count=F('download_count') - 1,
+        )
+        self.refresh_from_db(fields=['download_count'])
 
     def try_reserve_uploads(self, count):
         """
         Ατομική δέσμευση `count` upload slots πριν την επεξεργασία αρχείων —
         conditional UPDATE ώστε concurrent requests να μην υπερβούν το όριο.
         Επιστρέφει True αν δεσμεύτηκαν όλα τα slots.
+
+        Περιλαμβάνει τον revocation guard + ρητό allow_upload=True
+        (Γύρος 22): ταυτόχρονη ανάκληση ή απενεργοποίηση των uploads
+        ακυρώνει τη δέσμευση πριν γραφτεί οποιοδήποτε αρχείο.
         """
         from django.db.models import F, Q
         updated = SharedLink.objects.filter(
             Q(max_uploads__isnull=True)
             | Q(upload_count__lte=F('max_uploads') - count),
-            pk=self.pk,
+            self._revocation_guard_q() & Q(allow_upload=True),
         ).update(
             last_accessed_at=timezone.now(),
             upload_count=F('upload_count') + count,
         )
-        self.refresh_from_db(fields=['last_accessed_at', 'upload_count'])
+        if updated:
+            self.refresh_from_db(fields=['last_accessed_at', 'upload_count'])
         return bool(updated)
 
     def release_uploads(self, count):

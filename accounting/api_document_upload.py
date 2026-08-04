@@ -265,10 +265,14 @@ def upload_document_with_version(request):
                 on_existing='replace' if version_action == 'replace' else 'version',
             )
         except ValidationError as e:
-            return JsonResponse({
-                'success': False,
-                'error': '; '.join(e.messages)
-            }, status=400)
+            # Κοινό contract: MultipleCurrentDocumentsError → 409, ποτέ 400
+            message, code = filing.document_error_status(e)
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
+        except (_filing.DocumentKeyConflict, _filing.DocumentGone) as e:
+            message, code = _filing.document_error_status(e)
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
 
         if has_conflict and version_action == 'replace':
             action, message = 'replaced', 'Το αρχείο αντικαταστάθηκε'
