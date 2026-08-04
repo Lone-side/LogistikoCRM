@@ -507,14 +507,23 @@ class DownloadQuotaStorageFailureTest(TestCase):
     def test_successful_download_consumes_exactly_one_slot(self):
         url = f'/accounting/share/{self.link.token}/download/'
         resp = self.web.get(url)
-        self.assertEqual(resp.status_code, 200)
-        if hasattr(resp, 'close'):
+        try:
+            self.assertEqual(resp.status_code, 200)
+
+            # ΠΡΟΣΟΧΗ (σειρά): τα DB assertions ΠΡΙΝ το resp.close(). Το
+            # close() ενός FileResponse πυροδοτεί το signal
+            # `request_finished`, που κλείνει το DB connection — σε
+            # PostgreSQL κάθε επόμενο query σκάει με InterfaceError
+            # (σε SQLite περνάει σιωπηλά).
+            self.link.refresh_from_db()
+            self.assertEqual(self.link.download_count, 1)
+            self.assertEqual(
+                SharedLinkAccess.objects.filter(
+                    shared_link=self.link, action='download').count(), 1)
+        finally:
+            # Το FileResponse κλείνει ΠΑΝΤΑ, ακόμη κι αν αποτύχει
+            # κάποιο assertion — κανένα streaming handle δεν διαρρέει.
             resp.close()
-        self.link.refresh_from_db()
-        self.assertEqual(self.link.download_count, 1)
-        self.assertEqual(
-            SharedLinkAccess.objects.filter(
-                shared_link=self.link, action='download').count(), 1)
 
     def test_file_handle_closed_when_guard_rejects(self):
         """
