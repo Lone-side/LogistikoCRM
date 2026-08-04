@@ -319,47 +319,79 @@ def _delete_stored_file(doc):
         logger.warning(f"Δεν καθαρίστηκε orphan αρχείο: {e}")
 
 
+VALID_ON_EXISTING = ('version', 'replace', 'keep')
+
+
+def _exact_conflict_qs(ClientDocument, client, category, year, month, obligation):
+    """
+    Το ΠΛΗΡΕΣ logical conflict key — όλα τα φίλτρα ΠΡΙΝ από κάθε select:
+    client, document_category ΑΚΡΙΒΩΣ (και το 'general'), year, month,
+    obligation ΑΚΡΙΒΩΣ (obligation__isnull=True όταν δεν υπάρχει).
+    Δεν αφήνουμε ordering/uploaded_at να διαλέξει «κάποιο» row.
+    """
+    qs = ClientDocument.objects.select_for_update().filter(
+        client=client,
+        is_current=True,
+        document_category=category or 'general',
+        year=year,
+        month=month,
+    )
+    if obligation is not None:
+        qs = qs.filter(obligation=obligation)
+    else:
+        qs = qs.filter(obligation__isnull=True)
+    return qs
+
+
 def create_client_document(client, uploaded_file, category='general', obligation=None,
                            year=None, month=None, user=None, description='',
                            on_existing='version'):
     """
     Το μοναδικό σημείο δημιουργίας ClientDocument από upload.
 
-    - Επικυρώνει το αρχείο βάσει ρυθμίσεων (validate_upload)
-    - Κρατά το ΠΡΑΓΜΑΤΙΚΟ αρχικό όνομα και μετά εφαρμόζει τον Κανόνα
-      Ονοματολογίας των ρυθμίσεων + sanitize (apply_naming)
-    - Παίρνει κατηγορία/έτος/μήνα από την υποχρέωση αν δεν δόθηκαν
-    - Αν υπάρχει ήδη τρέχον έγγραφο για τον ίδιο συνδυασμό:
-      on_existing='version' → νέα έκδοση, 'replace' → αντικατάσταση (v1),
-      'keep' → νέο ανεξάρτητο έγγραφο ΧΩΡΙΣ να πειραχτεί το υπάρχον
-      (υποχρεωτικό για ανώνυμα uploads πελατών — δεν επιτρέπεται να
-      εκτοπίζουν έγγραφα του γραφείου)
-    - Επιβάλλει το κεντρικό permission matrix (require_document_mutation_perms)
-      ΑΦΟΥ προσδιοριστεί race-safe (select_for_update) αν υπάρχει conflict,
-      αλλά ΠΡΙΝ από κάθε DB αλλαγή ή file I/O
-    - Δημιουργεί on-demand τους φακέλους για το έτος του εγγράφου
+    Σειρά (καμία μόνιμη αλλαγή storage πριν από τα permissions):
+    1. Input validation (on_existing, validate_upload, cross-client invariant)
+       — χωρίς μόνιμα side effects
+    2. Parent serialization lock: select_for_update στο MonthlyObligation
+       (όταν υπάρχει obligation) αλλιώς στο ClientProfile row — αυτό
+       σειριοποιεί και τα ταυτόχρονα ΠΡΩΤΑ uploads του ίδιου key, όπου
+       δεν υπάρχει ακόμη conflict row για να κλειδωθεί
+    3. Exact conflict lookup στο πλήρες logical key (_exact_conflict_qs)·
+       πολλαπλά matching current rows → fail closed (ValidationError +
+       internal-ID log), ΔΕΝ επιλέγεται αυθαίρετα ένα
+    4. Mutation determination (create/version/replace)
+    5. require_document_mutation_perms — permission matrix
+    6. ΜΟΝΟ μετά: apply_naming, ensure_folders, storage write, DB mutation
 
-    Lifecycle εγγύηση (DB + storage ΔΕΝ είναι atomic από μόνα τους — υπάρχει
-    compensating cleanup):
-    - Σε αποτυχία DB save το νέο φυσικό αρχείο διαγράφεται (όχι orphans).
-    - Το παλιό φυσικό αρχείο (replace) διαγράφεται ΜΟΝΟ μετά το commit
-      (transaction.on_commit) — σε failure μένουν παλιό row ΚΑΙ παλιό αρχείο.
-    - Σε version failure το παλιό document παραμένει is_current=True
-      (rollback του conditional update).
+    on_existing: 'version' (νέα έκδοση), 'replace' (αντικατάσταση),
+    'keep' (νέο ανεξάρτητο — υποχρεωτικό για ανώνυμα portal uploads).
+
+    Lifecycle (DB + storage ΔΕΝ είναι atomic — compensating cleanup):
+    - Outer compensation: σε ΚΑΘΕ αποτυχία μετά τη δημιουργία του νέου
+      φυσικού αρχείου (row save, μεταγενέστερο βήμα, commit) το νέο αρχείο
+      διαγράφεται ΜΟΝΟ αφού επιβεβαιωθεί ότι το row ΔΕΝ υπάρχει στη βάση —
+      σε ambiguous commit outcome (row τελικά committed) το αρχείο
+      ΔΕΝ διαγράφεται, ώστε να μη μείνει committed row χωρίς αρχείο.
+    - Replace: το παλιό φυσικό αρχείο διαγράφεται ΑΠΟΚΛΕΙΣΤΙΚΑ με
+      transaction.on_commit — σε failure μένουν παλιό row ΚΑΙ παλιό αρχείο.
+    - Version failure: το παλιό document παραμένει is_current=True (rollback).
 
     Returns: ClientDocument
-    Raises: ValidationError (μη αποδεκτό αρχείο/ασυνέπεια),
+    Raises: ValidationError (μη αποδεκτό αρχείο/ασυνέπεια/άκυρο on_existing),
             PermissionDenied (permission matrix)
     """
     from django.core.exceptions import ValidationError
     from django.db import transaction
-    from accounting.models import ClientDocument
+    from accounting.models import ClientDocument, ClientProfile, MonthlyObligation
 
+    # === 1. Input validation — κανένα μόνιμο side effect ===
+    if on_existing not in VALID_ON_EXISTING:
+        raise ValidationError(
+            f"Μη έγκυρη τιμή on_existing — επιτρέπονται: "
+            f"{', '.join(VALID_ON_EXISTING)}")
     validate_upload(uploaded_file)
     original_name = os.path.basename(uploaded_file.name or '') or 'unnamed_file'
 
-    # Data-integrity invariant ΠΡΙΝ από κάθε file I/O ή row: η υποχρέωση
-    # (αν δόθηκε) πρέπει να ανήκει στον ίδιο πελάτη
     if obligation is not None and client is not None \
             and obligation.client_id != client.id:
         raise ValidationError(
@@ -372,82 +404,104 @@ def create_client_document(client, uploaded_file, category='general', obligation
     year = int(year or now.year)
     month = int(month or now.month)
 
-    apply_naming(uploaded_file, client, category=category, year=year, month=month)
+    new_file_ref = {'storage': None, 'name': None, 'pk': None}
+    try:
+        with transaction.atomic():
+            # === 2. Parent serialization lock (βλ. docstring) ===
+            if obligation is not None:
+                MonthlyObligation.objects.select_for_update().get(
+                    pk=obligation.pk)
+            else:
+                ClientProfile.objects.select_for_update().get(pk=client.pk)
 
-    # Φάκελοι για το έτος του εγγράφου (idempotent, καλύπτει νέα χρονιά)
-    ensure_folders(client, year=year)
-
-    with transaction.atomic():
-        # Race-safe conflict detection: κλειδώνουμε το υποψήφιο υπάρχον row
-        # ώστε δύο ταυτόχρονα requests να μη δουν και τα δύο «δεν υπάρχει».
-        existing = None
-        if on_existing != 'keep':
-            conflict_qs = ClientDocument.objects.select_for_update().filter(
-                client=client, is_current=True)
-            if obligation:
-                conflict_qs = conflict_qs.filter(obligation=obligation)
-            if category and category != 'general':
-                conflict_qs = conflict_qs.filter(document_category=category)
-            existing = conflict_qs.first()
-
-        has_conflict = bool(
-            existing and existing.year == year and existing.month == month)
-        if has_conflict:
-            mutation = 'replace' if on_existing == 'replace' else 'version'
-        else:
+            # === 3. Exact conflict lookup ===
+            existing = None
             mutation = 'create'
+            if on_existing != 'keep':
+                matches = list(_exact_conflict_qs(
+                    ClientDocument, client, category, year, month, obligation))
+                if len(matches) > 1:
+                    logger.error(
+                        'Πολλαπλά current documents στο ίδιο conflict key: '
+                        'client id=%s, ids=%s',
+                        client.pk, sorted(d.pk for d in matches))
+                    raise ValidationError(
+                        'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                        'συνδυασμό — απαιτείται χειροκίνητη διόρθωση '
+                        '(audit_clientdocument_invariants).')
+                existing = matches[0] if matches else None
+                if existing is not None:
+                    mutation = 'replace' if on_existing == 'replace' else 'version'
 
-        # Permission matrix ΜΕΤΑ τον race-safe προσδιορισμό του conflict,
-        # ΠΡΙΝ από οποιαδήποτε αλλαγή ή file I/O
-        require_document_mutation_perms(user, mutation)
+            # === 4-5. Permission matrix ΠΡΙΝ από κάθε αλλαγή/file I/O ===
+            require_document_mutation_perms(user, mutation)
 
-        if mutation == 'version':
-            doc = existing.create_new_version(
-                new_file=uploaded_file, user=user,
-                original_filename=original_name,
-            )
-            if description:
-                doc.description = description
-                doc.save(update_fields=['description'])
-            _queue_text_extraction(doc)
-            return doc
+            # === 6. Naming/folders/storage — μόνο μετά τα permissions ===
+            apply_naming(uploaded_file, client, category=category,
+                         year=year, month=month)
+            ensure_folders(client, year=year)
 
-        old_file_name = None
-        if mutation == 'replace':
-            # Το παλιό row φεύγει μέσα στο transaction· το παλιό ΦΥΣΙΚΟ αρχείο
-            # διαγράφεται μόνο μετά το commit — σε failure μένουν και τα δύο.
-            old_file_name = existing.file.name if existing.file else None
-            existing.delete()
+            if mutation == 'version':
+                doc = existing.create_new_version(
+                    new_file=uploaded_file, user=user,
+                    original_filename=original_name,
+                    description=description or None,
+                )
+                new_file_ref.update(storage=doc.file.storage,
+                                    name=doc.file.name, pk=doc.pk)
+            else:
+                old_file_name = None
+                if mutation == 'replace':
+                    # Το παλιό row φεύγει μέσα στο transaction· το παλιό
+                    # ΦΥΣΙΚΟ αρχείο διαγράφεται μόνο on_commit.
+                    old_file_name = existing.file.name if existing.file else None
+                    existing.delete()
 
-        doc = ClientDocument(
-            client=client,
-            obligation=obligation,
-            file=uploaded_file,
-            original_filename=original_name,
-            document_category=category or 'general',
-            year=year,
-            month=month,
-            version=1,
-            is_current=True,
-            description=description,
-            uploaded_by=user,
-        )
-        # Το save() γράφει πρώτα το φυσικό αρχείο και μετά το row· σε αποτυχία
-        # του row το αρχείο καθαρίζεται (compensating cleanup) και το
-        # transaction κάνει rollback κάθε DB αλλαγή (και το delete του replace).
-        try:
-            doc.save()
-        except Exception:
-            _delete_stored_file(doc)
-            raise
+                doc = ClientDocument(
+                    client=client,
+                    obligation=obligation,
+                    file=uploaded_file,
+                    original_filename=original_name,
+                    document_category=category or 'general',
+                    year=year,
+                    month=month,
+                    version=1,
+                    is_current=True,
+                    description=description,
+                    uploaded_by=user,
+                )
+                try:
+                    doc.save()
+                except Exception:
+                    # Το save μπορεί να αποτύχει ΜΕΤΑ το storage write
+                    # (insert/signal) — καθάρισε το γραμμένο αρχείο
+                    _delete_stored_file(doc)
+                    raise
+                new_file_ref.update(storage=doc.file.storage,
+                                    name=doc.file.name, pk=doc.pk)
 
-        if old_file_name:
-            storage = doc.file.storage
-            transaction.on_commit(
-                lambda: _safe_storage_delete(storage, old_file_name))
+                if old_file_name:
+                    storage = doc.file.storage
+                    transaction.on_commit(
+                        lambda: _safe_storage_delete(storage, old_file_name))
+    except Exception:
+        # Outer compensation: καλύπτει ΚΑΘΕ αποτυχία μετά το storage write
+        # (row save, μεταγενέστερα βήματα, commit). Διαγραφή ΜΟΝΟ αν το row
+        # δεν υπάρχει στη βάση — προστασία σε ambiguous commit outcome.
+        if new_file_ref['name']:
+            try:
+                committed = new_file_ref['pk'] is not None and \
+                    ClientDocument.objects.filter(
+                        pk=new_file_ref['pk']).exists()
+                if not committed:
+                    new_file_ref['storage'].delete(new_file_ref['name'])
+            except Exception as cleanup_err:
+                logger.warning(f"Δεν καθαρίστηκε orphan αρχείο: {cleanup_err}")
+        raise
 
     _queue_text_extraction(doc)
     return doc
+
 
 
 def _safe_storage_delete(storage, name):

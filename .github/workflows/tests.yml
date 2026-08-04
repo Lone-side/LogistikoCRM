@@ -76,6 +76,15 @@ jobs:
         run: |
           python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata --keepdb -v 2
 
+      # PostgreSQL concurrency proof (Γύρος 18 — F2): πραγματικό race test
+      # με δύο threads/connections. BLOCKING — το test αποτυγχάνει (όχι
+      # skip) αν δεν τρέχει σε PostgreSQL.
+      - name: PostgreSQL concurrency tests (blocking)
+        env:
+          REQUIRE_POSTGRES_TESTS: '1'
+        run: |
+          python manage.py test tests.accounting.test_concurrency_postgres --keepdb -v 2
+
       - name: Run tests with coverage
         run: |
           coverage run manage.py test tests.accounting tests.crm tests.common tests.mydata --keepdb
@@ -217,4 +226,5 @@ jobs:
             tests.accounting.test_rbac_round15 \
             tests.accounting.test_rbac_round16 \
             tests.accounting.test_rbac_round17 \
+            tests.accounting.test_rbac_round18 \
             -v 2

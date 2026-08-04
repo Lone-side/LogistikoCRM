@@ -8,3 +8,5 @@ class AccountingConfig(AppConfig):
     def ready(self):
         # Import signals to register them
         import accounting.signals  # noqa: F401
+        # Register system checks (libmagic fail-closed σε production)
+        import accounting.checks  # noqa: F401

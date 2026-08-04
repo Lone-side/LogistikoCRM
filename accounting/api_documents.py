@@ -97,10 +97,14 @@ class DocumentSerializer(serializers.ModelSerializer):
             'document_category', 'category_display', 'description',
             'uploaded_at'
         ]
-        # Το file είναι ΠΑΝΤΑ read-only εδώ: κάθε πραγματικό upload περνά
-        # ΜΟΝΟ από το filing service (validation/ονομασία/versioning) μέσω
-        # του /upload/ action — όχι από generic create/update.
-        read_only_fields = ['file', 'filename', 'file_type', 'uploaded_at']
+        # file: κάθε πραγματικό upload περνά ΜΟΝΟ από το filing service.
+        # client/obligation/document_category: καθορίζουν ownership και
+        # storage path — αλλαγή τους ΧΩΡΙΣ μετακίνηση αρχείου θα άφηνε
+        # row/path mismatch. Attach/detach obligation ΜΟΝΟ μέσω των
+        # dedicated actions (με τα δικά τους permissions/consistency checks).
+        read_only_fields = ['file', 'client', 'obligation',
+                            'document_category', 'filename', 'file_type',
+                            'uploaded_at']
 
     def get_file_url(self, obj):
         if obj.file:
@@ -255,12 +259,21 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
+    # Πεδία που καθορίζουν ownership/storage path — ΔΕΝ αλλάζουν από
+    # generic PUT/PATCH (μόνο descriptive metadata, π.χ. description)
+    IMMUTABLE_UPDATE_FIELDS = ('file', 'client', 'obligation',
+                               'document_category', 'previous_version',
+                               'is_current', 'version', 'year', 'month')
+
     def update(self, request, *args, **kwargs):
-        """Metadata-only updates: αλλαγή αρχείου μέσω PUT/PATCH απορρίπτεται."""
-        if 'file' in request.data:
+        """Descriptive-metadata-only updates: file/ownership/path πεδία → 400."""
+        blocked = [f for f in self.IMMUTABLE_UPDATE_FIELDS
+                   if f in request.data]
+        if blocked:
             return Response(
-                {'error': 'Το αρχείο δεν αλλάζει μέσω αυτού του endpoint — '
-                          'χρησιμοποιήστε το upload-with-version.'},
+                {'error': 'Τα πεδία αρχείου/ιδιοκτησίας δεν αλλάζουν από '
+                          'αυτό το endpoint — χρησιμοποιήστε τα dedicated '
+                          'actions (upload-with-version, attach/detach).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return super().update(request, *args, **kwargs)
@@ -391,18 +404,34 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         })
 
     def destroy(self, request, *args, **kwargs):
-        """Override delete to also remove file from storage"""
+        """
+        Ασφαλής σειρά διαγραφής: πρώτα το DB row (atomic), το φυσικό αρχείο
+        ΜΟΝΟ με transaction.on_commit — σε DB failure μένουν και row και
+        αρχείο· σε storage failure το row έχει ήδη διαγραφεί (generic
+        warning χωρίς πλήρες path).
+        """
+        from django.db import transaction
+
         document = self.get_object()
+        storage = document.file.storage if document.file else None
+        file_name = document.file.name if document.file else None
 
-        # Delete file from storage
-        if document.file:
-            try:
-                document.file.delete(save=False)
-            except Exception:
-                pass  # File might not exist
-
-        document.delete()
+        with transaction.atomic():
+            document.delete()
+            if file_name:
+                transaction.on_commit(
+                    lambda: _safe_delete_document_file(storage, file_name))
         return Response({'message': 'Το έγγραφο διαγράφηκε επιτυχώς.'})
+
+
+def _safe_delete_document_file(storage, name):
+    """Post-commit διαγραφή φυσικού αρχείου — generic warning, όχι path/PII."""
+    try:
+        storage.delete(name)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Αποτυχία διαγραφής φυσικού αρχείου εγγράφου μετά το commit')
 
 
 # ============================================
@@ -515,7 +544,17 @@ def obligation_documents(request, obligation_id):
     List all documents attached to an obligation
     """
     from django.http import Http404
-    from accounting.services.access import get_accessible_obligation_or_404
+    from accounting.services.access import (
+        check_model_perms, get_accessible_obligation_or_404,
+    )
+    # Model permissions ΠΡΙΝ από κάθε ανάκτηση: επιστρέφει στοιχεία
+    # υποχρέωσης ΚΑΙ εγγράφων (με signed URLs)
+    if not check_model_perms(request, 'accounting.view_monthlyobligation',
+                             'accounting.view_clientdocument'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     try:
         obligation = get_accessible_obligation_or_404(
             request.user, obligation_id, request=request

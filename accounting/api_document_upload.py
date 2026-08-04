@@ -106,11 +106,13 @@ def check_existing_document(request):
                 'document': None
             })
 
-    except Exception as e:
-        logger.error(f"Error checking existing document: {e}", exc_info=True)
-        return JsonResponse({
-            'error': str(e)
-        }, status=500)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Μη έγκυρες παράμετροι.'}, status=400)
+    except Exception:
+        logger.exception("Error checking existing document")
+        return JsonResponse(
+            {'error': 'Σφάλμα κατά τον έλεγχο υπάρχοντος εγγράφου.'},
+            status=500)
 
 
 # =============================================================================
@@ -190,16 +192,26 @@ def upload_document_with_version(request):
                 year = year or now.year
                 month = month or now.month
 
-        year = int(year)
-        month = int(month)
+        try:
+            year = int(year)
+            month = int(month)
+        except (TypeError, ValueError):
+            return JsonResponse({
+                'success': False,
+                'error': 'Μη έγκυρο έτος ή μήνας.'
+            }, status=400)
+        if not (2000 <= year <= 2100) or not (1 <= month <= 12):
+            return JsonResponse({
+                'success': False,
+                'error': 'Μη έγκυρο έτος ή μήνας.'
+            }, status=400)
 
-        # Check for existing document
+        # Exact conflict key — ίδια σημασιολογία με το filing service
         existing = ClientDocument.check_existing(
-            client=client,
-            obligation=obligation,
-            category=category if category != 'general' else None
+            client=client, obligation=obligation, category=category,
+            year=year, month=month,
         )
-        has_conflict = bool(existing and existing.year == year and existing.month == month)
+        has_conflict = existing is not None
 
         if has_conflict and version_action not in ('new_version', 'replace'):
             # auto - return info that file exists
@@ -332,7 +344,8 @@ def _document_to_dict(doc):
         'version': doc.version,
         'is_current': doc.is_current,
         'url': signed_media_url(doc.file) if doc.file else None,
-        'folder_path': doc.folder_path,
+        # ΟΧΙ folder_path/file.path: absolute filesystem paths δεν εκτίθενται
+        # σε JSON, και το file.path δεν υπάρχει σε μη-local storage backends
         'uploaded_at': doc.uploaded_at.strftime('%d/%m/%Y %H:%M'),
         'uploaded_by': doc.uploaded_by.get_full_name() if doc.uploaded_by else None,
     }

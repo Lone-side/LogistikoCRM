@@ -786,7 +786,8 @@ class ClientDocumentAdmin(admin.ModelAdmin):
             existing = ClientDocument.check_existing(
                 client=obj.client,
                 obligation=obj.obligation,
-                category=obj.document_category if obj.document_category != 'general' else None
+                category=obj.document_category,
+                year=obj.year, month=obj.month,
             )
 
             if existing and 'confirm_replace' not in request.POST:

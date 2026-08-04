@@ -13,6 +13,17 @@ from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend, FilterSet, CharFilter, BooleanFilter
 from django.db.models import Count, Q
 
+
+def _delete_file_post_commit(storage, name):
+    """Post-commit διαγραφή φυσικού αρχείου — generic warning, όχι path/PII."""
+    try:
+        if storage is not None:
+            storage.delete(name)
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Αποτυχία διαγραφής φυσικού αρχείου εγγράφου μετά το commit')
+
 from .models import ClientProfile, MonthlyObligation, ClientDocument
 from .serializers import ClientDocumentSerializer
 from .mixins import ClientScopedQuerysetMixin
@@ -509,26 +520,25 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             )
 
         try:
-            # Delete file from storage
-            if document.file:
-                try:
-                    document.file.delete(save=False)
-                except Exception as file_error:
-                    logger.warning(f"Could not delete file from storage: {file_error}")
-
-            # Store filename for response
+            # Ασφαλής σειρά: πρώτα το DB row (atomic), το φυσικό αρχείο
+            # ΜΟΝΟ με on_commit — DB failure δεν αφήνει row χωρίς αρχείο
+            from django.db import transaction
             filename = document.filename
-
-            # Delete document (this will cascade delete related tags, favorites, etc.)
-            document.delete()
+            storage = document.file.storage if document.file else None
+            file_name = document.file.name if document.file else None
+            with transaction.atomic():
+                document.delete()
+                if file_name:
+                    transaction.on_commit(
+                        lambda s=storage, n=file_name: _delete_file_post_commit(s, n))
 
             return Response({
                 'message': f'Το έγγραφο "{filename}" διαγράφηκε επιτυχώς.'
             })
-        except Exception as e:
-            logger.error(f"Error deleting document {doc_id}: {e}")
+        except Exception:
+            logger.exception(f"Error deleting document id={doc_id}")
             return Response(
-                {'error': f'Σφάλμα κατά τη διαγραφή: {str(e)}'},
+                {'error': 'Σφάλμα κατά τη διαγραφή του εγγράφου.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

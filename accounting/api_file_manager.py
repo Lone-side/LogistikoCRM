@@ -509,9 +509,17 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             try:
                 # Μόνο έγγραφα πελατών ανατεθειμένων στον χρήστη
                 doc = allowed.get(id=doc_id)
-                if doc.file:
-                    doc.file.delete(save=False)
-                doc.delete()
+                # Ασφαλής σειρά: DB row πρώτα, φυσικό αρχείο μόνο on_commit
+                from django.db import transaction
+                from accounting.api_clients import _delete_file_post_commit
+                storage = doc.file.storage if doc.file else None
+                file_name = doc.file.name if doc.file else None
+                with transaction.atomic():
+                    doc.delete()
+                    if file_name:
+                        transaction.on_commit(
+                            lambda s=storage, n=file_name:
+                            _delete_file_post_commit(s, n))
                 deleted_count += 1
             except ClientDocument.DoesNotExist:
                 continue

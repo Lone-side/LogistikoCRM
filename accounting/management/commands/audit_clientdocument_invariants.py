@@ -5,19 +5,26 @@
 Το model save guard δεν καλύπτει παλιά rows, QuerySet.update, bulk
 operations ή direct SQL — αυτό το command σαρώνει τη βάση και αναφέρει:
 
-1. document.client_id != obligation.client_id
-2. document.client_id != previous_version.client_id
-3. Σπασμένες αλυσίδες previous_version (self-reference)
-4. Περισσότερα από ένα current documents στην ίδια version chain
-   (previous_version με is_current=True ενώ υπάρχει νεότερη current έκδοση)
+1. document.client_id != obligation.client_id (cross-client edge)
+2. document.client_id != previous_version.client_id (cross-client edge)
+3. Κύκλους στο version graph (self-reference, 2-node, 3+ node) —
+   iterative traversal με visited/visiting state, ΟΧΙ ακολούθηση
+   previous_version χωρίς cycle guard
+4. Περισσότερα από ένα current documents στην ίδια αλυσίδα/συστάδα
+   (siblings, non-adjacent descendants — μέσω connected components)
+5. Branching chains (δύο documents με το ίδιο previous_version)
+6. Invalid version progression (doc.version != prev.version + 1)
+7. Duplicate current rows στο ίδιο exact logical conflict key
+   (client, document_category, year, month, obligation)
 
-Report-only by design: ΔΕΝ γίνεται αυτόματη επανάθεση ξένων documents σε
-άλλον πελάτη — η διόρθωση είναι χειροκίνητη, βάσει των πραγματικών
-παραστατικών (fail closed). Στα logs μπαίνουν ΜΟΝΟ internal IDs — ποτέ
-πλήρες ΑΦΜ ή ονόματα αρχείων.
+Report-only by design: ΔΕΝ γίνεται αυτόματη επανάθεση/διόρθωση — η
+διόρθωση είναι χειροκίνητη (fail closed). Στα ευρήματα μπαίνουν ΜΟΝΟ
+internal IDs — ποτέ ΑΦΜ ή ονόματα αρχείων.
 
 Χρήση σε deployment checks: --fail-on-findings → exit code != 0 (CommandError).
 """
+from collections import defaultdict
+
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F
 
@@ -25,8 +32,8 @@ from accounting.models import ClientDocument
 
 
 class Command(BaseCommand):
-    help = ("Αναφέρει ClientDocument rows που παραβιάζουν τα cross-client "
-            "invariants (report-only, χειροκίνητη διόρθωση)")
+    help = ("Αναφέρει ClientDocument rows που παραβιάζουν τα cross-client/"
+            "version-graph invariants (report-only, χειροκίνητη διόρθωση)")
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -63,23 +70,108 @@ class Command(BaseCommand):
                 f"{doc['previous_version__client_id']})"
             )
 
-        # 3. Self-referencing chain
-        for doc in (ClientDocument.objects
-                    .filter(previous_version_id=F('id'))
-                    .values('id')):
-            findings.append(
-                f"broken-chain-self-reference: document id={doc['id']}")
+        # === Version graph: φόρτωση σε μνήμη για ασφαλή ανάλυση ===
+        rows = list(ClientDocument.objects.values(
+            'id', 'previous_version_id', 'is_current', 'version',
+            'client_id', 'document_category', 'year', 'month',
+            'obligation_id'))
+        prev_of = {r['id']: r['previous_version_id'] for r in rows}
+        info = {r['id']: r for r in rows}
 
-        # 4. Δύο (ή περισσότερα) current στην ίδια αλυσίδα: previous_version
-        # που παραμένει is_current=True ενώ έχει νεότερη έκδοση
-        for doc in (ClientDocument.objects
-                    .filter(previous_version__isnull=False,
-                            previous_version__is_current=True)
-                    .values('id', 'previous_version_id')):
-            findings.append(
-                f"multiple-current-in-chain: document id={doc['id']} και "
-                f"previous id={doc['previous_version_id']}"
-            )
+        # 3. Κύκλοι: iterative traversal με τρι-κατάστατο visited
+        # (0=unvisited, 1=visiting, 2=done) — cycle guard, όχι recursion
+        state = {}
+        cycle_nodes = set()
+        for start in prev_of:
+            if state.get(start):
+                continue
+            path = []
+            node = start
+            while node is not None and node in prev_of:
+                st = state.get(node, 0)
+                if st == 2:
+                    break
+                if st == 1:
+                    # Κύκλος: όλα τα nodes από την πρώτη εμφάνιση του node
+                    idx = path.index(node)
+                    cycle_nodes.update(path[idx:])
+                    break
+                state[node] = 1
+                path.append(node)
+                node = prev_of[node]
+            for n in path:
+                state[n] = 2
+        for n in sorted(cycle_nodes):
+            findings.append(f"version-graph-cycle: document id={n}")
+
+        # 5. Branching: δύο (ή περισσότερα) docs με ίδιο previous_version
+        children = defaultdict(list)
+        for doc_id, prev_id in prev_of.items():
+            if prev_id is not None:
+                children[prev_id].append(doc_id)
+        for prev_id, kids in sorted(children.items()):
+            if len(kids) > 1:
+                findings.append(
+                    f"branching-chain: previous id={prev_id} έχει "
+                    f"{len(kids)} διαδόχους ids={sorted(kids)}"
+                )
+
+        # 4. Πολλαπλά current στην ίδια συστάδα (connected component του
+        # previous_version graph) — καλύπτει siblings ΚΑΙ non-adjacent
+        # descendants. Union-find πάνω στα edges (χωρίς recursion).
+        parent = {}
+
+        def find(x):
+            root = x
+            while parent.get(root, root) != root:
+                root = parent[root]
+            while parent.get(x, x) != x:
+                parent[x], x = root, parent[x]
+            return root
+
+        def union(a, b):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        for doc_id, prev_id in prev_of.items():
+            if prev_id is not None and prev_id in info:
+                union(doc_id, prev_id)
+        comp_current = defaultdict(list)
+        for r in rows:
+            if r['is_current']:
+                comp_current[find(r['id'])].append(r['id'])
+        for comp, currents in sorted(comp_current.items()):
+            if len(currents) > 1:
+                findings.append(
+                    f"multiple-current-in-chain: ids={sorted(currents)}"
+                )
+
+        # 6. Invalid version progression
+        for doc_id, prev_id in sorted(prev_of.items()):
+            if prev_id is None or prev_id not in info or doc_id in cycle_nodes:
+                continue
+            if info[doc_id]['version'] != info[prev_id]['version'] + 1:
+                findings.append(
+                    f"invalid-version-progression: document id={doc_id} "
+                    f"(v{info[doc_id]['version']}) ← previous id={prev_id} "
+                    f"(v{info[prev_id]['version']})"
+                )
+
+        # 7. Duplicate current rows στο exact logical conflict key
+        by_key = defaultdict(list)
+        for r in rows:
+            if r['is_current']:
+                key = (r['client_id'], r['document_category'], r['year'],
+                       r['month'], r['obligation_id'])
+                by_key[key].append(r['id'])
+        for key, ids in sorted(by_key.items()):
+            if len(ids) > 1:
+                findings.append(
+                    f"duplicate-current-for-key: client id={key[0]} "
+                    f"category={key[1]} {key[3]}/{key[2]} obligation "
+                    f"id={key[4]} → ids={sorted(ids)}"
+                )
 
         if not findings:
             self.stdout.write(self.style.SUCCESS(

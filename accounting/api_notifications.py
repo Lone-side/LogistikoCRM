@@ -136,15 +136,15 @@ def notifications_list(request):
                 'icon': 'calendar',
             })
 
-    except Exception as e:
-        logger.error(f"Error fetching notifications: {e}")
-        # Return empty list on error instead of failing
+    except Exception:
+        # Generic safe empty-state — ποτέ raw exception text στο response
+        logger.exception("Error fetching notifications")
         return Response({
             'notifications': [],
             'count': 0,
             'overdue_count': 0,
             'today_count': 0,
-            'error': str(e)
+            'error': 'Σφάλμα κατά την ανάκτηση ειδοποιήσεων.'
         })
 
     return Response({

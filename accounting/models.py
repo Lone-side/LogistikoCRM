@@ -2046,21 +2046,30 @@ class ClientDocument(models.Model):
         filing.ensure_folders(self.client, year=self.year)
 
     @classmethod
-    def check_existing(cls, client, obligation=None, category=None):
+    def check_existing(cls, client, obligation=None, category='general',
+                       year=None, month=None):
         """
-        Έλεγχος αν υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό.
+        Έλεγχος αν υπάρχει ήδη τρέχον αρχείο για το ΑΚΡΙΒΕΣ logical key:
+        client + document_category (και το 'general' μετρά κανονικά) +
+        obligation ΑΚΡΙΒΩΣ (isnull όταν δεν δόθηκε) + year/month αν δόθηκαν.
         Επιστρέφει το υπάρχον αρχείο ή None.
         """
-        qs = cls.objects.filter(client=client, is_current=True)
-
-        if obligation:
+        qs = cls.objects.filter(
+            client=client, is_current=True,
+            document_category=category or 'general',
+        )
+        if obligation is not None:
             qs = qs.filter(obligation=obligation)
-        if category:
-            qs = qs.filter(document_category=category)
+        else:
+            qs = qs.filter(obligation__isnull=True)
+        if year is not None:
+            qs = qs.filter(year=year)
+        if month is not None:
+            qs = qs.filter(month=month)
+        return qs.order_by('pk').first()
 
-        return qs.first()
-
-    def create_new_version(self, new_file, user=None, original_filename=None):
+    def create_new_version(self, new_file, user=None, original_filename=None,
+                           description=None):
         """
         Δημιουργεί νέα έκδοση του εγγράφου. Το παλιό γίνεται is_current=False.
 
@@ -2103,7 +2112,10 @@ class ClientDocument(models.Model):
                 version=self.version + 1,
                 is_current=True,
                 previous_version=self,
-                description=self.description,
+                # description στο ΠΡΩΤΟ save — όχι δεύτερο save μετά
+                # (θα άνοιγε παράθυρο για orphan σε ενδιάμεση αποτυχία)
+                description=description if description is not None
+                else self.description,
                 uploaded_by=user,
             )
             try:
