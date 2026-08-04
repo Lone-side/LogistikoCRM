@@ -81,6 +81,32 @@ class MediaTestCase(TestCase):
         shutil.rmtree(TEMP_MEDIA, ignore_errors=True)
 
 
+from contextlib import contextmanager  # noqa: E402
+
+
+@contextmanager
+def current_constraints_disabled():
+    """
+    Προσομοίωση legacy DB ΧΩΡΙΣ τα uniq_current_doc_* constraints — μόνο
+    έτσι μπορεί πλέον να δημιουργηθεί corrupted multiple-current state
+    (το DB net του Γύρου 19 μπλοκάρει κάθε νέο τέτοιο row). Στο τέλος
+    καθαρίζονται ΟΛΑ τα rows πριν την επαναφορά των constraints.
+    """
+    from django.db import connection
+    cons = [c for c in ClientDocument._meta.constraints
+            if c.name.startswith('uniq_current_doc')]
+    with connection.schema_editor() as se:
+        for c in cons:
+            se.remove_constraint(ClientDocument, c)
+    try:
+        yield
+    finally:
+        ClientDocument.objects.all().delete()
+        with connection.schema_editor() as se:
+            for c in cons:
+                se.add_constraint(ClientDocument, c)
+
+
 @override_settings(ENFORCE_CLIENT_ASSIGNMENT=True, MEDIA_ROOT=TEMP_MEDIA)
 class FilingBase(MediaTestCase):
     @classmethod
@@ -143,23 +169,24 @@ class ExactConflictKeyTest(FilingBase):
         ob_doc.refresh_from_db()
         self.assertTrue(ob_doc.is_current)
 
-    def test_two_matching_current_rows_fail_closed(self):
+    def test_queryset_update_bypass_blocked_by_db_constraint(self):
+        """Γύρος 19: το QuerySet.update bypass πλέον μπλοκάρεται από το
+        partial unique constraint στο DB — δεν χρειάζεται καν το service."""
+        from django.db import IntegrityError, transaction
         doc1 = self._upload()
-        # Δεύτερο current row στο ίδιο key μέσω QuerySet.update (bypass guard)
         doc2 = self._upload(user=self.add_only, category='payroll')
-        ClientDocument.objects.filter(pk=doc2.pk).update(
-            document_category='vat')
-        before_rows = set(ClientDocument.objects.values_list('id', flat=True))
-        before_files = media_files()
-        with self.assertRaises(ValidationError):
-            self._upload()
-        # Κανένα row δεν άλλαξε/διαγράφηκε αυθαίρετα
-        self.assertEqual(
-            set(ClientDocument.objects.values_list('id', flat=True)),
-            before_rows)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ClientDocument.objects.filter(pk=doc2.pk).update(
+                    document_category='vat')
         doc1.refresh_from_db()
+        doc2.refresh_from_db()
         self.assertTrue(doc1.is_current)
-        self.assertEqual(media_files(), before_files)
+        self.assertEqual(doc2.document_category, 'payroll')
+
+    # Το legacy corrupted-DB σενάριο (χωρίς constraints) ζει στο
+    # LegacyCorruptionTest (TransactionTestCase — DDL δεν επιτρέπεται
+    # μέσα στο transaction του TestCase σε SQLite).
 
     def test_add_only_with_real_conflict_denied(self):
         existing = self._upload()
@@ -325,7 +352,7 @@ class SafeDeletionTest(FilingBase):
         doc = self._upload()
         api = self._api()
         with mock.patch(
-                'accounting.api_documents._safe_delete_document_file'
+                'accounting.services.filing._safe_storage_delete'
         ) as m_del:
             m_del.side_effect = None  # καλείται, δεν ρίχνει (generic warning)
             with self.captureOnCommitCallbacks(execute=True):
@@ -482,11 +509,12 @@ class VersionGraphAuditTest(FilingBase):
         text = self._run()
         self.assertIn('invalid-version-progression', text)
 
-    def test_duplicate_current_for_key_detected_and_fails(self):
-        self._doc(1, is_current=True, month=1)
-        self._doc(1, is_current=True, month=1)  # ίδιο exact key
-        text = self._run()
-        self.assertIn('duplicate-current-for-key', text)
+    # Το duplicate-current-for-key σενάριο ζει στο LegacyCorruptionTest
+    # (απαιτεί DDL — βλ. σχόλιο εκεί).
+
+    def test_fail_on_findings_via_cycle(self):
+        d1 = self._doc(1, is_current=False, month=1)
+        ClientDocument.objects.filter(pk=d1.pk).update(previous_version=d1.pk)
         with self.assertRaises(CommandError):
             self._run(fail=True)
 
@@ -585,3 +613,68 @@ class LibmagicCheckTest(TestCase):
         from accounting import checks
         with mock.patch.object(checks, '_magic_works', return_value=True):
             self.assertEqual(checks.check_libmagic_available(None), [])
+
+
+# ---------------------------------------------------------------------------
+# Legacy corrupted DB σενάρια — TransactionTestCase γιατί το DDL
+# (remove/add constraint) δεν επιτρέπεται μέσα στο transaction του
+# TestCase σε SQLite.
+# ---------------------------------------------------------------------------
+from django.test import TransactionTestCase  # noqa: E402
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True, MEDIA_ROOT=TEMP_MEDIA)
+class LegacyCorruptionTest(TransactionTestCase):
+    def setUp(self):
+        call_command('setup_roles', verbosity=0)
+        self.client_a = ClientProfile.objects.create(
+            afm='123456783', eponimia='Α ΑΕ', eidos_ipoxreou='company')
+        self.full = make_perm_user(
+            'lc19_full', ['add_clientdocument', 'change_clientdocument',
+                          'delete_clientdocument', 'view_clientprofile'],
+            [self.client_a])
+        self.add_only = make_perm_user(
+            'lc19_add', ['add_clientdocument', 'view_clientprofile'],
+            [self.client_a])
+
+    def _upload(self, user=None, **kwargs):
+        kwargs.setdefault('category', 'vat')
+        kwargs.setdefault('year', 2026)
+        kwargs.setdefault('month', 3)
+        return filing.create_client_document(
+            client=self.client_a, uploaded_file=pdf_upload(),
+            user=user or self.full, **kwargs)
+
+    def test_two_matching_current_rows_fail_closed(self):
+        """Legacy corrupted DB: το service κάνει fail closed — κανένα row
+        δεν αλλάζει/διαγράφεται αυθαίρετα, κανένα νέο αρχείο."""
+        with current_constraints_disabled():
+            doc1 = self._upload()
+            doc2 = self._upload(user=self.add_only, category='payroll')
+            ClientDocument.objects.filter(pk=doc2.pk).update(
+                document_category='vat')
+            before_rows = set(
+                ClientDocument.objects.values_list('id', flat=True))
+            with self.assertRaises(ValidationError):
+                self._upload()
+            self.assertEqual(
+                set(ClientDocument.objects.values_list('id', flat=True)),
+                before_rows)
+            doc1.refresh_from_db()
+            self.assertTrue(doc1.is_current)
+
+    def test_duplicate_current_for_key_detected_and_fails(self):
+        with current_constraints_disabled():
+            for _ in range(2):
+                doc = ClientDocument(
+                    client=self.client_a, document_category='vat', year=2026,
+                    month=1, version=1, is_current=True, file='dup.pdf',
+                    original_filename='x.pdf', filename='x.pdf',
+                    file_type='pdf', file_size=1)
+                doc.save()
+            out = StringIO()
+            call_command('audit_clientdocument_invariants', stdout=out)
+            self.assertIn('duplicate-current-for-key', out.getvalue())
+            with self.assertRaises(CommandError):
+                call_command('audit_clientdocument_invariants',
+                             '--fail-on-findings', stdout=StringIO())

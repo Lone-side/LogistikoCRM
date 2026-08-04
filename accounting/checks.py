@@ -16,10 +16,14 @@ from django.core.checks import Error, Warning as CheckWarning, register
 
 
 def _magic_works():
+    """Πραγματικός λειτουργικός έλεγχος: το detection πρέπει να αναγνωρίζει
+    σωστά γνωστό PDF ΚΑΙ γνωστό HTML — όχι απλώς truthy αποτέλεσμα."""
     try:
         import magic
-        detected = magic.from_buffer(b'%PDF-1.4 probe', mime=True)
-        return bool(detected)
+        pdf = magic.from_buffer(b'%PDF-1.4 probe', mime=True)
+        html = magic.from_buffer(
+            b'<!DOCTYPE html><html><body>x</body></html>', mime=True)
+        return pdf == 'application/pdf' and html == 'text/html'
     except Exception:
         return False
 

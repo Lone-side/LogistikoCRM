@@ -1864,6 +1864,21 @@ class ClientDocument(models.Model):
         help_text='Μήνας αναφοράς (από υποχρέωση ή upload)'
     )
 
+    # === Logical slot (μέρος του exact conflict key) ===
+    # Το γραφείο δουλεύει με ένα «κύριο» slot ('') ανά (client, category,
+    # year, month, obligation) — δεύτερο upload στο ίδιο key γίνεται version.
+    # Τα portal uploads (on_existing='keep') παίρνουν μοναδικό slot ώστε
+    # πολλά ανεξάρτητα έγγραφα πελάτη στην ίδια κατηγορία/περίοδο να ΜΗΝ
+    # παραβιάζουν το invariant «ένα current ανά exact key» και να μην
+    # εκτοπίζουν ποτέ τα έγγραφα του γραφείου.
+    slot = models.CharField(
+        max_length=64,
+        default='',
+        blank=True,
+        verbose_name='Slot',
+        help_text='Λογική θέση εγγράφου — μέρος του exact conflict key',
+    )
+
     # === Versioning ===
     version = models.PositiveIntegerField(
         default=1,
@@ -1941,6 +1956,24 @@ class ClientDocument(models.Model):
             models.Index(fields=['client', 'year', 'month']),
             models.Index(fields=['client', 'document_category']),
             models.Index(fields=['obligation', 'is_current']),
+        ]
+        # DB-level enforcement του «ένα current ανά exact logical key».
+        # Δύο partial constraints επειδή το obligation είναι nullable και
+        # στην PostgreSQL NULL != NULL (τα partial unique indexes
+        # υποστηρίζονται και σε PostgreSQL και σε SQLite):
+        constraints = [
+            models.UniqueConstraint(
+                fields=['client', 'document_category', 'year', 'month',
+                        'slot'],
+                condition=models.Q(is_current=True, obligation__isnull=True),
+                name='uniq_current_doc_no_obligation',
+            ),
+            models.UniqueConstraint(
+                fields=['client', 'document_category', 'year', 'month',
+                        'obligation', 'slot'],
+                condition=models.Q(is_current=True, obligation__isnull=False),
+                name='uniq_current_doc_with_obligation',
+            ),
         ]
 
     def __str__(self):
@@ -2047,26 +2080,26 @@ class ClientDocument(models.Model):
 
     @classmethod
     def check_existing(cls, client, obligation=None, category='general',
-                       year=None, month=None):
+                       year=None, month=None, slot=''):
         """
-        Έλεγχος αν υπάρχει ήδη τρέχον αρχείο για το ΑΚΡΙΒΕΣ logical key:
-        client + document_category (και το 'general' μετρά κανονικά) +
-        obligation ΑΚΡΙΒΩΣ (isnull όταν δεν δόθηκε) + year/month αν δόθηκαν.
-        Επιστρέφει το υπάρχον αρχείο ή None.
+        Έλεγχος αν υπάρχει ήδη τρέχον αρχείο για το ΑΚΡΙΒΕΣ logical key —
+        deleg­άρει στον ΚΟΙΝΟ helper (accounting.services.filing.
+        find_current_for_key). Ρίχνει MultipleCurrentDocumentsError σε
+        corrupted πολλαπλά current rows (fail closed, ΟΧΙ αυθαίρετο first).
+        Όταν year/month δεν δόθηκαν, παίρνονται από την υποχρέωση ή το
+        τρέχον έτος/μήνα (ίδια σημασιολογία με το filing service).
         """
-        qs = cls.objects.filter(
-            client=client, is_current=True,
-            document_category=category or 'general',
-        )
+        from accounting.services import filing
         if obligation is not None:
-            qs = qs.filter(obligation=obligation)
+            year = year or obligation.year
+            month = month or obligation.month
         else:
-            qs = qs.filter(obligation__isnull=True)
-        if year is not None:
-            qs = qs.filter(year=year)
-        if month is not None:
-            qs = qs.filter(month=month)
-        return qs.order_by('pk').first()
+            now = datetime.now()
+            year = year or now.year
+            month = month or now.month
+        return filing.find_current_for_key(
+            client=client, category=category, year=year, month=month,
+            obligation=obligation, slot=slot)
 
     def create_new_version(self, new_file, user=None, original_filename=None,
                            description=None):
@@ -2109,6 +2142,7 @@ class ClientDocument(models.Model):
                 document_category=self.document_category,
                 year=self.year,
                 month=self.month,
+                slot=self.slot,
                 version=self.version + 1,
                 is_current=True,
                 previous_version=self,

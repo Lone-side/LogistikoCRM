@@ -185,9 +185,11 @@ class DocumentApiInvariantTest(TestCase):
         self.assertIsNone(self.doc_a.obligation_id)
 
     def test_attach_to_obligation_same_client_ok(self):
+        # Γύρος 19: το attach απαιτεί συμβατή περίοδο document↔obligation
+        now = timezone.now()
         ob_a = MonthlyObligation.objects.create(
-            client=self.client_a, obligation_type=self.ob_type, month=3,
-            year=2026, deadline=timezone.now().date())
+            client=self.client_a, obligation_type=self.ob_type,
+            month=now.month, year=now.year, deadline=now.date())
         resp = self.api.post(
             f'/accounting/api/v1/documents/{self.doc_a.id}/attach-to-obligation/',
             {'obligation_id': ob_a.id}, format='multipart')

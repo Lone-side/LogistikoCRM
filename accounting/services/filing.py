@@ -127,16 +127,52 @@ _DANGEROUS_MIME_TYPES = {
     'application/x-sh', 'application/x-msdownload',
 }
 
+# Επιτρεπτά detected MIME types — αντιστοιχούν στις επιτρεπόμενες
+# καταλήξεις (pdf/office/εικόνες/zip/κείμενο). Το octet-stream επιτρέπεται
+# συνειδητά: γενικό binary αποτέλεσμα του libmagic για αρκετά νόμιμα
+# office formats — η άμυνα σε executables γίνεται από το blacklist πιο πάνω.
+_ALLOWED_MIME_TYPES = {
+    'application/pdf', 'image/jpeg', 'image/png', 'image/gif',
+    'application/zip', 'text/plain', 'text/csv', 'text/xml',
+    'application/xml', 'application/msword', 'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/CDFV2', 'application/octet-stream', 'application/x-empty',
+    'image/webp', 'application/rtf', 'text/rtf',
+}
+
+
+def _libmagic_fail_closed():
+    """Production mode: DEBUG=False Ή ρητό REQUIRE_LIBMAGIC=True."""
+    from django.conf import settings as dj_settings
+    return (not dj_settings.DEBUG) or getattr(
+        dj_settings, 'REQUIRE_LIBMAGIC', False)
+
 
 _MAGIC_MISSING_WARNED = False
 
 
 def _reject_dangerous_content(uploaded_file):
-    """Best-effort έλεγχος πραγματικού περιεχομένου με python-magic (αν υπάρχει)."""
+    """
+    Έλεγχος πραγματικού περιεχομένου με python-magic.
+
+    Production mode (_libmagic_fail_closed): FAIL CLOSED —
+    - ImportError του magic → reject upload
+    - runtime exception από from_buffer → reject upload
+    - κενό/άκυρο MIME αποτέλεσμα → reject upload
+    - MIME εκτός _ALLOWED_MIME_TYPES → reject upload
+    Development: μόνο warning σε απουσία magic (extension-only validation),
+    αλλά το dangerous blacklist εφαρμόζεται πάντα όταν το magic λειτουργεί.
+    """
     global _MAGIC_MISSING_WARNED
+    fail_closed = _libmagic_fail_closed()
     try:
         import magic
     except ImportError:
+        if fail_closed:
+            raise ValidationError(
+                'Ο έλεγχος περιεχομένου αρχείων δεν είναι διαθέσιμος — '
+                'η μεταφόρτωση απορρίφθηκε.')
         if not _MAGIC_MISSING_WARNED:
             _MAGIC_MISSING_WARNED = True
             logger.warning(
@@ -150,11 +186,24 @@ def _reject_dangerous_content(uploaded_file):
         detected = magic.from_buffer(uploaded_file.read(2048), mime=True)
         uploaded_file.seek(0)
     except Exception:
+        if fail_closed:
+            logger.exception('Αποτυχία libmagic detection (fail closed)')
+            raise ValidationError(
+                'Ο έλεγχος περιεχομένου του αρχείου απέτυχε — '
+                'η μεταφόρτωση απορρίφθηκε.')
         return
     if detected in _DANGEROUS_MIME_TYPES:
         raise ValidationError(
             'Το περιεχόμενο του αρχείου δεν αντιστοιχεί σε αποδεκτό τύπο εγγράφου.'
         )
+    if fail_closed:
+        if not detected or not isinstance(detected, str):
+            raise ValidationError(
+                'Δεν αναγνωρίστηκε ο τύπος περιεχομένου του αρχείου — '
+                'η μεταφόρτωση απορρίφθηκε.')
+        if detected not in _ALLOWED_MIME_TYPES:
+            raise ValidationError(
+                'Ο τύπος περιεχομένου του αρχείου δεν επιτρέπεται.')
 
 
 def apply_naming(uploaded_file, client, category=None, year=None, month=None):
@@ -321,26 +370,87 @@ def _delete_stored_file(doc):
 
 VALID_ON_EXISTING = ('version', 'replace', 'keep')
 
+# Λογικό εύρος ετών για document metadata
+MIN_DOCUMENT_YEAR = 2000
+MAX_DOCUMENT_YEAR = 2100
 
-def _exact_conflict_qs(ClientDocument, client, category, year, month, obligation):
+
+class MultipleCurrentDocumentsError(ValidationError):
+    """Corrupted κατάσταση: >1 current rows στο ίδιο exact logical key."""
+
+
+class DocumentKeyConflict(Exception):
+    """Ελεγχόμενο conflict (409): το target exact key είναι κατειλημμένο."""
+
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
+        self.status_code = 409
+
+
+def validate_document_key_inputs(category, year, month):
     """
-    Το ΠΛΗΡΕΣ logical conflict key — όλα τα φίλτρα ΠΡΙΝ από κάθε select:
-    client, document_category ΑΚΡΙΒΩΣ (και το 'general'), year, month,
-    obligation ΑΚΡΙΒΩΣ (obligation__isnull=True όταν δεν υπάρχει).
-    Δεν αφήνουμε ordering/uploaded_at να διαλέξει «κάποιο» row.
+    Κοινό validation layer για τα key inputs ΠΡΙΝ από lock/storage mutation.
+    Raises ValidationError (→ 400 στα endpoints), ποτέ 500.
     """
-    qs = ClientDocument.objects.select_for_update().filter(
+    from accounting.models import ClientDocument
+    valid_categories = {c[0] for c in ClientDocument.CATEGORY_CHOICES}
+    if (category or 'general') not in valid_categories:
+        raise ValidationError('Μη έγκυρη κατηγορία εγγράφου.')
+    try:
+        year = int(year)
+        month = int(month)
+    except (TypeError, ValueError):
+        raise ValidationError('Μη έγκυρο έτος ή μήνας.')
+    if not (MIN_DOCUMENT_YEAR <= year <= MAX_DOCUMENT_YEAR):
+        raise ValidationError('Μη έγκυρο έτος.')
+    if not (1 <= month <= 12):
+        raise ValidationError('Μη έγκυρος μήνας.')
+    return year, month
+
+
+def find_current_for_key(client, category, year, month, obligation=None,
+                         slot='', for_update=False):
+    """
+    Ο ΜΟΝΑΔΙΚΟΣ exact-conflict helper — τον χρησιμοποιούν filing service,
+    ClientDocument.check_existing, check-existing API, upload-with-version
+    pre-check, admin flows και attach/detach.
+
+    Πλήρες logical key: client + document_category ΑΚΡΙΒΩΣ (και το
+    'general') + year + month + obligation ΑΚΡΙΒΩΣ (obligation__isnull=True
+    όταν λείπει) + slot. Πάντα is_current=True. Όλα τα φίλτρα μπαίνουν
+    ΠΡΙΝ από κάθε select — κανένα .first() πριν ελεγχθεί το πλήθος.
+
+    Returns: None (κανένα match) ή ακριβώς ένα ClientDocument.
+    Raises: MultipleCurrentDocumentsError (fail closed, internal-ID log)
+            για >1 matches — ΔΕΝ επιλέγεται αυθαίρετα ένα.
+    """
+    from accounting.models import ClientDocument
+    qs = ClientDocument.objects.filter(
         client=client,
         is_current=True,
         document_category=category or 'general',
         year=year,
         month=month,
+        slot=slot or '',
     )
     if obligation is not None:
         qs = qs.filter(obligation=obligation)
     else:
         qs = qs.filter(obligation__isnull=True)
-    return qs
+    if for_update:
+        qs = qs.select_for_update()
+    matches = list(qs)
+    if len(matches) > 1:
+        logger.error(
+            'Πολλαπλά current documents στο ίδιο conflict key: '
+            'client id=%s, ids=%s',
+            client.pk, sorted(d.pk for d in matches))
+        raise MultipleCurrentDocumentsError(
+            'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον συνδυασμό — '
+            'απαιτείται χειροκίνητη διόρθωση '
+            '(audit_clientdocument_invariants).')
+    return matches[0] if matches else None
 
 
 def create_client_document(client, uploaded_file, category='general', obligation=None,
@@ -401,35 +511,37 @@ def create_client_document(client, uploaded_file, category='general', obligation
         year = year or obligation.year
         month = month or obligation.month
     now = datetime.now()
-    year = int(year or now.year)
-    month = int(month or now.month)
+    year = year or now.year
+    month = month or now.month
+    # Κοινό key-input validation (category/year/month) — 400, ποτέ 500
+    year, month = validate_document_key_inputs(category, year, month)
+
+    # on_existing='keep' (portal): μοναδικό slot ώστε το νέο ανεξάρτητο
+    # έγγραφο να ζει σε ΔΙΚΟ του exact key — ΠΟΤΕ δεύτερο current στο ίδιο
+    # key, ΠΟΤΕ εκτοπισμός εγγράφων του γραφείου (βλ. ClientDocument.slot).
+    slot = ''
+    if on_existing == 'keep':
+        import uuid
+        slot = uuid.uuid4().hex[:32]
 
     new_file_ref = {'storage': None, 'name': None, 'pk': None}
     try:
         with transaction.atomic():
-            # === 2. Parent serialization lock (βλ. docstring) ===
+            # === 2. Parent serialization locks — deterministic ordering:
+            # ΠΑΝΤΑ πρώτα το ClientProfile row και μετά το MonthlyObligation
+            # (ίδια σειρά και στα attach/detach services → όχι deadlocks) ===
+            ClientProfile.objects.select_for_update().get(pk=client.pk)
             if obligation is not None:
                 MonthlyObligation.objects.select_for_update().get(
                     pk=obligation.pk)
-            else:
-                ClientProfile.objects.select_for_update().get(pk=client.pk)
 
-            # === 3. Exact conflict lookup ===
+            # === 3. Exact conflict lookup (κοινός helper, fail closed) ===
             existing = None
             mutation = 'create'
             if on_existing != 'keep':
-                matches = list(_exact_conflict_qs(
-                    ClientDocument, client, category, year, month, obligation))
-                if len(matches) > 1:
-                    logger.error(
-                        'Πολλαπλά current documents στο ίδιο conflict key: '
-                        'client id=%s, ids=%s',
-                        client.pk, sorted(d.pk for d in matches))
-                    raise ValidationError(
-                        'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
-                        'συνδυασμό — απαιτείται χειροκίνητη διόρθωση '
-                        '(audit_clientdocument_invariants).')
-                existing = matches[0] if matches else None
+                existing = find_current_for_key(
+                    client, category, year, month, obligation,
+                    slot=slot, for_update=True)
                 if existing is not None:
                     mutation = 'replace' if on_existing == 'replace' else 'version'
 
@@ -465,6 +577,7 @@ def create_client_document(client, uploaded_file, category='general', obligation
                     document_category=category or 'general',
                     year=year,
                     month=month,
+                    slot=slot,
                     version=1,
                     is_current=True,
                     description=description,
@@ -519,3 +632,179 @@ def _queue_text_extraction(doc):
         text_extraction.queue_extraction(doc)
     except Exception as e:
         logger.warning(f"Αποτυχία δρομολόγησης εξαγωγής κειμένου: {e}")
+
+
+# ===========================================================================
+# Transactional services για structural μεταβολές ClientDocument
+# (attach/detach obligation, delete) — ΟΛΕΣ οι διαδρομές API/admin
+# περνούν από εδώ. Deterministic lock ordering: ΠΑΝΤΑ ClientProfile
+# πρώτα, μετά MonthlyObligation (ίδιο και στο create_client_document).
+# ===========================================================================
+
+def _audit_document_event(user, document, event):
+    """Audit χωρίς PII/filesystem paths — μόνο internal IDs."""
+    try:
+        from common.models import AuditLog
+        AuditLog.objects.create(
+            user=user if getattr(user, 'is_authenticated', False) else None,
+            action='update',
+            model_name='ClientDocument',
+            object_id=str(document.pk),
+            description=(
+                f'{event}: document id={document.pk}, '
+                f'client id={document.client_id}, '
+                f'obligation id={document.obligation_id}'
+            ),
+            severity='low',
+        )
+    except Exception:
+        logger.warning('Δεν γράφτηκε document audit event', exc_info=True)
+
+
+def attach_document_service(user, document, obligation):
+    """
+    Attach document ↔ obligation (structural: το obligation είναι μέρος
+    του exact logical key).
+
+    Σειρά: input validation → permission validation → locks (client →
+    obligation) → exact target-key conflict lookup (fail closed σε
+    πολλαπλά) → controlled conflict (DocumentKeyConflict/409) αν το target
+    key είναι κατειλημμένο → mutation → audit (χωρίς PII/paths).
+
+    Raises: ValidationError (400), DocumentKeyConflict (409),
+            PermissionDenied (403), MultipleCurrentDocumentsError (409).
+    """
+    from django.core.exceptions import PermissionDenied
+    from django.db import transaction
+    from accounting.models import ClientProfile, MonthlyObligation
+
+    # 1. Input validation
+    if obligation is None:
+        raise ValidationError('Απαιτείται υποχρέωση.')
+    if document.client_id != obligation.client_id:
+        raise ValidationError('Η υποχρέωση ανήκει σε διαφορετικό πελάτη.')
+    if document.year != obligation.year or document.month != obligation.month:
+        raise ValidationError(
+            'Η περίοδος του εγγράφου δεν συμφωνεί με την υποχρέωση.')
+    if document.obligation_id == obligation.pk:
+        return document  # no-op
+
+    # 2. Permission validation
+    if user is None or not user.has_perm('accounting.change_clientdocument'):
+        raise PermissionDenied(
+            'Δεν έχετε δικαίωμα για αυτή την ενέργεια στο έγγραφο.')
+
+    with transaction.atomic():
+        # 3. Locks: client πρώτα, μετά obligation (deterministic)
+        ClientProfile.objects.select_for_update().get(pk=document.client_id)
+        MonthlyObligation.objects.select_for_update().get(pk=obligation.pk)
+
+        # 4-6. Exact target-key conflict (μόνο για current docs — τα
+        # historical δεν συμμετέχουν στο invariant)
+        if document.is_current:
+            occupied = find_current_for_key(
+                document.client, document.document_category,
+                document.year, document.month, obligation,
+                slot=document.slot, for_update=True)
+            if occupied is not None and occupied.pk != document.pk:
+                raise DocumentKeyConflict(
+                    'Υπάρχει ήδη τρέχον έγγραφο συνδεδεμένο με αυτή την '
+                    'υποχρέωση για την ίδια κατηγορία/περίοδο.')
+
+        # 7. Mutation
+        document.obligation = obligation
+        document.full_clean()
+        document.save()
+
+    # 8. Audit
+    _audit_document_event(user, document, 'attach-obligation')
+    return document
+
+
+def detach_document_service(user, document):
+    """
+    Detach document από obligation — συμμετρικό του attach: locks (client),
+    exact null-obligation target-key conflict, controlled 409, audit.
+    """
+    from django.core.exceptions import PermissionDenied
+    from django.db import transaction
+    from accounting.models import ClientProfile
+
+    if document.obligation_id is None:
+        return document  # no-op
+
+    if user is None or not user.has_perm('accounting.change_clientdocument'):
+        raise PermissionDenied(
+            'Δεν έχετε δικαίωμα για αυτή την ενέργεια στο έγγραφο.')
+
+    with transaction.atomic():
+        ClientProfile.objects.select_for_update().get(pk=document.client_id)
+
+        if document.is_current:
+            occupied = find_current_for_key(
+                document.client, document.document_category,
+                document.year, document.month, None,
+                slot=document.slot, for_update=True)
+            if occupied is not None and occupied.pk != document.pk:
+                raise DocumentKeyConflict(
+                    'Υπάρχει ήδη ανεξάρτητο τρέχον έγγραφο στην ίδια '
+                    'κατηγορία/περίοδο — η αποσύνδεση θα δημιουργούσε '
+                    'διπλό τρέχον έγγραφο.')
+
+        document.obligation = None
+        document.full_clean()
+        document.save()
+
+    _audit_document_event(user, document, 'detach-obligation')
+    return document
+
+
+def delete_document_service(user, document):
+    """
+    Πολιτική διαγραφής versioned documents:
+    - Root/ενδιάμεση version με descendants → ΑΠΑΓΟΡΕΥΕΤΑΙ (ValidationError)·
+      διαγράφεται πρώτα ολόκληρη η ουρά (νεότερες εκδόσεις).
+    - Current version με previous_version → atomic: διαγραφή row +
+      προαγωγή της αμέσως προηγούμενης σε current (δεν μένει chain
+      χωρίς current).
+    - Current version χωρίς previous (μοναδική) → απλή διαγραφή.
+    DB mutation πρώτα· το φυσικό αρχείο διαγράφεται ΜΟΝΟ με
+    transaction.on_commit· αποτυχία storage → generic warning χωρίς
+    path/PII. Καμία διαγραφή δεν αφήνει invariant violation.
+    """
+    from django.core.exceptions import PermissionDenied
+    from django.db import transaction
+    from accounting.models import ClientDocument, ClientProfile
+
+    if user is None or not user.has_perm('accounting.delete_clientdocument'):
+        raise PermissionDenied(
+            'Δεν έχετε δικαίωμα διαγραφής εγγράφου.')
+
+    with transaction.atomic():
+        ClientProfile.objects.select_for_update().get(pk=document.client_id)
+        locked = ClientDocument.objects.select_for_update().get(
+            pk=document.pk)
+
+        if locked.next_versions.exists():
+            raise ValidationError(
+                'Το έγγραφο έχει νεότερες εκδόσεις — διαγράψτε πρώτα '
+                'τις νεότερες εκδόσεις.')
+
+        storage = locked.file.storage if locked.file else None
+        file_name = locked.file.name if locked.file else None
+        promote_pk = (locked.previous_version_id
+                      if locked.is_current else None)
+
+        locked.delete()
+
+        if promote_pk:
+            # Ατομική προαγωγή της αμέσως προηγούμενης — η chain δεν
+            # μένει ποτέ χωρίς current
+            ClientDocument.objects.filter(pk=promote_pk).update(
+                is_current=True)
+
+        if file_name:
+            transaction.on_commit(
+                lambda: _safe_storage_delete(storage, file_name))
+
+    _audit_document_event(user, document, 'delete-document')

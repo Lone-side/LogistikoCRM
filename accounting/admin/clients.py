@@ -782,19 +782,37 @@ class ClientDocumentAdmin(admin.ModelAdmin):
         if not change:
             obj.uploaded_by = request.user
 
-            # Έλεγχος αν υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό
-            existing = ClientDocument.check_existing(
-                client=obj.client,
-                obligation=obj.obligation,
-                category=obj.document_category,
-                year=obj.year, month=obj.month,
-            )
+            # Έλεγχος αν υπάρχει ήδη αρχείο (ΚΟΙΝΟΣ exact-conflict helper)
+            from accounting.services import filing as _filing
+            try:
+                existing = ClientDocument.check_existing(
+                    client=obj.client,
+                    obligation=obj.obligation,
+                    category=obj.document_category,
+                    year=obj.year, month=obj.month,
+                )
+            except _filing.MultipleCurrentDocumentsError:
+                from django.core.exceptions import ValidationError as _VErr
+                raise _VErr(
+                    'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                    'συνδυασμό — απαιτείται χειροκίνητη διόρθωση.')
 
             if existing and 'confirm_replace' not in request.POST:
                 # Θα χειριστεί στο response_add
                 pass
 
         super().save_model(request, obj, form, change)
+
+    def get_readonly_fields(self, request, obj=None):
+        """Structural πεδία (μέρη του exact logical key) ΔΕΝ αλλάζουν από
+        το admin σε υπάρχον έγγραφο — attach/detach μόνο μέσω των
+        transactional services (αλλιώς θα παρακάμπτονταν locks/conflict
+        checks). Το DB constraint είναι το τελικό δίχτυ."""
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None:
+            readonly += ['client', 'obligation', 'document_category',
+                         'year', 'month', 'slot', 'previous_version']
+        return readonly
 
     def get_queryset(self, request):
         """Default: μόνο τρέχουσες εκδόσεις + RBAC scoping ανά πελάτη"""

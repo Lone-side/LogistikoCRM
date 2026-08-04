@@ -19,6 +19,8 @@ from accounting.services.search import apply_document_search
 
 
 def make_document(client, filename, extracted_text='', description=''):
+    # Γύρος 19: μοναδικό slot ανά fixture — δύο ανεξάρτητα current έγγραφα
+    # στο ίδιο key απαγορεύονται πλέον από το DB constraint
     return ClientDocument.objects.create(
         client=client,
         file=SimpleUploadedFile(filename, b'%PDF-1.4 test'),
@@ -29,6 +31,7 @@ def make_document(client, filename, extracted_text='', description=''):
         document_category='general',
         year=2026,
         month=7,
+        slot=f'test-{filename}'[:64],
     )
 
 

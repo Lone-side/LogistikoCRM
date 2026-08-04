@@ -520,17 +520,16 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             )
 
         try:
-            # Ασφαλής σειρά: πρώτα το DB row (atomic), το φυσικό αρχείο
-            # ΜΟΝΟ με on_commit — DB failure δεν αφήνει row χωρίς αρχείο
-            from django.db import transaction
+            # Κοινό delete service: versioned deletion policy + DB πρώτα +
+            # αρχείο μόνο on_commit
+            from django.core.exceptions import ValidationError as _VErr
+            from accounting.services import filing as _filing
             filename = document.filename
-            storage = document.file.storage if document.file else None
-            file_name = document.file.name if document.file else None
-            with transaction.atomic():
-                document.delete()
-                if file_name:
-                    transaction.on_commit(
-                        lambda s=storage, n=file_name: _delete_file_post_commit(s, n))
+            try:
+                _filing.delete_document_service(request.user, document)
+            except _VErr as e:
+                return Response({'error': '; '.join(e.messages)},
+                                status=status.HTTP_400_BAD_REQUEST)
 
             return Response({
                 'message': f'Το έγγραφο "{filename}" διαγράφηκε επιτυχώς.'

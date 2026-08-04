@@ -66,23 +66,39 @@ def check_existing_document(request):
         }, status=400)
 
     try:
-        # Build query (μόνο έγγραφα ανατεθειμένων πελατών)
-        from accounting.services.access import accessible_documents
-        qs = accessible_documents(request.user).filter(
-            client_id=client_id,
-            is_current=True
+        # ΚΟΙΝΟΣ exact-conflict helper — ίδια σημασιολογία με το filing
+        # service (πλήρες key, χωρίς αυθαίρετο first σε πολλαπλά current)
+        from accounting.services import filing as _filing
+        from accounting.services.access import (
+            accessible_clients, get_accessible_obligation_or_404,
         )
-
+        from django.http import Http404 as _H404
+        client = accessible_clients(request.user).filter(
+            id=int(client_id)).first()
+        if client is None:
+            return JsonResponse({'error': 'Ο πελάτης δεν βρέθηκε.'},
+                                status=404)
+        obligation = None
         if obligation_id:
-            qs = qs.filter(obligation_id=obligation_id)
-        if category and category != 'general':
-            qs = qs.filter(document_category=category)
-        if year:
-            qs = qs.filter(year=int(year))
-        if month:
-            qs = qs.filter(month=int(month))
-
-        existing = qs.select_related('uploaded_by').first()
+            try:
+                obligation = get_accessible_obligation_or_404(
+                    request.user, int(obligation_id), request=request)
+            except _H404:
+                return JsonResponse({'error': 'Η υποχρέωση δεν βρέθηκε.'},
+                                    status=404)
+        year_i = int(year) if year else None
+        month_i = int(month) if month else None
+        try:
+            existing = ClientDocument.check_existing(
+                client=client, obligation=obligation,
+                category=category or 'general',
+                year=year_i, month=month_i)
+        except _filing.MultipleCurrentDocumentsError:
+            # Corrupted multiple-current κατάσταση → controlled conflict
+            return JsonResponse({
+                'error': 'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                         'συνδυασμό — απαιτείται χειροκίνητη διόρθωση.',
+            }, status=409)
 
         if existing:
             return JsonResponse({
@@ -206,11 +222,20 @@ def upload_document_with_version(request):
                 'error': 'Μη έγκυρο έτος ή μήνας.'
             }, status=400)
 
-        # Exact conflict key — ίδια σημασιολογία με το filing service
-        existing = ClientDocument.check_existing(
-            client=client, obligation=obligation, category=category,
-            year=year, month=month,
-        )
+        # Exact conflict key — ΚΟΙΝΟΣ helper· corrupted multiple-current
+        # → controlled 409 (όχι αυθαίρετη επιλογή row)
+        from accounting.services import filing as _filing
+        try:
+            existing = ClientDocument.check_existing(
+                client=client, obligation=obligation, category=category,
+                year=year, month=month,
+            )
+        except _filing.MultipleCurrentDocumentsError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                         'συνδυασμό — απαιτείται χειροκίνητη διόρθωση.',
+            }, status=409)
         has_conflict = existing is not None
 
         if has_conflict and version_action not in ('new_version', 'replace'):

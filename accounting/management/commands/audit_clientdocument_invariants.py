@@ -74,7 +74,7 @@ class Command(BaseCommand):
         rows = list(ClientDocument.objects.values(
             'id', 'previous_version_id', 'is_current', 'version',
             'client_id', 'document_category', 'year', 'month',
-            'obligation_id'))
+            'obligation_id', 'slot').order_by('id'))
         prev_of = {r['id']: r['previous_version_id'] for r in rows}
         info = {r['id']: r for r in rows}
 
@@ -158,20 +158,81 @@ class Command(BaseCommand):
                     f"(v{info[prev_id]['version']})"
                 )
 
-        # 7. Duplicate current rows στο exact logical conflict key
+        # 7. Duplicate current rows στο exact logical conflict key (με slot)
         by_key = defaultdict(list)
         for r in rows:
             if r['is_current']:
                 key = (r['client_id'], r['document_category'], r['year'],
-                       r['month'], r['obligation_id'])
+                       r['month'], r['obligation_id'], r['slot'])
                 by_key[key].append(r['id'])
         for key, ids in sorted(by_key.items()):
             if len(ids) > 1:
                 findings.append(
                     f"duplicate-current-for-key: client id={key[0]} "
                     f"category={key[1]} {key[3]}/{key[2]} obligation "
-                    f"id={key[4]} → ids={sorted(ids)}"
+                    f"id={key[4]} slot={key[5]!r} → ids={sorted(ids)}"
                 )
+
+        # 8. Cross-key previous_version edge: η προηγούμενη έκδοση πρέπει
+        # να ανήκει στο ΙΔΙΟ exact logical key (client/category/year/
+        # month/obligation/slot)
+        def _key(r):
+            return (r['client_id'], r['document_category'], r['year'],
+                    r['month'], r['obligation_id'], r['slot'])
+
+        for doc_id, prev_id in sorted(prev_of.items()):
+            if prev_id is None or prev_id not in info:
+                continue
+            if _key(info[doc_id]) != _key(info[prev_id]):
+                findings.append(
+                    f"cross-key-previous-version: document id={doc_id} ← "
+                    f"previous id={prev_id} (διαφορετικό logical key)"
+                )
+
+        # 9. Per-component ανάλυση: zero current, root version != 1,
+        # duplicate version numbers, current που δεν είναι terminal,
+        # πολλαπλά roots
+        comp_members = defaultdict(list)
+        for r in rows:
+            comp_members[find(r['id'])].append(r['id'])
+        has_child = set(children.keys())
+        for comp, members in sorted(comp_members.items()):
+            member_rows = [info[m] for m in members]
+            currents = [r['id'] for r in member_rows if r['is_current']]
+            # Zero-current component (chain χωρίς current)
+            if len(members) >= 1 and not currents:
+                findings.append(
+                    f"chain-without-current: ids={sorted(members)}")
+            # Current που δεν είναι terminal node (έχει descendants)
+            for cid in currents:
+                if cid in has_child:
+                    findings.append(
+                        f"current-not-terminal: document id={cid} έχει "
+                        f"νεότερες εκδόσεις")
+            # Roots: nodes χωρίς previous (ή previous εκτός DB)
+            roots = [r['id'] for r in member_rows
+                     if not prev_of.get(r['id'])
+                     or prev_of[r['id']] not in info]
+            if len(members) > 1 and len(roots) > 1:
+                findings.append(
+                    f"multiple-roots-in-chain: ids={sorted(roots)}")
+            # Root version != 1 (π.χ. orphaned chain μετά από διαγραφή root)
+            for rid in roots:
+                if len(members) > 1 and info[rid]['version'] != 1 \
+                        and rid not in cycle_nodes:
+                    findings.append(
+                        f"root-version-not-1: document id={rid} "
+                        f"(v{info[rid]['version']})")
+            # Duplicate version numbers στην ίδια chain
+            seen_versions = defaultdict(list)
+            for r in member_rows:
+                seen_versions[r['version']].append(r['id'])
+            if len(members) > 1:
+                for v, ids in sorted(seen_versions.items()):
+                    if len(ids) > 1:
+                        findings.append(
+                            f"duplicate-version-in-chain: v{v} → "
+                            f"ids={sorted(ids)}")
 
         if not findings:
             self.stdout.write(self.style.SUCCESS(

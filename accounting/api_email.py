@@ -650,9 +650,14 @@ def complete_and_notify(request, obligation_id):
     from .services import filing as _filing
     with transaction.atomic():
         if existing_document is not None:
-            existing_document.obligation = obligation
-            existing_document.full_clean()
-            existing_document.save()
+            # Structural attach ΜΟΝΟ μέσω του κοινού service (locks +
+            # exact target-key conflict + audit)
+            try:
+                _filing.attach_document_service(
+                    request.user, existing_document, obligation)
+            except _filing.DocumentKeyConflict as e:
+                return Response({'error': e.message},
+                                status=status.HTTP_409_CONFLICT)
             document = existing_document
 
         if uploaded_file is not None:

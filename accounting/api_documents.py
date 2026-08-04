@@ -377,9 +377,18 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         if document.client_id != obligation.client_id:
             raise Http404
 
-        document.obligation = obligation
-        document.full_clean()
-        document.save()
+        # Κοινό transactional service: validation → perms → locks →
+        # exact target-key conflict (fail closed) → mutation → audit
+        from django.core.exceptions import ValidationError
+        from .services import filing
+        try:
+            filing.attach_document_service(request.user, document, obligation)
+        except filing.DocumentKeyConflict as e:
+            return Response({'error': e.message},
+                            status=status.HTTP_409_CONFLICT)
+        except ValidationError as e:
+            return Response({'error': '; '.join(e.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -391,11 +400,19 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     def detach_from_obligation(self, request, pk=None):
         """
         POST /api/v1/documents/{id}/detach-from-obligation/
-        Remove document association with obligation
+        Remove document association with obligation (κοινό service)
         """
+        from django.core.exceptions import ValidationError
+        from .services import filing
         document = self.get_object()
-        document.obligation = None
-        document.save()
+        try:
+            filing.detach_document_service(request.user, document)
+        except filing.DocumentKeyConflict as e:
+            return Response({'error': e.message},
+                            status=status.HTTP_409_CONFLICT)
+        except ValidationError as e:
+            return Response({'error': '; '.join(e.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -405,33 +422,20 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Ασφαλής σειρά διαγραφής: πρώτα το DB row (atomic), το φυσικό αρχείο
-        ΜΟΝΟ με transaction.on_commit — σε DB failure μένουν και row και
-        αρχείο· σε storage failure το row έχει ήδη διαγραφεί (generic
-        warning χωρίς πλήρες path).
+        Διαγραφή μέσω delete_document_service: πολιτική versioned deletion
+        (descendants → 400, current → προαγωγή προηγούμενης), DB πρώτα,
+        αρχείο μόνο on_commit.
         """
-        from django.db import transaction
+        from django.core.exceptions import ValidationError
+        from .services import filing
 
         document = self.get_object()
-        storage = document.file.storage if document.file else None
-        file_name = document.file.name if document.file else None
-
-        with transaction.atomic():
-            document.delete()
-            if file_name:
-                transaction.on_commit(
-                    lambda: _safe_delete_document_file(storage, file_name))
+        try:
+            filing.delete_document_service(request.user, document)
+        except ValidationError as e:
+            return Response({'error': '; '.join(e.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
         return Response({'message': 'Το έγγραφο διαγράφηκε επιτυχώς.'})
-
-
-def _safe_delete_document_file(storage, name):
-    """Post-commit διαγραφή φυσικού αρχείου — generic warning, όχι path/PII."""
-    try:
-        storage.delete(name)
-    except Exception:
-        import logging
-        logging.getLogger(__name__).warning(
-            'Αποτυχία διαγραφής φυσικού αρχείου εγγράφου μετά το commit')
 
 
 # ============================================
@@ -488,15 +492,17 @@ def attach_document_to_obligation(request, obligation_id):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Verify same client
-        if document.client_id != obligation.client_id:
-            return Response(
-                {'error': 'Το έγγραφο ανήκει σε διαφορετικό πελάτη.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        document.obligation = obligation
-        document.save()
+        # Κοινό transactional service — ίδια πολιτική με το ViewSet action
+        from django.core.exceptions import ValidationError
+        from .services import filing as _filing
+        try:
+            _filing.attach_document_service(request.user, document, obligation)
+        except _filing.DocumentKeyConflict as e:
+            return Response({'error': e.message},
+                            status=status.HTTP_409_CONFLICT)
+        except ValidationError as e:
+            return Response({'error': '; '.join(e.messages)},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
