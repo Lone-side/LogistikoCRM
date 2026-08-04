@@ -2062,36 +2062,61 @@ class ClientDocument(models.Model):
 
     def create_new_version(self, new_file, user=None, original_filename=None):
         """
-        Δημιουργεί νέα έκδοση του εγγράφου.
-        Το παλιό γίνεται is_current=False.
+        Δημιουργεί νέα έκδοση του εγγράφου. Το παλιό γίνεται is_current=False.
+
+        Race-safe: το «κατέβασμα» του παλιού γίνεται με conditional UPDATE
+        (test-and-set στο is_current) μέσα σε transaction — δύο ταυτόχρονα
+        version attempts δεν αφήνουν ποτέ δύο current εκδόσεις. Σε αποτυχία
+        του DB save το νέο φυσικό αρχείο καθαρίζεται (όχι orphan) και το
+        rollback επαναφέρει το παλιό ως current.
 
         Returns: new ClientDocument instance
+        Raises: ValidationError αν το έγγραφο δεν είναι πλέον η τρέχουσα έκδοση
         """
-        # Mark this as not current
-        self.is_current = False
-        self.save(update_fields=['is_current'])
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
 
-        # Ρητό _v{n} στο όνομα ώστε οι εκδόσεις να ξεχωρίζουν στον φάκελο
-        # (αντί για τα τυχαία suffixes του Django storage)
-        base, ext = os.path.splitext(os.path.basename(new_file.name))
-        new_file.name = f"{base}_v{self.version + 1}{ext}"
+        with transaction.atomic():
+            demoted = ClientDocument.objects.filter(
+                pk=self.pk, is_current=True
+            ).update(is_current=False)
+            if not demoted:
+                # Κάποιος άλλος πρόλαβε να δημιουργήσει νέα έκδοση
+                raise ValidationError(
+                    'Το έγγραφο έχει ήδη νεότερη έκδοση — ανανεώστε και '
+                    'δοκιμάστε ξανά.')
+            self.is_current = False
 
-        # Create new version
-        new_doc = ClientDocument(
-            client=self.client,
-            obligation=self.obligation,
-            file=new_file,
-            original_filename=original_filename or os.path.basename(new_file.name),
-            document_category=self.document_category,
-            year=self.year,
-            month=self.month,
-            version=self.version + 1,
-            is_current=True,
-            previous_version=self,
-            description=self.description,
-            uploaded_by=user,
-        )
-        new_doc.save()
+            # Ρητό _v{n} στο όνομα ώστε οι εκδόσεις να ξεχωρίζουν στον φάκελο
+            # (αντί για τα τυχαία suffixes του Django storage)
+            base, ext = os.path.splitext(os.path.basename(new_file.name))
+            new_file.name = f"{base}_v{self.version + 1}{ext}"
+
+            new_doc = ClientDocument(
+                client=self.client,
+                obligation=self.obligation,
+                file=new_file,
+                original_filename=original_filename or os.path.basename(new_file.name),
+                document_category=self.document_category,
+                year=self.year,
+                month=self.month,
+                version=self.version + 1,
+                is_current=True,
+                previous_version=self,
+                description=self.description,
+                uploaded_by=user,
+            )
+            try:
+                new_doc.save()
+            except Exception:
+                # Το save() γράφει πρώτα το αρχείο· καθάρισε το orphan —
+                # το rollback του transaction επαναφέρει το is_current
+                try:
+                    if new_doc.file and new_doc.file.name:
+                        new_doc.file.storage.delete(new_doc.file.name)
+                except Exception:
+                    pass
+                raise
         return new_doc
 
     def get_all_versions(self):

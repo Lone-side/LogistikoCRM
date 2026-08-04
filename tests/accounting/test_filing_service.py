@@ -43,6 +43,11 @@ class FilingServiceBase(TestCase):
             doy="Α' ΑΘΗΝΩΝ",
         )
         self.filing_settings = FilingSystemSettings.get_settings()
+        # Γύρος 17: το versioning/replace απαιτεί πλέον permissions —
+        # τα tests εδώ ελέγχουν τη μηχανική, όχι το matrix
+        from django.contrib.auth import get_user_model
+        self.doc_user = get_user_model().objects.create_superuser(
+            f'filing_su_{self.id().split(".")[-1][:20]}', 'su@t.com', 'x')
 
 
 class ValidateUploadTest(FilingServiceBase):
@@ -122,6 +127,7 @@ class EnsureFoldersTest(FilingServiceBase):
 
 class CreateClientDocumentTest(FilingServiceBase):
     def _upload(self, name='test.pdf', **kwargs):
+        kwargs.setdefault('user', self.doc_user)
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile(name, b'%PDF-1.4 test'),
@@ -218,6 +224,7 @@ class AutoNamingTest(FilingServiceBase):
     """Ο Κανόνας Ονοματολογίας των ρυθμίσεων εφαρμόζεται στο upload."""
 
     def _upload(self, name='Τιμολόγιο (3).pdf', **kwargs):
+        kwargs.setdefault('user', self.doc_user)
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile(name, b'%PDF-1.4'),
@@ -267,7 +274,7 @@ class AutoNamingTest(FilingServiceBase):
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('νέο.pdf', b'%PDF-1.4'),
             category='vat', year=2026, month=6,
-            on_existing='replace',
+            on_existing='replace', user=self.doc_user,
         )
         self.assertEqual(doc2.version, 1)
         self.assertTrue(doc2.is_current)

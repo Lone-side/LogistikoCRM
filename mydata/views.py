@@ -69,6 +69,31 @@ def _parse_int(value, param='παράμετρος', default=None, min_val=None, 
     return result
 
 
+def _audit_vat_sync(user, client_id, success, period_id=None):
+    """
+    Audit event για εξωτερικό myDATA VAT sync — χωρίς πλήρες ΑΦΜ,
+    credentials, raw response ή exception text (μόνο internal IDs).
+    """
+    try:
+        from common.models import AuditLog
+        detail = f'client id={client_id}'
+        if period_id is not None:
+            detail += f', period id={period_id}'
+        AuditLog.objects.create(
+            user=user if getattr(user, 'is_authenticated', False) else None,
+            action='update',
+            model_name='MyDataSync',
+            object_id=str(client_id),
+            description=(
+                f'myDATA VAT sync {"επιτυχία" if success else "αποτυχία"}: '
+                f'{detail}'
+            ),
+            severity='medium',
+        )
+    except Exception:
+        logger.warning('Could not write mydata sync audit', exc_info=True)
+
+
 def get_vat_rate_for_category(category: int) -> int:
     """Get VAT rate percentage for category."""
     rates = {1: 24, 2: 13, 3: 6, 4: 17, 5: 9, 6: 4, 7: 0, 8: 0}
@@ -220,7 +245,9 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
         'verify': ['mydata.change_mydatacredentials'],
         'update_credentials': ['mydata.change_mydatacredentials'],
         'set_initial_credit': ['mydata.change_mydatacredentials'],
-        'sync': ['mydata.change_mydatacredentials'],
+        # Εξωτερικό myDATA sync: ΔΕΝ αρκεί το change στα credentials —
+        # απαιτείται το dedicated mydata.sync_vatdata
+        'sync': ['mydata.change_mydatacredentials', 'mydata.sync_vatdata'],
         'by_client': ['mydata.view_mydatacredentials'],
     }
 
@@ -421,6 +448,7 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
 
             call_command('mydata_sync_vat', *args, stdout=out)
 
+            _audit_vat_sync(request.user, credentials.client_id, success=True)
             return Response({
                 'success': True,
                 'message': out.getvalue(),
@@ -432,6 +460,7 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
             logger.exception(
                 f"Sync error for client id={credentials.client_id}"
             )
+            _audit_vat_sync(request.user, credentials.client_id, success=False)
             return Response(
                 {'error': 'Σφάλμα συγχρονισμού myDATA'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -702,25 +731,37 @@ class MyDataDashboardView(APIView):
             total_vat=Sum('vat_amount'),
         )
 
-        # Per-client summaries
+        # Per-client summaries — ΠΑΝΤΑ πάνω σε ΟΛΟΥΣ τους προσβάσιμους
+        # πελάτες, ΟΧΙ στο credentials_qs: αλλιώς η ίδια η ύπαρξη του πελάτη
+        # στη λίστα θα διέρρεε ποιος έχει MyDataCredentials row (side channel)
+        # ακόμη και χωρίς το view_mydatacredentials permission.
+        creds_by_client = {c.client_id: c for c in credentials_qs}
         clients_data = []
-        for creds in credentials_qs:
-            client = creds.client
+        for client in allowed_clients:
+            creds = creds_by_client.get(client.id)
             summary = build_period_summary(client, year, month)
             income_breakdown = build_category_breakdown(client, year, month, 1)
             expense_breakdown = build_category_breakdown(client, year, month, 2)
 
-            clients_data.append({
+            entry = {
                 'client_afm': client.afm,
                 'client_name': client.eponimia,
-                # Credential status μόνο με mydata.view_mydatacredentials
-                'has_credentials': creds.has_credentials if can_see_credentials else None,
-                'is_verified': creds.is_verified if can_see_credentials else None,
-                'last_sync': creds.last_vat_sync_at if can_see_credentials else None,
                 'current_period': summary,
                 'income_by_category': income_breakdown,
                 'expense_by_category': expense_breakdown,
-            })
+            }
+            # Credential-derived πεδία ΜΟΝΟ με mydata.view_mydatacredentials —
+            # χωρίς το permission είναι null για ΟΛΟΥΣ (ίδια μορφή, καμία
+            # διάκριση ποιος έχει/δεν έχει credentials)
+            if can_see_credentials:
+                entry['has_credentials'] = bool(creds and creds.has_credentials)
+                entry['is_verified'] = bool(creds and creds.is_verified)
+                entry['last_sync'] = creds.last_vat_sync_at if creds else None
+            else:
+                entry['has_credentials'] = None
+                entry['is_verified'] = None
+                entry['last_sync'] = None
+            clients_data.append(entry)
 
         return Response({
             'period': {
@@ -1075,8 +1116,11 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
             )
 
         # Optional: sync missing months first — εξωτερικό side effect, ΧΩΡΙΣ
-        # το dedicated permission επιτρέπεται μόνο απλός υπολογισμός
-        sync_first = request.data.get('sync_first', False)
+        # το dedicated permission επιτρέπεται μόνο απλός υπολογισμός.
+        # Αυστηρό boolean parsing: "false"/"0" → False, άκυρη τιμή → 400.
+        from accounting.services.access import parse_strict_bool
+        sync_first = parse_strict_bool(
+            request.data.get('sync_first'), 'sync_first', default=False)
         if sync_first:
             if not request.user.has_perm('mydata.sync_vatdata'):
                 return Response(
@@ -1084,22 +1128,8 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             self._sync_period_months(period)
-            # Audit χωρίς ΑΦΜ/credentials
-            try:
-                from common.models import AuditLog
-                AuditLog.objects.create(
-                    user=request.user,
-                    action='update',
-                    model_name='VATPeriodResult',
-                    object_id=str(period.pk),
-                    description=(
-                        f'myDATA sync: client id={period.client_id}, '
-                        f'period id={period.pk}, {period.period}/{period.year}'
-                    ),
-                    severity='medium',
-                )
-            except Exception:
-                logger.warning('Could not write mydata_sync audit', exc_info=True)
+            _audit_vat_sync(request.user, period.client_id, success=True,
+                            period_id=period.pk)
 
         # Calculate from records
         result = period.calculate_from_records(save=True)

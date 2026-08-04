@@ -125,10 +125,15 @@ def resolve_email_attachment_documents(request, client, attachment_ids):
     """
     Κοινός, αυστηρός resolver email attachments (fail closed):
     - απαιτεί accounting.view_clientdocument,
-    - δέχεται μόνο documents του συγκεκριμένου client,
-    - μόνο is_current=True,
+    - δέχεται ΜΟΝΟ list/tuple/set από IDs (όχι σκέτο string — θα γινόταν
+      iteration χαρακτήρων),
+    - duplicate IDs: επιτρέπονται και αφαιρούνται (κάθε έγγραφο
+      επισυνάπτεται ακριβώς μία φορά) — τεκμηριωμένη πολιτική,
+    - δέχεται μόνο documents του συγκεκριμένου client, μόνο is_current=True,
     - exact-set validation: κάθε ζητούμενο ID πρέπει να βρεθεί,
-    - σε οποιοδήποτε άκυρο/ξένο/stale ID → απόρριψη ΟΛΟΥ του request.
+    - κάθε document πρέπει να έχει πραγματικό/αναγνώσιμο αρχείο στο storage,
+    - σε οποιοδήποτε άκυρο/ξένο/stale ID → απόρριψη ΟΛΟΥ του request,
+      ΧΩΡΙΣ να αποκαλύπτεται ποιο συγκεκριμένο ID ήταν το πρόβλημα.
 
     Επιστρέφει λίστα ClientDocument. Ρίχνει AttachmentResolutionError
     (με status_code 403/400) πριν από κάθε αποστολή/μεταβολή.
@@ -136,10 +141,13 @@ def resolve_email_attachment_documents(request, client, attachment_ids):
     from accounting.models import ClientDocument
     if not attachment_ids:
         return []
+    if isinstance(attachment_ids, (str, bytes)) \
+            or not isinstance(attachment_ids, (list, tuple, set)):
+        raise AttachmentResolutionError('Μη έγκυρα συνημμένα.', status_code=400)
     if not check_model_perms(request, 'accounting.view_clientdocument'):
         raise AttachmentResolutionError(
             'Δεν έχετε δικαίωμα επισύναψης εγγράφων.', status_code=403)
-    # Κανονικοποίηση σε μοναδικά int IDs
+    # Κανονικοποίηση σε μοναδικά int IDs (deduplication policy)
     try:
         wanted = {int(i) for i in attachment_ids}
     except (TypeError, ValueError):
@@ -149,7 +157,36 @@ def resolve_email_attachment_documents(request, client, attachment_ids):
     if len(docs) != len(wanted):
         raise AttachmentResolutionError(
             'Μη έγκυρα ή ξένα συνημμένα.', status_code=400)
+    # Κάθε row πρέπει να δείχνει σε υπαρκτό αρχείο — αλλιώς όλο το request
+    # απορρίπτεται ΠΡΙΝ από completion/EmailLog/αποστολή
+    for doc in docs:
+        try:
+            if not doc.file or not doc.file.storage.exists(doc.file.name):
+                raise AttachmentResolutionError(
+                    'Κάποιο συνημμένο δεν είναι διαθέσιμο.', status_code=400)
+        except AttachmentResolutionError:
+            raise
+        except Exception:
+            raise AttachmentResolutionError(
+                'Κάποιο συνημμένο δεν είναι διαθέσιμο.', status_code=400)
     return docs
+
+
+def parse_strict_bool(value, field_name, default=False):
+    """
+    Αυστηρό boolean parsing για flags που προκαλούν mutation ή external
+    calls (sync_first, send_email, attach_to_email, ...). ΟΧΙ raw truthiness:
+    δέχεται true/false/"true"/"false"/"1"/"0"/1/0· οτιδήποτε άλλο →
+    DRF ValidationError (400, ποτέ 500).
+    """
+    from rest_framework import serializers as drf_serializers
+    if value is None:
+        return default
+    try:
+        return drf_serializers.BooleanField().to_internal_value(value)
+    except drf_serializers.ValidationError:
+        raise drf_serializers.ValidationError(
+            {field_name: 'Μη έγκυρη boolean τιμή.'})
 
 
 def mask_pii_value(value):

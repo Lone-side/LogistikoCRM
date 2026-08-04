@@ -35,10 +35,12 @@ class SharedLinkGatesBase(TestCase):
 
     def _make_doc(self):
         from accounting.services import filing
+        # on_existing='keep': ανεξάρτητα fixtures — versioning με user=None
+        # απαγορεύεται πλέον από το permission matrix (Γύρος 17)
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('έγγραφο.pdf', b'%PDF-1.4'),
-            category='vat', year=2026, month=1,
+            category='vat', year=2026, month=1, on_existing='keep',
         )
 
     def _make_link(self, **kwargs):

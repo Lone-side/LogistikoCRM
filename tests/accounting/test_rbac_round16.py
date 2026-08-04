@@ -394,7 +394,7 @@ class MyDataSyncPermTest(TestCase):
                         'mydata.change_vatperiodresult',
                         'mydata.view_vatperiodresult',
                         'mydata.sync_vatdata'], [self.client_a])
-        before = AuditLog.objects.filter(model_name='VATPeriodResult').count()
+        before = AuditLog.objects.filter(model_name='MyDataSync').count()
         with mock.patch(
                 'mydata.views.VATPeriodResultViewSet._sync_period_months',
                 return_value=None):
@@ -402,11 +402,11 @@ class MyDataSyncPermTest(TestCase):
                 f'/accounting/api/mydata/periods/{period.id}/calculate/',
                 {'sync_first': True}, format='json')
         self.assertEqual(resp.status_code, 200, resp.content)
-        after = AuditLog.objects.filter(model_name='VATPeriodResult').count()
+        after = AuditLog.objects.filter(model_name='MyDataSync').count()
         self.assertEqual(after, before + 1)
         # Το audit description δεν περιέχει ολόκληρο ΑΦΜ
         entry = AuditLog.objects.filter(
-            model_name='VATPeriodResult').latest('id')
+            model_name='MyDataSync').latest('id')
         self.assertNotIn(self.client_a.afm, entry.description)
 
     def test_simple_calculate_allowed_without_sync_perm(self):

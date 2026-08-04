@@ -336,6 +336,11 @@ urlpatterns = [
     path("api/v1/tickets/stats/", tickets_stats, name="api_tickets_stats"),
     path("api/v1/clients/search-for-match/", search_clients_for_match, name="search_clients_for_match"),
 
+    # Explicit document paths ΠΡΙΝ το router: αλλιώς το detail route του
+    # DocumentViewSet (documents/<pk>/) τα «σκιάζει» (pk='check-existing')
+    path("api/v1/documents/check-existing/", check_existing_document, name="api_check_existing_document"),
+    path("api/v1/documents/upload-with-version/", upload_document_with_version, name="api_upload_document_with_version"),
+
     # REST ROUTER
     path("api/", include(router.urls)),
     path("api/v1/", include(router.urls)),  # Versioned API endpoint
@@ -401,8 +406,7 @@ urlpatterns = [
     # ==================================================
     # DOCUMENT UPLOAD API WITH VERSIONING
     # ==================================================
-    path("api/v1/documents/check-existing/", check_existing_document, name="api_check_existing_document"),
-    path("api/v1/documents/upload-with-version/", upload_document_with_version, name="api_upload_document_with_version"),
+    # (check-existing / upload-with-version μετακινήθηκαν ΠΡΙΝ το router)
     path("api/v1/documents/<int:document_id>/preview/", document_preview, name="api_document_preview"),
 
     # ==================================================

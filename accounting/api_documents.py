@@ -97,7 +97,10 @@ class DocumentSerializer(serializers.ModelSerializer):
             'document_category', 'category_display', 'description',
             'uploaded_at'
         ]
-        read_only_fields = ['filename', 'file_type', 'uploaded_at']
+        # Το file είναι ΠΑΝΤΑ read-only εδώ: κάθε πραγματικό upload περνά
+        # ΜΟΝΟ από το filing service (validation/ονομασία/versioning) μέσω
+        # του /upload/ action — όχι από generic create/update.
+        read_only_fields = ['file', 'filename', 'file_type', 'uploaded_at']
 
     def get_file_url(self, obj):
         if obj.file:
@@ -243,6 +246,24 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         return super().get_queryset().select_related(
             'client', 'obligation', 'obligation__obligation_type'
         )
+
+    def create(self, request, *args, **kwargs):
+        """Generic POST απενεργοποιημένο: uploads ΜΟΝΟ μέσω /upload/ (filing)."""
+        return Response(
+            {'error': 'Χρησιμοποιήστε το /api/v1/documents/upload/ για '
+                      'μεταφόρτωση εγγράφων.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        """Metadata-only updates: αλλαγή αρχείου μέσω PUT/PATCH απορρίπτεται."""
+        if 'file' in request.data:
+            return Response(
+                {'error': 'Το αρχείο δεν αλλάζει μέσω αυτού του endpoint — '
+                          'χρησιμοποιήστε το upload-with-version.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
 
     @action(detail=False, methods=['post'], url_path='upload')
     def upload(self, request):
@@ -454,47 +475,25 @@ def attach_document_to_obligation(request, obligation_id):
             'document': serializer.data
         })
 
-    # Check if uploading new file
+    # Check if uploading new file — ΠΑΝΤΑ μέσω filing service (validation
+    # βάσει ρυθμίσεων, dangerous-content check, ονομασία, versioning)
     if 'file' in request.FILES:
-        uploaded_file = request.FILES['file']
+        from django.core.exceptions import ValidationError
+        from .services import filing
 
-        # Validate file
-        allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
-        ext = os.path.splitext(uploaded_file.name)[1].lower()
-
-        if ext not in allowed_extensions:
+        try:
+            document = filing.create_client_document(
+                client=obligation.client,
+                obligation=obligation,
+                uploaded_file=request.FILES['file'],
+                user=request.user,
+                description=request.data.get('description', ''),
+            )
+        except ValidationError as e:
             return Response(
-                {'error': f'Μη επιτρεπτός τύπος αρχείου. Επιτρέπονται: {", ".join(allowed_extensions)}'},
+                {'error': '; '.join(e.messages)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
-        if uploaded_file.size > 10 * 1024 * 1024:
-            return Response(
-                {'error': 'Το αρχείο είναι μεγαλύτερο από 10MB.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Determine category based on obligation type
-        category = 'general'
-        if obligation.obligation_type:
-            type_code = obligation.obligation_type.code.upper()
-            if 'ΦΠΑ' in type_code or 'VAT' in type_code:
-                category = 'vat'
-            elif 'ΜΥΦ' in type_code:
-                category = 'myf'
-            elif 'ΑΠΔ' in type_code:
-                category = 'payroll'
-            elif 'Ε1' in type_code or 'Ε3' in type_code:
-                category = 'tax'
-
-        # Create document
-        document = ClientDocument.objects.create(
-            client=obligation.client,
-            obligation=obligation,
-            file=uploaded_file,
-            document_category=category,
-            description=request.data.get('description', '')
-        )
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({

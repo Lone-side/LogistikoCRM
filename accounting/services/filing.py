@@ -275,6 +275,50 @@ def _write_info_file(client, base_path):
         f.write("  └─ 13_ΕΤΗΣΙΑ/     → Ετήσιες δηλώσεις (Ε1, Ε3, ΕΝΦΙΑ, ισολογισμός)\n")
 
 
+# ---------------------------------------------------------------------------
+# Permission matrix για document mutations (κεντρική πολιτική — ισχύει για
+# ΟΛΟΥΣ τους callers του filing service):
+#   create (νέο ανεξάρτητο / keep):  add_clientdocument
+#   version (νέα έκδοση):            add_clientdocument + change_clientdocument
+#   replace (αντικατάσταση):         add + change + delete_clientdocument
+# ---------------------------------------------------------------------------
+MUTATION_PERMS = {
+    'create': ('accounting.add_clientdocument',),
+    'version': ('accounting.add_clientdocument',
+                'accounting.change_clientdocument'),
+    'replace': ('accounting.add_clientdocument',
+                'accounting.change_clientdocument',
+                'accounting.delete_clientdocument'),
+}
+
+
+def require_document_mutation_perms(user, mutation):
+    """
+    Fail-closed έλεγχος του permission matrix. user=None (ανώνυμα portal
+    uploads) επιτρέπεται ΜΟΝΟ για 'create' — ποτέ version/replace.
+    Raises django PermissionDenied (→ 403 σε DRF και Django views).
+    """
+    from django.core.exceptions import PermissionDenied
+    required = MUTATION_PERMS[mutation]
+    if user is None:
+        if mutation != 'create':
+            raise PermissionDenied(
+                'Δεν επιτρέπεται αντικατάσταση/νέα έκδοση χωρίς χρήστη.')
+        return
+    if not all(user.has_perm(p) for p in required):
+        raise PermissionDenied(
+            'Δεν έχετε δικαίωμα για αυτή την ενέργεια στο έγγραφο.')
+
+
+def _delete_stored_file(doc):
+    """Best-effort διαγραφή του φυσικού αρχείου ενός (μη-committed) doc."""
+    try:
+        if doc.file and doc.file.name:
+            doc.file.storage.delete(doc.file.name)
+    except Exception as e:
+        logger.warning(f"Δεν καθαρίστηκε orphan αρχείο: {e}")
+
+
 def create_client_document(client, uploaded_file, category='general', obligation=None,
                            year=None, month=None, user=None, description='',
                            on_existing='version'):
@@ -290,13 +334,25 @@ def create_client_document(client, uploaded_file, category='general', obligation
       'keep' → νέο ανεξάρτητο έγγραφο ΧΩΡΙΣ να πειραχτεί το υπάρχον
       (υποχρεωτικό για ανώνυμα uploads πελατών — δεν επιτρέπεται να
       εκτοπίζουν έγγραφα του γραφείου)
+    - Επιβάλλει το κεντρικό permission matrix (require_document_mutation_perms)
+      ΑΦΟΥ προσδιοριστεί race-safe (select_for_update) αν υπάρχει conflict,
+      αλλά ΠΡΙΝ από κάθε DB αλλαγή ή file I/O
     - Δημιουργεί on-demand τους φακέλους για το έτος του εγγράφου
-      (αυτό καλύπτει και το πέρασμα σε νέα χρονιά)
+
+    Lifecycle εγγύηση (DB + storage ΔΕΝ είναι atomic από μόνα τους — υπάρχει
+    compensating cleanup):
+    - Σε αποτυχία DB save το νέο φυσικό αρχείο διαγράφεται (όχι orphans).
+    - Το παλιό φυσικό αρχείο (replace) διαγράφεται ΜΟΝΟ μετά το commit
+      (transaction.on_commit) — σε failure μένουν παλιό row ΚΑΙ παλιό αρχείο.
+    - Σε version failure το παλιό document παραμένει is_current=True
+      (rollback του conditional update).
 
     Returns: ClientDocument
-    Raises: ValidationError για μη αποδεκτό αρχείο
+    Raises: ValidationError (μη αποδεκτό αρχείο/ασυνέπεια),
+            PermissionDenied (permission matrix)
     """
     from django.core.exceptions import ValidationError
+    from django.db import transaction
     from accounting.models import ClientDocument
 
     validate_upload(uploaded_file)
@@ -321,25 +377,34 @@ def create_client_document(client, uploaded_file, category='general', obligation
     # Φάκελοι για το έτος του εγγράφου (idempotent, καλύπτει νέα χρονιά)
     ensure_folders(client, year=year)
 
-    existing = None
-    if on_existing != 'keep':
-        existing = ClientDocument.check_existing(
-            client=client,
-            obligation=obligation,
-            category=category if category and category != 'general' else None,
-        )
-    if existing and existing.year == year and existing.month == month:
-        if on_existing == 'replace':
-            old_path = existing.file.path if existing.file else None
-            existing.delete()
-            if old_path and os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except OSError as e:
-                    logger.warning(f"Δεν διαγράφηκε το παλιό αρχείο {old_path}: {e}")
+    with transaction.atomic():
+        # Race-safe conflict detection: κλειδώνουμε το υποψήφιο υπάρχον row
+        # ώστε δύο ταυτόχρονα requests να μη δουν και τα δύο «δεν υπάρχει».
+        existing = None
+        if on_existing != 'keep':
+            conflict_qs = ClientDocument.objects.select_for_update().filter(
+                client=client, is_current=True)
+            if obligation:
+                conflict_qs = conflict_qs.filter(obligation=obligation)
+            if category and category != 'general':
+                conflict_qs = conflict_qs.filter(document_category=category)
+            existing = conflict_qs.first()
+
+        has_conflict = bool(
+            existing and existing.year == year and existing.month == month)
+        if has_conflict:
+            mutation = 'replace' if on_existing == 'replace' else 'version'
         else:
+            mutation = 'create'
+
+        # Permission matrix ΜΕΤΑ τον race-safe προσδιορισμό του conflict,
+        # ΠΡΙΝ από οποιαδήποτε αλλαγή ή file I/O
+        require_document_mutation_perms(user, mutation)
+
+        if mutation == 'version':
             doc = existing.create_new_version(
-                new_file=uploaded_file, user=user, original_filename=original_name
+                new_file=uploaded_file, user=user,
+                original_filename=original_name,
             )
             if description:
                 doc.description = description
@@ -347,26 +412,50 @@ def create_client_document(client, uploaded_file, category='general', obligation
             _queue_text_extraction(doc)
             return doc
 
-    from django.db import transaction
-    doc = ClientDocument(
-        client=client,
-        obligation=obligation,
-        file=uploaded_file,
-        original_filename=original_name,
-        document_category=category or 'general',
-        year=year,
-        month=month,
-        version=1,
-        is_current=True,
-        description=description,
-        uploaded_by=user,
-    )
-    # Αρχείο + database row atomic· το save() επιβάλλει το client/obligation
-    # invariant και ρίχνει ΠΡΙΝ γραφτεί οτιδήποτε σε storage/DB
-    with transaction.atomic():
-        doc.save()
+        old_file_name = None
+        if mutation == 'replace':
+            # Το παλιό row φεύγει μέσα στο transaction· το παλιό ΦΥΣΙΚΟ αρχείο
+            # διαγράφεται μόνο μετά το commit — σε failure μένουν και τα δύο.
+            old_file_name = existing.file.name if existing.file else None
+            existing.delete()
+
+        doc = ClientDocument(
+            client=client,
+            obligation=obligation,
+            file=uploaded_file,
+            original_filename=original_name,
+            document_category=category or 'general',
+            year=year,
+            month=month,
+            version=1,
+            is_current=True,
+            description=description,
+            uploaded_by=user,
+        )
+        # Το save() γράφει πρώτα το φυσικό αρχείο και μετά το row· σε αποτυχία
+        # του row το αρχείο καθαρίζεται (compensating cleanup) και το
+        # transaction κάνει rollback κάθε DB αλλαγή (και το delete του replace).
+        try:
+            doc.save()
+        except Exception:
+            _delete_stored_file(doc)
+            raise
+
+        if old_file_name:
+            storage = doc.file.storage
+            transaction.on_commit(
+                lambda: _safe_storage_delete(storage, old_file_name))
+
     _queue_text_extraction(doc)
     return doc
+
+
+def _safe_storage_delete(storage, name):
+    """Διαγραφή παλιού αρχείου μετά το commit — ποτέ δεν ρίχνει."""
+    try:
+        storage.delete(name)
+    except Exception as e:
+        logger.warning(f"Δεν διαγράφηκε το παλιό αρχείο {os.path.basename(name)!r}: {e}")
 
 
 def _queue_text_extraction(doc):

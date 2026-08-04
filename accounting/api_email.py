@@ -574,21 +574,19 @@ def complete_and_notify(request, obligation_id):
     email_sent = False
     email_error = None
 
-    # Parse boolean fields from form data
-    save_to_client_folder = request.data.get('save_to_client_folder', 'true')
-    if isinstance(save_to_client_folder, str):
-        save_to_client_folder = save_to_client_folder.lower() == 'true'
-
-    send_email_flag = request.data.get('send_email', 'false')
-    if isinstance(send_email_flag, str):
-        send_email_flag = send_email_flag.lower() == 'true'
+    # Αυστηρό boolean parsing (όχι raw truthiness) — άκυρη τιμή → 400
+    from accounting.services.access import parse_strict_bool
+    save_to_client_folder = parse_strict_bool(
+        request.data.get('save_to_client_folder'), 'save_to_client_folder',
+        default=True)
+    send_email_flag = parse_strict_bool(
+        request.data.get('send_email'), 'send_email', default=False)
 
     if send_email_flag and not check_model_perms(request, 'accounting.send_client_email'):
         return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
-    attach_to_email = request.data.get('attach_to_email', 'false')
-    if isinstance(attach_to_email, str):
-        attach_to_email = attach_to_email.lower() == 'true'
+    attach_to_email = parse_strict_bool(
+        request.data.get('attach_to_email'), 'attach_to_email', default=False)
 
     # === ΟΛΟΙ οι permission/consistency έλεγχοι ΠΡΙΝ από κάθε μεταβολή ===
     document_id = request.data.get('document_id')
@@ -918,21 +916,18 @@ def bulk_complete_with_documents(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Parse boolean options
-    save_to_folders = request.data.get('save_to_folders', 'true')
-    if isinstance(save_to_folders, str):
-        save_to_folders = save_to_folders.lower() == 'true'
-
-    send_emails = request.data.get('send_emails', 'false')
-    if isinstance(send_emails, str):
-        send_emails = send_emails.lower() == 'true'
+    # Αυστηρό boolean parsing (όχι raw truthiness) — άκυρη τιμή → 400
+    from accounting.services.access import parse_strict_bool
+    save_to_folders = parse_strict_bool(
+        request.data.get('save_to_folders'), 'save_to_folders', default=True)
+    send_emails = parse_strict_bool(
+        request.data.get('send_emails'), 'send_emails', default=False)
 
     if send_emails and not check_model_perms(request, 'accounting.send_client_email'):
         return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
-    attach_to_emails = request.data.get('attach_to_emails', 'false')
-    if isinstance(attach_to_emails, str):
-        attach_to_emails = attach_to_emails.lower() == 'true'
+    attach_to_emails = parse_strict_bool(
+        request.data.get('attach_to_emails'), 'attach_to_emails', default=False)
 
     # Uploads εγγράφων απαιτούν add_clientdocument — έλεγχος πριν από
     # οποιαδήποτε μεταβολή

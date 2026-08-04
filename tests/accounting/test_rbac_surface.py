@@ -142,7 +142,11 @@ class MyDataRbacTest(SurfaceBase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data['overview']['clients_with_credentials'], 0)
-        self.assertEqual(data['clients'], [])
+        # Γύρος 17: η λίστα βασίζεται σε ΟΛΟΥΣ τους προσβάσιμους πελάτες
+        # (όχι στο credentials_qs — side channel)· ο ξένος client_b με τα
+        # credentials δεν εμφανίζεται ΠΟΤΕ
+        listed_afms = {c['client_afm'] for c in data['clients']}
+        self.assertNotIn(self.client_b.afm, listed_afms)
 
     def test_vat_summary_report_excludes_foreign_mydata(self):
         resp = self.api(self.accountant).get(

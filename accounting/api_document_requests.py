@@ -188,10 +188,12 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
         )
         client = get_accessible_client_or_404(request.user, data['client_id'], request=request)
 
-        # send_email=true → απαιτείται send_client_email ΠΡΙΝ δημιουργηθεί
-        # request ή shared link (κανένα side effect χωρίς το permission)
-        wants_email = data['send_email'] and (client.email or '').strip()
-        if wants_email and not check_model_perms(
+        # Authorization βάσει του ΖΗΤΟΥΜΕΝΟΥ action (send_email=true), όχι
+        # της τρέχουσας ύπαρξης email στον πελάτη — ο έλεγχος γίνεται ΠΡΙΝ
+        # δημιουργηθεί request ή shared link (κανένα side effect χωρίς perm).
+        # Η ΔΥΝΑΤΟΤΗΤΑ dispatch (έχει email;) κρίνεται ξεχωριστά μετά.
+        send_email_requested = data['send_email']
+        if send_email_requested and not check_model_perms(
             request, 'accounting.send_client_email'
         ):
             from rest_framework.response import Response as _Resp
@@ -199,6 +201,9 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
                 {'error': 'Δεν έχετε δικαίωμα αποστολής email.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        # Documented συμπεριφορά: send_email=true χωρίς email πελάτη →
+        # το αίτημα δημιουργείται ΧΩΡΙΣ dispatch και email_sent=False.
+        wants_email = send_email_requested and bool((client.email or '').strip())
 
         with transaction.atomic():
             shared_link = SharedLink(

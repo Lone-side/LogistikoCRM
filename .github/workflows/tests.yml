@@ -215,4 +215,6 @@ jobs:
             tests.accounting.test_rbac_round13 \
             tests.accounting.test_rbac_round14 \
             tests.accounting.test_rbac_round15 \
+            tests.accounting.test_rbac_round16 \
+            tests.accounting.test_rbac_round17 \
             -v 2

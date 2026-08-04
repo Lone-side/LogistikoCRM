@@ -11,6 +11,7 @@ import json
 import logging
 from datetime import datetime
 
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib.admin.views.decorators import staff_member_required
@@ -249,11 +250,18 @@ def upload_document_with_version(request):
             response['previous_version'] = previous_version
         return JsonResponse(response)
 
-    except Exception as e:
-        logger.error(f"Error uploading document: {e}", exc_info=True)
+    except PermissionDenied:
+        # Το permission matrix του filing (create/version/replace) —
+        # π.χ. add-only χρήστης που προσπαθεί version/replace
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'
+        }, status=403)
+    except Exception:
+        logger.exception("Error uploading document")
+        return JsonResponse({
+            'success': False,
+            'error': 'Σφάλμα κατά τη μεταφόρτωση του εγγράφου.'
         }, status=500)
 
 
