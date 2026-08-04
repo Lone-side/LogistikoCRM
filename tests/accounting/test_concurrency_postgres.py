@@ -557,3 +557,155 @@ class SharedLinkConcurrencyTest(TransactionTestCase):
             SharedLinkAccess.objects.filter(shared_link=self.link).count(), 0)
         downloads, _ = self._counters()
         self.assertEqual(downloads, 0)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class UnlimitedSharedLinkConcurrencyTest(TransactionTestCase):
+    """
+    Γύρος 23 — links ΧΩΡΙΣ `max_downloads` (unlimited).
+
+    Πριν, αυτά περνούσαν από μη-atomic `record_access()`: μια ταυτόχρονη
+    ανάκληση/λήξη/αλλαγή ασφαλείας δεν εμπόδιζε την επιστροφή αρχείου ή
+    access token. Τώρα χρησιμοποιούν τον ίδιο `_revocation_guard_q()`
+    μέσω `try_record_access()`.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL — τρέχει blocking στο CI.')
+        from accounting.models import SharedLink
+        self.client_profile = ClientProfile.objects.create(
+            afm='123456783', eponimia='PG UNLIM ΑΕ', eidos_ipoxreou='company')
+        self.user = User.objects.create_user('pg_unlim_user', password='x')
+        for codename in ('add_clientdocument', 'view_clientprofile'):
+            self.user.user_permissions.add(Permission.objects.get(
+                codename=codename, content_type__app_label='accounting'))
+        self.user = User.objects.get(pk=self.user.pk)
+        self.doc = filing.create_client_document(
+            client=self.client_profile,
+            uploaded_file=SimpleUploadedFile('u.pdf', b'%PDF-1.4 unlimited'),
+            category='vat', year=2026, month=3, user=self.user)
+        # ΧΩΡΙΣ όριο λήψεων
+        self.link = SharedLink.objects.create(
+            document=self.doc, access_level='download', max_downloads=None)
+
+    def _fresh(self):
+        from accounting.models import SharedLink
+        return SharedLink.objects.get(pk=self.link.pk)
+
+    def _state(self):
+        from accounting.models import SharedLinkAccess
+        link = self._fresh()
+        return (link.view_count, link.download_count,
+                SharedLinkAccess.objects.filter(shared_link=link).count())
+
+    def _run_pair(self, fn_a, fn_b):
+        barrier = threading.Barrier(2)
+        results = {}
+
+        def wrap(name, fn):
+            def runner():
+                try:
+                    barrier.wait(timeout=10)
+                    results[name] = fn()
+                except Exception as e:      # pragma: no cover - διαγνωστικό
+                    results[name] = f'error:{type(e).__name__}'
+                finally:
+                    connections.close_all()
+            return runner
+
+        threads = [threading.Thread(target=wrap('a', fn_a)),
+                   threading.Thread(target=wrap('b', fn_b))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        return results
+
+    def test_unlimited_access_concurrent_with_revoke(self):
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def revoke():
+            SharedLink.objects.filter(pk=self.link.pk).update(is_active=False)
+            return 'revoked'
+
+        results = self._run_pair(link_a.try_record_access, revoke)
+        views, downloads, _logs = self._state()
+        # Είτε πέρασε πριν την ανάκληση, είτε ακυρώθηκε πλήρως
+        self.assertEqual(views, 1 if results.get('a') else 0)
+        self.assertEqual(downloads, 0)
+
+    def test_unlimited_access_concurrent_with_expiry(self):
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def expire():
+            SharedLink.objects.filter(pk=self.link.pk).update(
+                expires_at=timezone.now() - timezone.timedelta(minutes=5))
+            return 'expired'
+
+        results = self._run_pair(link_a.try_record_access, expire)
+        views, _d, _l = self._state()
+        self.assertEqual(views, 1 if results.get('a') else 0)
+
+    def test_unlimited_access_concurrent_with_security_change(self):
+        from accounting.models import SharedLink
+        link_a = self._fresh()
+
+        def change_security():
+            SharedLink.objects.filter(pk=self.link.pk).update(
+                password_hash='pbkdf2_sha256$αλλαγμένο', requires_email=True)
+            return 'changed'
+
+        results = self._run_pair(link_a.try_record_access, change_security)
+        views, _d, _l = self._state()
+        self.assertEqual(views, 1 if results.get('a') else 0)
+
+    def test_unlimited_access_concurrent_with_token_regeneration(self):
+        from accounting.models import SharedLink, generate_share_token
+        link_a = self._fresh()
+
+        def regenerate():
+            SharedLink.objects.filter(pk=self.link.pk).update(
+                token=generate_share_token())
+            return 'regenerated'
+
+        results = self._run_pair(link_a.try_record_access, regenerate)
+        views, _d, _l = self._state()
+        self.assertEqual(views, 1 if results.get('a') else 0)
+
+    def test_no_bytes_or_token_after_revocation(self):
+        """
+        Μετά την ανάκληση, ούτε το public content endpoint ούτε το
+        preview επιστρέφουν δεδομένα ή token — και δεν γράφεται log.
+        """
+        from accounting.models import SharedLink
+        from tests.accounting.secure_client import SecureAPIClient
+        SharedLink.objects.filter(pk=self.link.pk).update(is_active=False)
+        web = SecureAPIClient()
+
+        content = web.get(f'/accounting/share/{self.link.token}/')
+        self.assertEqual(content.status_code, 410)
+        self.assertNotIn('access_token', getattr(content, 'data', {}) or {})
+
+        preview = web.get(f'/accounting/share/{self.link.token}/preview/')
+        self.assertEqual(preview.status_code, 410)
+
+        views, downloads, logs = self._state()
+        self.assertEqual((views, downloads, logs), (0, 0, 0))
+
+    def test_two_concurrent_unlimited_accesses_both_counted(self):
+        """Unlimited: δύο ταυτόχρονες προσβάσεις μετρώνται και οι δύο."""
+        link_a, link_b = self._fresh(), self._fresh()
+        results = self._run_pair(link_a.try_record_access,
+                                 link_b.try_record_access)
+        self.assertEqual(list(results.values()), [True, True], results)
+        views, downloads, _l = self._state()
+        self.assertEqual(views, 2)
+        self.assertEqual(downloads, 0)

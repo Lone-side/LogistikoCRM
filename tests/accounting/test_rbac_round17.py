@@ -506,8 +506,14 @@ class StrictBoolSyncFirstTest(TestCase):
             period_type='monthly')
         c = SecureAPIClient()
         c.force_authenticate(user)
+        # Ο stub δηλώνει ΕΠΙΤΥΧΗ συγχρονισμό — το test αφορά το αυστηρό
+        # boolean parsing του `sync_first` (πόσες φορές καλείται το sync),
+        # όχι την έκβασή του (Γύρος 23: δομημένο αποτέλεσμα).
         with mock.patch(
-                'mydata.views.VATPeriodResultViewSet._sync_period_months'
+                'mydata.views.VATPeriodResultViewSet._sync_period_months',
+                return_value={'status': 'success', 'reason': '',
+                              'successful_months': [1],
+                              'failed_months': [], 'errors': []}
         ) as m_sync:
             resp = c.post(
                 f'/accounting/api/mydata/periods/{period.id}/calculate/',

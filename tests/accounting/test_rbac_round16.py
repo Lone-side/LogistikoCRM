@@ -408,9 +408,15 @@ class MyDataSyncPermTest(TestCase):
                         'mydata.view_vatperiodresult',
                         'mydata.sync_vatdata'], [self.client_a])
         before = AuditLog.objects.filter(model_name='MyDataSync').count()
+        # Ο stub δηλώνει ΕΠΙΤΥΧΗ συγχρονισμό — το test αφορά το permission
+        # gating και το audit, όχι το αποτέλεσμα του sync. (Γύρος 23: το
+        # `_sync_period_months` επιστρέφει πλέον δομημένο αποτέλεσμα και
+        # το audit αντικατοπτρίζει την πραγματική έκβαση.)
         with mock.patch(
                 'mydata.views.VATPeriodResultViewSet._sync_period_months',
-                return_value=None):
+                return_value={'status': 'success', 'reason': '',
+                              'successful_months': [1],
+                              'failed_months': [], 'errors': []}):
             resp = self.api(user).post(
                 f'/accounting/api/mydata/periods/{period.id}/calculate/',
                 {'sync_first': True}, format='json')

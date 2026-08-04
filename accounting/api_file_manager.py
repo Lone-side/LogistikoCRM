@@ -953,9 +953,13 @@ class PublicSharedLinkView(APIView):
                 'access_level': shared_link.access_level
             })
 
-        # Record view access
+        # Ατομική καταγραφή ΠΡΙΝ επιστραφεί περιεχόμενο ή access token
+        # (Γύρος 23): ταυτόχρονη ανάκληση/λήξη/αλλαγή ρυθμίσεων ακυρώνει
+        # την πρόσβαση — ισχύει και για unlimited links.
+        if not shared_link.try_record_access():
+            return Response({'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                            status=status.HTTP_410_GONE)
         self._log_access(request, shared_link, 'view')
-        shared_link.record_access(is_download=False)
 
         return self._get_content_response(request, shared_link)
 
@@ -984,9 +988,13 @@ class PublicSharedLinkView(APIView):
             except DjangoValidationError:
                 return Response({'error': 'Μη έγκυρο email'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Log access
+        # Ατομική καταγραφή ΠΡΙΝ εκδοθεί το access token (Γύρος 23):
+        # ανάκληση/λήξη/αλλαγή password/token/target ανάμεσα στον έλεγχο
+        # κωδικού και εδώ ακυρώνει την έκδοση — κανένα token, κανένα log.
+        if not shared_link.try_record_access():
+            return Response({'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                            status=status.HTTP_410_GONE)
         self._log_access(request, shared_link, 'view', email)
-        shared_link.record_access(is_download=False)
 
         return self._get_content_response(request, shared_link, email=email)
 
@@ -1219,7 +1227,13 @@ class PublicSharedLinkPreviewView(APIView):
                     status=status.HTTP_410_GONE)
             quota_reserved = True
         else:
-            shared_link.record_access(is_download=False)
+            # Unlimited link: ΑΤΟΜΙΚΗ καταγραφή με τον ίδιο revocation
+            # guard (Γύρος 23) — χωρίς αυτό, ανάκληση/λήξη ανάμεσα στο
+            # αρχικό validation και εδώ επέστρεφε ούτως ή άλλως το αρχείο.
+            if not shared_link.try_record_access():
+                return Response(
+                    {'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                    status=status.HTTP_410_GONE)
 
         # Γύρος 22 (P3): άνοιγμα ΠΡΙΝ το success log· αποτυχία storage →
         # αποδέσμευση slot και κανένα log επιτυχίας

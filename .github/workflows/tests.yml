@@ -232,6 +232,7 @@ jobs:
             tests.accounting.test_rbac_round20 \
             tests.accounting.test_rbac_round21 \
             tests.accounting.test_rbac_round22 \
+            tests.accounting.test_rbac_round23 \
             -v 2
 
       # Blocking production-mode έλεγχοι (Γύρος 20): fail-closed libmagic

@@ -516,13 +516,18 @@ def obligation_upload_file(request, obligation_id):
             'version': document.version,
         })
 
-    except ValidationError as e:
-        return JsonResponse({
-            'success': False,
-            'error': '; '.join(e.messages)
-        }, status=400)
-    except Exception as e:
-        logger.error(f"File upload error for obligation {obligation_id}: {e}", exc_info=True)
+    except (ValidationError, filing.DocumentKeyConflict,
+            filing.DocumentGone) as e:
+        # Κοινό contract (Γύρος 23): MultipleCurrentDocumentsError → 409,
+        # όχι γενικό 400 — ίδια σημασιολογία με τους υπόλοιπους document
+        # callers. Καμία ολοκλήρωση υποχρέωσης, κανένα partial write: το
+        # filing service κάνει rollback πριν φτάσει εδώ.
+        message, code = filing.document_error_status(e)
+        return JsonResponse({'success': False, 'error': message},
+                            status=code)
+    except Exception:
+        logger.exception(
+            'Αποτυχία μεταφόρτωσης για obligation id=%s', obligation_id)
         return JsonResponse({
             'success': False,
             'error': GENERIC_SERVER_ERROR

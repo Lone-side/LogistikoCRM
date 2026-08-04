@@ -2638,6 +2638,38 @@ class SharedLink(models.Model):
                   | Q(expires_at__gt=timezone.now()))
         return guard
 
+    def try_record_access(self, is_download=False):
+        """
+        Γύρος 23 — ΑΤΟΜΙΚΗ καταγραφή πρόσβασης για ΚΑΘΕ link, με ή χωρίς
+        `max_downloads`.
+
+        Το `record_access()` είναι μη-atomic: ανάμεσα στο αρχικό
+        validation και σε αυτό, το link μπορεί να ανακληθεί, να λήξει ή
+        να αλλάξουν token/password/target/access_level — και το αρχείο ή
+        το access token θα επιστρεφόταν ούτως ή άλλως (TOCTOU). Εδώ ο
+        ίδιος `_revocation_guard_q()` μπαίνει στο conditional UPDATE:
+        αν επηρεαστούν 0 rows, ο caller ΔΕΝ επιστρέφει περιεχόμενο/token
+        και δεν γράφει success access log.
+
+        Για links ΜΕ όριο λήψεων και `is_download=True` χρησιμοποίησε το
+        `try_record_download()` (ελέγχει και το quota).
+        Επιστρέφει True αν η πρόσβαση καταγράφηκε.
+        """
+        from django.db.models import F
+        fields = {
+            'last_accessed_at': timezone.now(),
+            'view_count': F('view_count') + 1,
+        }
+        if is_download:
+            fields['download_count'] = F('download_count') + 1
+        updated = SharedLink.objects.filter(
+            self._revocation_guard_q()
+        ).update(**fields)
+        if updated:
+            self.refresh_from_db(
+                fields=['last_accessed_at', 'view_count', 'download_count'])
+        return bool(updated)
+
     def try_record_download(self):
         """
         Ατομική δέσμευση ενός download slot: conditional UPDATE στη βάση —

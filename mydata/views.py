@@ -1127,55 +1127,193 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                     {'error': 'Δεν έχετε δικαίωμα συγχρονισμού δεδομένων ΦΠΑ.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            self._sync_period_months(period)
-            _audit_vat_sync(request.user, period.client_id, success=True,
-                            period_id=period.pk)
+            sync_result = self._normalize_sync_result(
+                self._sync_period_months(period))
+            # Το audit αντικατοπτρίζει το ΠΡΑΓΜΑΤΙΚΟ αποτέλεσμα (Γύρος 23)
+            _audit_vat_sync(
+                request.user, period.client_id,
+                success=(sync_result['status'] == 'success'),
+                period_id=period.pk)
+
+            if sync_result['status'] == 'failed':
+                # Fail closed: ΔΕΝ υπολογίζουμε πάνω σε stale δεδομένα
+                http_status = (
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                    if sync_result['reason'] in ('missing_credentials',
+                                                 'authentication')
+                    else status.HTTP_502_BAD_GATEWAY
+                )
+                return Response({
+                    'success': False,
+                    'sync_status': 'failed',
+                    'error': 'Ο συγχρονισμός myDATA απέτυχε — ο υπολογισμός '
+                             'δεν εκτελέστηκε για να μη χρησιμοποιηθούν '
+                             'παλαιά δεδομένα.',
+                    'sync_reason': sync_result['reason'],
+                    'failed_months': sync_result['failed_months'],
+                }, status=http_status)
 
         # Calculate from records
         result = period.calculate_from_records(save=True)
 
-        return Response({
+        response = {
             'success': True,
             'message': 'Ο υπολογισμός ολοκληρώθηκε',
             'result': result,
             'period': self.get_serializer(period).data
-        })
+        }
+        if sync_first:
+            # Ρητή δήλωση κατάστασης συγχρονισμού — ποτέ «πλήρως
+            # ενημερωμένο» όταν κάποιοι μήνες απέτυχαν
+            response['sync_status'] = sync_result['status']
+            if sync_result['status'] == 'partial':
+                response['warning'] = (
+                    'Ο συγχρονισμός myDATA ολοκληρώθηκε ΜΕΡΙΚΩΣ — ο '
+                    'υπολογισμός μπορεί να μην περιλαμβάνει όλα τα '
+                    'δεδομένα της περιόδου.'
+                )
+                response['failed_months'] = sync_result['failed_months']
+                response['synced_months'] = sync_result['successful_months']
+        return Response(response)
+
+    @staticmethod
+    def _normalize_sync_result(result):
+        """
+        Fail-closed κανονικοποίηση του αποτελέσματος συγχρονισμού.
+
+        Αν το `_sync_period_months` (π.χ. σε override/patch) επιστρέψει
+        κάτι που δεν είναι αναγνωρίσιμο δομημένο αποτέλεσμα, το
+        θεωρούμε **αποτυχία** αντί να σκάσει ο caller ή —χειρότερα— να
+        θεωρηθεί επιτυχία.
+        """
+        valid = ('success', 'partial', 'failed')
+        if isinstance(result, dict) and result.get('status') in valid:
+            return {
+                'status': result['status'],
+                'reason': result.get('reason', ''),
+                'successful_months': result.get('successful_months', []),
+                'failed_months': result.get('failed_months', []),
+                'errors': result.get('errors', []),
+            }
+        logger.error(
+            'myDATA sync: μη αναγνωρίσιμο αποτέλεσμα συγχρονισμού (%s) — '
+            'θεωρείται αποτυχία', type(result).__name__)
+        return {
+            'status': 'failed',
+            'reason': 'unexpected_error',
+            'successful_months': [],
+            'failed_months': [],
+            'errors': ['Μη αναγνωρίσιμο αποτέλεσμα συγχρονισμού.'],
+        }
 
     def _sync_period_months(self, period):
-        """Sync all months in the period."""
+        """
+        Sync all months in the period.
+
+        Γύρος 23 — ΔΟΜΗΜΕΝΟ αποτέλεσμα αντί για σιωπηλή κατάποση
+        σφαλμάτων. Ο caller ΔΕΝ επιτρέπεται να δηλώσει success=True όταν
+        ο συγχρονισμός απέτυχε ολικά ή μερικά, ούτε να παρουσιάσει stale
+        δεδομένα ως ενημερωμένα.
+
+        Returns dict:
+            {
+              'status': 'success' | 'partial' | 'failed',
+              'reason': '' | 'missing_credentials' | 'authentication'
+                        | 'api_failure' | 'unexpected_error',
+              'successful_months': [...],
+              'failed_months': [...],
+              'errors': [...],   # γενικά μηνύματα, ΧΩΡΙΣ credentials/PII
+            }
+        """
+        result = {
+            'status': 'failed',
+            'reason': '',
+            'successful_months': [],
+            'failed_months': [],
+            'errors': [],
+        }
+        months = list(period.months_in_period)
+
         try:
             credentials = period.client.mydata_credentials
-            if not credentials.has_credentials:
-                return
+        except Exception:
+            logger.warning(
+                'myDATA sync: δεν βρέθηκαν credentials για client id=%s',
+                period.client_id)
+            result.update(reason='missing_credentials',
+                          failed_months=months,
+                          errors=['Δεν υπάρχουν διαπιστευτήρια myDATA.'])
+            return result
 
-            from django.core.management import call_command
-            from io import StringIO
+        if not credentials.has_credentials:
+            logger.warning(
+                'myDATA sync: ελλιπή credentials για client id=%s',
+                period.client_id)
+            result.update(reason='missing_credentials',
+                          failed_months=months,
+                          errors=['Δεν υπάρχουν διαπιστευτήρια myDATA.'])
+            return result
 
-            for month in period.months_in_period:
-                # Sync μήνα μέσω του ίδιου command με το credentials.sync action
-                # (το παλιό `from .services import sync_vat_records_for_client`
-                # έκανε ImportError και το sync_first ήταν σιωπηλό no-op).
-                # Per-month try: ο μήνας σημειώνεται synced ΜΟΝΟ σε επιτυχία.
-                try:
-                    call_command(
-                        'mydata_sync_vat',
-                        '--client', period.client.afm,
-                        '--year', str(period.year),
-                        '--month', str(month),
-                        stdout=StringIO(),
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Sync failed for client id={period.client_id} "
-                        f"{month}/{period.year}: {e}"
-                    )
-                    continue
-                if month not in period.months_synced:
-                    period.months_synced.append(month)
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from io import StringIO
 
+        for month in months:
+            # Sync μήνα μέσω του ίδιου command με το credentials.sync action.
+            # Per-month try: ο μήνας σημειώνεται synced ΜΟΝΟ σε επιτυχία και
+            # η αποτυχία ΚΑΤΑΓΡΑΦΕΤΑΙ στο αποτέλεσμα (δεν καταπίνεται).
+            try:
+                call_command(
+                    'mydata_sync_vat',
+                    '--client', period.client.afm,
+                    '--year', str(period.year),
+                    '--month', str(month),
+                    stdout=StringIO(),
+                )
+            except Exception as exc:
+                # Ταξινόμηση χωρίς να διαρρεύσει raw exception text
+                text = str(exc).lower()
+                if any(k in text for k in ('auth', '401', 'unauthor',
+                                           'διαπιστευτ')):
+                    reason = 'authentication'
+                elif isinstance(exc, CommandError):
+                    reason = 'api_failure'
+                else:
+                    reason = 'unexpected_error'
+                if not result['reason']:
+                    result['reason'] = reason
+                logger.error(
+                    'myDATA sync απέτυχε: client id=%s %s/%s (%s)',
+                    period.client_id, month, period.year,
+                    type(exc).__name__)
+                result['failed_months'].append(month)
+                result['errors'].append(
+                    f'Αποτυχία συγχρονισμού για τον μήνα {month}.')
+                continue
+
+            result['successful_months'].append(month)
+            if month not in period.months_synced:
+                period.months_synced.append(month)
+
+        try:
             period.save(update_fields=['months_synced'])
-        except Exception as e:
-            logger.error(f"Error syncing period months: {e}")
+        except Exception:
+            logger.exception(
+                'myDATA sync: αποτυχία αποθήκευσης months_synced για '
+                'period id=%s', period.pk)
+            result.update(status='failed', reason='unexpected_error')
+            result['errors'].append('Αποτυχία αποθήκευσης κατάστασης '
+                                    'συγχρονισμού.')
+            return result
+
+        if not result['failed_months']:
+            result['status'] = 'success'
+            result['reason'] = ''
+        elif result['successful_months']:
+            result['status'] = 'partial'
+        else:
+            result['status'] = 'failed'
+        return result
 
     @action(detail=True, methods=['post'])
     def lock(self, request, pk=None):
