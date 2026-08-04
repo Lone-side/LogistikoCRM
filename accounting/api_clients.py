@@ -527,9 +527,11 @@ class ClientViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             filename = document.filename
             try:
                 _filing.delete_document_service(request.user, document)
-            except _VErr as e:
-                return Response({'error': '; '.join(e.messages)},
-                                status=status.HTTP_400_BAD_REQUEST)
+            except (_filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict, _filing.DocumentGone,
+                    _VErr) as e:
+                message, code = _filing.document_error_status(e)
+                return Response({'error': message}, status=code)
 
             return Response({
                 'message': f'Το έγγραφο "{filename}" διαγράφηκε επιτυχώς.'

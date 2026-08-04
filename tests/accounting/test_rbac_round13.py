@@ -35,12 +35,14 @@ class SharedLinkGatesBase(TestCase):
 
     def _make_doc(self):
         from accounting.services import filing
-        # on_existing='keep': ανεξάρτητα fixtures — versioning με user=None
+        # on_existing='keep' + portal capability: ανεξάρτητα fixtures
         # απαγορεύεται πλέον από το permission matrix (Γύρος 17)
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('έγγραφο.pdf', b'%PDF-1.4'),
             category='vat', year=2026, month=1, on_existing='keep',
+            # Γύρος 20: ανώνυμο 'keep' απαιτεί explicit portal capability
+            portal_capability=filing.PortalUploadCapability(1),
         )
 
     def _make_link(self, **kwargs):

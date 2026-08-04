@@ -30,6 +30,17 @@ class SharedLinkPortalBase(TestCase):
             eponimia='ΠΕΛΑΤΗΣ ΠΟΡΤΑΛ ΑΕ',
             eidos_ipoxreou='company',
         )
+        self._staff_cache = None
+
+    def _staff_user(self):
+        """Χρήστης γραφείου για fixtures εγγράφων (Γύρος 20: user=None
+        επιτρέπεται μόνο με portal capability)."""
+        if self._staff_cache is None:
+            from django.contrib.auth import get_user_model
+            self._staff_cache = get_user_model().objects.create_superuser(
+                f'portal_staff_{self.id().split(".")[-1][:20]}',
+                'staff@t.com', 'x')
+        return self._staff_cache
 
     def _make_link(self, **kwargs):
         defaults = {'client': self.client_profile, 'allow_upload': True}
@@ -198,7 +209,7 @@ class DownloadSecurityFixTest(SharedLinkPortalBase):
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('doc.pdf', b'%PDF-1.4'),
-            category='vat', year=2026, month=1,
+            category='vat', year=2026, month=1, user=self._staff_user(),
         )
 
     def test_password_link_download_requires_token(self):
@@ -235,7 +246,7 @@ class DownloadSecurityFixTest(SharedLinkPortalBase):
         foreign_doc = filing.create_client_document(
             client=other,
             uploaded_file=SimpleUploadedFile('ξένο.pdf', b'%PDF-1.4'),
-            category='vat', year=2026, month=1,
+            category='vat', year=2026, month=1, user=self._staff_user(),
         )
         link = self._make_link(allow_upload=False, access_level='download')
         url = reverse('accounting:shared_link_download', args=[link.token])
@@ -250,7 +261,7 @@ class PortalSecurityHardeningTest(SharedLinkPortalBase):
         staff_doc = filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('φπα_γραφείου.pdf', b'%PDF-1.4'),
-            category='vat',
+            category='vat', user=self._staff_user(),
         )
         link = self._make_link(upload_category='vat')
         resp = self.client.post(self._upload_url(link), {

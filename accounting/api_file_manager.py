@@ -505,6 +505,7 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         from accounting.services.access import accessible_documents
         allowed = accessible_documents(request.user)
         deleted_count = 0
+        skipped = 0
         for doc_id in doc_ids:
             try:
                 # Μόνο έγγραφα πελατών ανατεθειμένων στον χρήστη
@@ -514,8 +515,12 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 from accounting.services import filing as _filing
                 try:
                     _filing.delete_document_service(request.user, doc)
-                except _VErr:
-                    # π.χ. έχει νεότερες εκδόσεις — παραλείπεται με μέτρηση
+                except (_filing.MultipleCurrentDocumentsError,
+                        _filing.DocumentKeyConflict, _filing.DocumentGone,
+                        _VErr):
+                    # έχει νεότερες εκδόσεις / corrupted / ήδη διαγραμμένο —
+                    # παραλείπεται με μέτρηση (controlled, όχι 500)
+                    skipped += 1
                     continue
                 deleted_count += 1
             except ClientDocument.DoesNotExist:
@@ -523,7 +528,8 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 
         return Response({
             'message': f'Διαγράφηκαν {deleted_count} έγγραφα',
-            'deleted_count': deleted_count
+            'deleted_count': deleted_count,
+            'skipped_count': skipped,
         })
 
     @action(detail=True, methods=['get'], url_path='preview')
@@ -1284,6 +1290,11 @@ class PublicSharedLinkUploadView(APIView):
                         user=None,
                         description=f'Μεταφόρτωση από {sender} μέσω portal',
                         on_existing='keep',
+                        # Explicit capability: το σκέτο user=None ΔΕΝ
+                        # εξουσιοδοτεί — το token κατασκευάζεται μόνο εδώ,
+                        # αφού έχει ήδη επικυρωθεί το shared link
+                        portal_capability=filing.PortalUploadCapability(
+                            shared_link.pk),
                     )
                 except DjangoValidationError as e:
                     errors.append(

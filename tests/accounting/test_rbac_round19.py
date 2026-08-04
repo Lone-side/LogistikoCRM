@@ -241,7 +241,8 @@ class KeepSlotTest(Round19Base):
         kept = filing.create_client_document(
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
-            on_existing='keep')
+            on_existing='keep',
+            portal_capability=filing.PortalUploadCapability(1))
         office.refresh_from_db()
         self.assertTrue(office.is_current)     # ΔΕΝ εκτοπίστηκε
         self.assertTrue(kept.is_current)
@@ -256,11 +257,13 @@ class KeepSlotTest(Round19Base):
         k1 = filing.create_client_document(
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
-            on_existing='keep')
+            on_existing='keep',
+            portal_capability=filing.PortalUploadCapability(1))
         k2 = filing.create_client_document(
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
-            on_existing='keep')
+            on_existing='keep',
+            portal_capability=filing.PortalUploadCapability(1))
         self.assertNotEqual(k1.slot, k2.slot)
         self.assertTrue(k1.is_current and k2.is_current)
 
@@ -268,7 +271,8 @@ class KeepSlotTest(Round19Base):
         kept = filing.create_client_document(
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
-            on_existing='keep')
+            on_existing='keep',
+            portal_capability=filing.PortalUploadCapability(1))
         v2 = kept.create_new_version(new_file=pdf_upload(), user=self.full)
         self.assertEqual(v2.slot, kept.slot)
 
@@ -457,7 +461,8 @@ class ExtendedAuditTest(Round19Base):
         filing.create_client_document(
             client=self.client_a, uploaded_file=pdf_upload(),
             category='vat', year=2026, month=3, user=None,
-            on_existing='keep')  # portal slot
+            on_existing='keep',
+            portal_capability=filing.PortalUploadCapability(1))  # portal slot
         text = self._run()
         self.assertIn('Κανένα invariant finding', text)
 

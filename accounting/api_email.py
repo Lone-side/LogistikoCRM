@@ -646,6 +646,7 @@ def complete_and_notify(request, obligation_id):
             return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
     # === Μεταβολές: document + completion ατομικά ===
+    from django.core.exceptions import ValidationError as _DjangoValidationError
     from django.db import transaction
     from .services import filing as _filing
     with transaction.atomic():
@@ -653,11 +654,13 @@ def complete_and_notify(request, obligation_id):
             # Structural attach ΜΟΝΟ μέσω του κοινού service (locks +
             # exact target-key conflict + audit)
             try:
-                _filing.attach_document_service(
+                existing_document = _filing.attach_document_service(
                     request.user, existing_document, obligation)
-            except _filing.DocumentKeyConflict as e:
-                return Response({'error': e.message},
-                                status=status.HTTP_409_CONFLICT)
+            except (_filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict, _filing.DocumentGone,
+                    _DjangoValidationError) as e:
+                message, code = _filing.document_error_status(e)
+                return Response({'error': message}, status=code)
             document = existing_document
 
         if uploaded_file is not None:

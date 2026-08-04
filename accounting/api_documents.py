@@ -339,7 +339,8 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 description=description,
             )
         except ValidationError as e:
-            return Response({'error': '; '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         result_serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -378,17 +379,17 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             raise Http404
 
         # Κοινό transactional service: validation → perms → locks →
-        # exact target-key conflict (fail closed) → mutation → audit
+        # reload+lock document → exact target-key conflict → mutation → audit
         from django.core.exceptions import ValidationError
         from .services import filing
         try:
-            filing.attach_document_service(request.user, document, obligation)
-        except filing.DocumentKeyConflict as e:
-            return Response({'error': e.message},
-                            status=status.HTTP_409_CONFLICT)
-        except ValidationError as e:
-            return Response({'error': '; '.join(e.messages)},
-                            status=status.HTTP_400_BAD_REQUEST)
+            document = filing.attach_document_service(
+                request.user, document, obligation)
+        except (filing.MultipleCurrentDocumentsError,
+                filing.DocumentKeyConflict, filing.DocumentGone,
+                ValidationError) as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -406,13 +407,12 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         from .services import filing
         document = self.get_object()
         try:
-            filing.detach_document_service(request.user, document)
-        except filing.DocumentKeyConflict as e:
-            return Response({'error': e.message},
-                            status=status.HTTP_409_CONFLICT)
-        except ValidationError as e:
-            return Response({'error': '; '.join(e.messages)},
-                            status=status.HTTP_400_BAD_REQUEST)
+            document = filing.detach_document_service(request.user, document)
+        except (filing.MultipleCurrentDocumentsError,
+                filing.DocumentKeyConflict, filing.DocumentGone,
+                ValidationError) as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -432,9 +432,11 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         document = self.get_object()
         try:
             filing.delete_document_service(request.user, document)
-        except ValidationError as e:
-            return Response({'error': '; '.join(e.messages)},
-                            status=status.HTTP_400_BAD_REQUEST)
+        except (filing.MultipleCurrentDocumentsError,
+                filing.DocumentKeyConflict, filing.DocumentGone,
+                ValidationError) as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
         return Response({'message': 'Το έγγραφο διαγράφηκε επιτυχώς.'})
 
 
@@ -496,13 +498,13 @@ def attach_document_to_obligation(request, obligation_id):
         from django.core.exceptions import ValidationError
         from .services import filing as _filing
         try:
-            _filing.attach_document_service(request.user, document, obligation)
-        except _filing.DocumentKeyConflict as e:
-            return Response({'error': e.message},
-                            status=status.HTTP_409_CONFLICT)
-        except ValidationError as e:
-            return Response({'error': '; '.join(e.messages)},
-                            status=status.HTTP_400_BAD_REQUEST)
+            document = _filing.attach_document_service(
+                request.user, document, obligation)
+        except (_filing.MultipleCurrentDocumentsError,
+                _filing.DocumentKeyConflict, _filing.DocumentGone,
+                ValidationError) as e:
+            message, code = _filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -525,10 +527,8 @@ def attach_document_to_obligation(request, obligation_id):
                 description=request.data.get('description', ''),
             )
         except ValidationError as e:
-            return Response(
-                {'error': '; '.join(e.messages)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({

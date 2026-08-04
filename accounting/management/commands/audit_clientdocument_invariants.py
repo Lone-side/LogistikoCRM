@@ -234,6 +234,23 @@ class Command(BaseCommand):
                             f"duplicate-version-in-chain: v{v} → "
                             f"ids={sorted(ids)}")
 
+        # 10. Legacy slots από τα migrations 10020/10021: ΔΕΝ θεωρούνται
+        # καθαρά — απαιτούν χειροκίνητη ταξινόμηση/επιβεβαίωση ποιο
+        # έγγραφο είναι το πραγματικό κύριο του key. Μία γραμμή ΑΝΑ
+        # component (όχι ανά row) για deterministic, μη-θορυβώδες output.
+        legacy_components = defaultdict(list)
+        for r in rows:
+            if (r['slot'] or '').startswith('legacy-'):
+                legacy_components[find(r['id'])].append(r['id'])
+        for comp, ids in sorted(
+                legacy_components.items(), key=lambda kv: min(kv[1])):
+            findings.append(
+                f"legacy-slot-needs-review: chain ids={sorted(ids)} — "
+                f"απαιτείται χειροκίνητη επιβεβαίωση ότι το slot είναι "
+                f"σωστό (migration 10020/10021 μετέφερε αμφίβολα duplicate "
+                f"currents σε legacy slot· το κύριο slot παραμένει ελεύθερο)"
+            )
+
         if not findings:
             self.stdout.write(self.style.SUCCESS(
                 'Κανένα invariant finding — όλα τα ClientDocument συνεπή.'))

@@ -41,10 +41,15 @@ class ProtectedMediaViewTest(TestCase):
         self.client_profile = ClientProfile.objects.create(
             afm='123456783', eponimia='ΠΕΛΑΤΗΣ ΑΕ', eidos_ipoxreou='company')
         from accounting.services import filing
+        from django.contrib.auth import get_user_model
+        # Έγγραφο γραφείου → πραγματικός χρήστης (Γύρος 20: το user=None
+        # επιτρέπεται μόνο με portal capability)
+        doc_owner = get_user_model().objects.create_superuser(
+            'pm_doc_owner', 'pm@t.com', 'x')
         self.doc = filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('test.pdf', b'%PDF-1.4 test content'),
-            category='vat', year=2026, month=1,
+            category='vat', year=2026, month=1, user=doc_owner,
         )
         self.rel_path = self.doc.file.name
 

@@ -18,6 +18,7 @@ import threading
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection, connections
 from django.test import TransactionTestCase, override_settings
@@ -207,3 +208,160 @@ class ConcurrentAttachTest(TransactionTestCase):
             month=3, obligation=self.ob1, is_current=True, slot='')
         # ΠΟΤΕ δύο current στο target key — ό,τι σειρά κι αν κέρδισε
         self.assertEqual(currents.count(), 1)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA)
+class ConcurrentStructuralMutationTest(TransactionTestCase):
+    """
+    Γύρος 20: ταυτόχρονο structural mutation + delete/version στο ΙΔΙΟ
+    document. Αποδεικνύει ότι το reload+lock του document μέσα στο
+    transaction δεν αφήνει stale state:
+    - κανένα deleted row δεν αναδημιουργείται
+    - κανένα stale obligation assignment
+    - κανένα duplicate current
+    - μόνο controlled αποτελέσματα (success / conflict / not-found)
+    - κανένα raw IntegrityError
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL — τρέχει blocking στο CI.')
+        from accounting.models import MonthlyObligation, ObligationType
+        from django.utils import timezone
+        self.client_profile = ClientProfile.objects.create(
+            afm='123456783', eponimia='PG ΑΕ', eidos_ipoxreou='company')
+        self.user = User.objects.create_user('pg_sm_user', password='x')
+        for codename in ('add_clientdocument', 'change_clientdocument',
+                         'delete_clientdocument'):
+            self.user.user_permissions.add(Permission.objects.get(
+                codename=codename, content_type__app_label='accounting'))
+        self.user = User.objects.get(pk=self.user.pk)
+        ot = ObligationType.objects.create(
+            name='ΦΠΑ-SM', code='FPA-SM', is_active=True)
+        self.ob = MonthlyObligation.objects.create(
+            client=self.client_profile, obligation_type=ot, month=3,
+            year=2026, deadline=timezone.now().date())
+
+    def _mk_doc(self, obligation=None):
+        return filing.create_client_document(
+            client=self.client_profile,
+            uploaded_file=SimpleUploadedFile('sm.pdf', b'%PDF-1.4 x'),
+            category='vat', year=2026, month=3, obligation=obligation,
+            user=self.user)
+
+    def _run_pair(self, fn_a, fn_b):
+        barrier = threading.Barrier(2)
+        results = {}
+
+        def wrap(name, fn):
+            def inner():
+                try:
+                    barrier.wait(timeout=10)
+                    fn()
+                    results[name] = 'ok'
+                except filing.DocumentGone:
+                    results[name] = 'gone'
+                except filing.DocumentKeyConflict:
+                    results[name] = 'conflict'
+                except filing.MultipleCurrentDocumentsError:
+                    results[name] = 'multiple'
+                except ValidationError:
+                    results[name] = 'invalid'
+                except Exception as e:  # pragma: no cover - διαγνωστικό
+                    results[name] = f'ERROR:{type(e).__name__}:{e}'
+                finally:
+                    connections.close_all()
+            return inner
+
+        threads = [threading.Thread(target=wrap('a', fn_a)),
+                   threading.Thread(target=wrap('b', fn_b))]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+        for name, value in results.items():
+            self.assertFalse(
+                str(value).startswith('ERROR:'),
+                f'Ανεξέλεγκτο σφάλμα στο thread {name}: {value}')
+        return results
+
+    def _assert_consistent(self, doc_pk):
+        """Καμία διπλή current, κανένα row χωρίς αρχείο, κανένα resurrect."""
+        currents = ClientDocument.objects.filter(
+            client=self.client_profile, document_category='vat',
+            year=2026, month=3, is_current=True)
+        by_key = {}
+        for d in currents:
+            key = (d.obligation_id, d.slot)
+            by_key.setdefault(key, []).append(d.pk)
+        for key, ids in by_key.items():
+            self.assertEqual(len(ids), 1, f'Διπλό current στο key {key}: {ids}')
+        for d in ClientDocument.objects.all():
+            self.assertTrue(d.file and d.file.name,
+                            'Committed row χωρίς αρχείο')
+
+    def test_concurrent_attach_and_delete(self):
+        doc = self._mk_doc()
+        stale = ClientDocument.objects.get(pk=doc.pk)
+        results = self._run_pair(
+            lambda: filing.attach_document_service(self.user, stale, self.ob),
+            lambda: filing.delete_document_service(self.user, doc),
+        )
+        self.assertTrue(set(results.values()) <= {'ok', 'gone', 'conflict'},
+                        results)
+        # Αν το delete κέρδισε, το attach ΔΕΝ αναδημιούργησε το row
+        if results.get('b') == 'ok':
+            self.assertFalse(
+                ClientDocument.objects.filter(pk=doc.pk).exists())
+        self._assert_consistent(doc.pk)
+
+    def test_concurrent_detach_and_delete(self):
+        doc = self._mk_doc(self.ob)
+        stale = ClientDocument.objects.get(pk=doc.pk)
+        results = self._run_pair(
+            lambda: filing.detach_document_service(self.user, stale),
+            lambda: filing.delete_document_service(self.user, doc),
+        )
+        self.assertTrue(set(results.values()) <= {'ok', 'gone', 'conflict'},
+                        results)
+        if results.get('b') == 'ok':
+            self.assertFalse(
+                ClientDocument.objects.filter(pk=doc.pk).exists())
+        self._assert_consistent(doc.pk)
+
+    def test_concurrent_attach_and_version(self):
+        doc = self._mk_doc()
+        stale = ClientDocument.objects.get(pk=doc.pk)
+        results = self._run_pair(
+            lambda: filing.attach_document_service(self.user, stale, self.ob),
+            lambda: filing.create_client_document(
+                client=self.client_profile,
+                uploaded_file=SimpleUploadedFile('v2.pdf', b'%PDF-1.4 y'),
+                category='vat', year=2026, month=3, user=self.user,
+                on_existing='version'),
+        )
+        self.assertTrue(
+            set(results.values()) <= {'ok', 'gone', 'conflict', 'invalid'},
+            results)
+        self._assert_consistent(doc.pk)
+
+    def test_concurrent_detach_and_version(self):
+        doc = self._mk_doc(self.ob)
+        stale = ClientDocument.objects.get(pk=doc.pk)
+        results = self._run_pair(
+            lambda: filing.detach_document_service(self.user, stale),
+            lambda: filing.create_client_document(
+                client=self.client_profile,
+                uploaded_file=SimpleUploadedFile('v2.pdf', b'%PDF-1.4 y'),
+                category='vat', year=2026, month=3, obligation=self.ob,
+                user=self.user, on_existing='version'),
+        )
+        self.assertTrue(
+            set(results.values()) <= {'ok', 'gone', 'conflict', 'invalid'},
+            results)
+        self._assert_consistent(doc.pk)

@@ -228,4 +228,23 @@ jobs:
             tests.accounting.test_rbac_round17 \
             tests.accounting.test_rbac_round18 \
             tests.accounting.test_rbac_round19 \
+            tests.accounting.test_rbac_round20 \
             -v 2
+
+      # Blocking production-mode έλεγχοι (Γύρος 20): fail-closed libmagic
+      # στην πραγματική upload διαδρομή + document invariant enforcement.
+      # REQUIRE_LIBMAGIC=True → κάθε αποτυχία detection απορρίπτει upload.
+      - name: Production-mode libmagic + invariant enforcement (blocking)
+        env:
+          REQUIRE_LIBMAGIC: 'True'
+        run: |
+          python manage.py test \
+            tests.accounting.test_rbac_round20.MimeFailClosedTest \
+            tests.accounting.test_rbac_round20.PermissionsBeforeLocksTest \
+            tests.accounting.test_rbac_round19.DbConstraintTest \
+            tests.accounting.test_rbac_round19.KeepSlotTest \
+            -v 2
+
+      # Το audit command πρέπει να τρέχει καθαρά σε φρέσκια βάση
+      - name: ClientDocument invariant audit (blocking)
+        run: python manage.py audit_clientdocument_invariants --fail-on-findings

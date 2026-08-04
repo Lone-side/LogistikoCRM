@@ -756,21 +756,27 @@ class ClientDocumentAdmin(admin.ModelAdmin):
     @admin.action(description='✓ Ορισμός ως τρέχουσα έκδοση')
     def mark_as_current(self, request, queryset):
         """Ορίζει τα επιλεγμένα ως τρέχουσες εκδόσεις"""
+        # ΜΟΝΟ μέσω του canonical service: permission → locks → demote
+        # ΜΟΝΟ του ίδιου exact key (incl. slot) → promote → audit.
+        # (Το παλιό inline update ήταν slot-blind και μη-transactional.)
+        from accounting.services import filing as _filing
+        from django.core.exceptions import PermissionDenied as _PD
+        done, skipped = 0, 0
         for doc in queryset:
-            # Βρες όλες τις εκδόσεις του ίδιου αρχείου
-            ClientDocument.objects.filter(
-                client=doc.client,
-                obligation=doc.obligation,
-                document_category=doc.document_category,
-                year=doc.year,
-                month=doc.month,
-            ).update(is_current=False)
-
-            # Όρισε αυτό ως τρέχον
-            doc.is_current = True
-            doc.save(update_fields=['is_current'])
-
-        messages.success(request, f'✅ Ορίστηκαν {queryset.count()} ως τρέχουσες εκδόσεις')
+            try:
+                _filing.promote_to_current_service(request.user, doc)
+                done += 1
+            except (_PD, _filing.DocumentGone,
+                    _filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict):
+                skipped += 1
+        if done:
+            messages.success(
+                request, f'✅ Ορίστηκαν {done} ως τρέχουσες εκδόσεις')
+        if skipped:
+            messages.warning(
+                request, f'⚠️ Παραλείφθηκαν {skipped} έγγραφα '
+                         f'(δικαίωμα ή ασυνέπεια δεδομένων)')
 
     # === Override save_model for versioning ===
 

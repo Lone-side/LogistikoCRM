@@ -75,7 +75,8 @@ class ValidateUploadTest(FilingServiceBase):
         self.filing_settings.save()
         with self.assertRaises(ValidationError):
             filing.validate_upload(SimpleUploadedFile('data.xlsx', b'PK'))
-        filing.validate_upload(SimpleUploadedFile('doc.pdf', b'%PDF'))
+        filing.validate_upload(SimpleUploadedFile(
+            'doc.pdf', b'%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n'))
 
 
 class GetDocumentDirTest(FilingServiceBase):
@@ -206,7 +207,15 @@ class ObligationUploadEndpointTest(TestCase):
     def test_non_pdf_allowed_types_accepted(self):
         # Το παλιό endpoint δεχόταν μόνο PDF — τώρα ισχύουν οι ρυθμίσεις
         url = reverse('accounting:obligation_upload_file', args=[self.obligation.id])
-        resp = self.client.post(url, {'file': SimpleUploadedFile('data.xlsx', b'PK')})
+        # Γύρος 20: απαιτείται ΠΡΑΓΜΑΤΙΚΟ OOXML container (σκέτο 'PK'
+        # απορρίπτεται πλέον ως κατεστραμμένο)
+        import io as _io, zipfile as _zip
+        _buf = _io.BytesIO()
+        with _zip.ZipFile(_buf, 'w') as _zf:
+            _zf.writestr('[Content_Types].xml', '<?xml version="1.0"?><T/>')
+            _zf.writestr('xl/workbook.xml', '<?xml version="1.0"?><w/>')
+        resp = self.client.post(
+            url, {'file': SimpleUploadedFile('data.xlsx', _buf.getvalue())})
         self.assertEqual(resp.status_code, 200, resp.content)
 
     def test_download_rejects_traversal(self):
