@@ -58,6 +58,7 @@ ROLES = {
             'delete_mydatacredentials',
             'view_vatrecord', 'view_vatsynclog',
             'add_vatperiodresult', 'change_vatperiodresult', 'view_vatperiodresult',
+            'sync_vatdata',
             # Τιμολόγια: ανάγνωση (η υποβολή στην ΑΑΔΕ θέλει change_invoice + staff)
             'view_invoice',
         ],

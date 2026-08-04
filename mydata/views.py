@@ -675,8 +675,14 @@ class MyDataDashboardView(APIView):
         )
 
         total_clients = allowed_clients.count()
-        clients_with_credentials = credentials_qs.count()
-        verified_credentials = credentials_qs.filter(is_verified=True).count()
+        # Aggregate credential metadata μόνο με view_mydatacredentials —
+        # χωρίς αυτό ακόμη και τα σύνολα δεν διαρρέουν (null)
+        if can_see_credentials:
+            clients_with_credentials = credentials_qs.count()
+            verified_credentials = credentials_qs.filter(is_verified=True).count()
+        else:
+            clients_with_credentials = None
+            verified_credentials = None
 
         # Aggregate totals for the period
         period_records = VATRecord.objects.filter(
@@ -1068,10 +1074,32 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Optional: sync missing months first
+        # Optional: sync missing months first — εξωτερικό side effect, ΧΩΡΙΣ
+        # το dedicated permission επιτρέπεται μόνο απλός υπολογισμός
         sync_first = request.data.get('sync_first', False)
         if sync_first:
+            if not request.user.has_perm('mydata.sync_vatdata'):
+                return Response(
+                    {'error': 'Δεν έχετε δικαίωμα συγχρονισμού δεδομένων ΦΠΑ.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             self._sync_period_months(period)
+            # Audit χωρίς ΑΦΜ/credentials
+            try:
+                from common.models import AuditLog
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='update',
+                    model_name='VATPeriodResult',
+                    object_id=str(period.pk),
+                    description=(
+                        f'myDATA sync: client id={period.client_id}, '
+                        f'period id={period.pk}, {period.period}/{period.year}'
+                    ),
+                    severity='medium',
+                )
+            except Exception:
+                logger.warning('Could not write mydata_sync audit', exc_info=True)
 
         # Calculate from records
         result = period.calculate_from_records(save=True)
@@ -1408,10 +1436,18 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             result = MyDataService().submit_invoice(invoice)
         except ValueError as e:
+            # Ελεγχόμενα guard messages (λάθος κατεύθυνση, ήδη απεσταλμένο,
+            # χωρίς γραμμές) — hand-written, χωρίς traceback/credentials.
+            logger.warning('myDATA submit rejected invoice id=%s', invoice.pk)
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except MyDataValidationError as e:
-            # Η ΑΑΔΕ απέρριψε το παραστατικό (business validation) — 422, όχι 502
-            return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            # Η ΑΑΔΕ απέρριψε το παραστατικό (business validation) — 422, όχι 502.
+            # Μόνο το ελεγχόμενο .message, όχι raw response_text.
+            logger.warning('myDATA validation rejected invoice id=%s', invoice.pk)
+            return Response(
+                {'error': e.message or 'Το παραστατικό απορρίφθηκε από το myDATA.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
         except MyDataAPIError:
             logger.exception('myDATA submit failed for invoice id=%s', invoice.pk)
             return Response(
@@ -1437,9 +1473,15 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             result = MyDataService().cancel_invoice(invoice)
         except ValueError as e:
+            # Ελεγχόμενα guard messages — hand-written, χωρίς traceback/credentials.
+            logger.warning('myDATA cancel rejected invoice id=%s', invoice.pk)
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except MyDataValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+            logger.warning('myDATA validation rejected cancel invoice id=%s', invoice.pk)
+            return Response(
+                {'error': e.message or 'Η ακύρωση απορρίφθηκε από το myDATA.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
         except MyDataAPIError:
             logger.exception('myDATA cancel failed for invoice id=%s', invoice.pk)
             return Response(

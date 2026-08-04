@@ -379,16 +379,19 @@ def send_email(request):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    # Get attachments
+    # Get attachments — αυστηρός resolver (view_clientdocument, same client,
+    # is_current, exact-set· άκυρο/ξένο ID → απόρριψη ΟΛΟΥ του request)
+    from accounting.services.access import (
+        AttachmentResolutionError, resolve_email_attachment_documents,
+    )
     attachments = []
     if attachment_ids:
-        documents = ClientDocument.objects.filter(
-            id__in=attachment_ids,
-            client=client
-        )
-        for doc in documents:
-            if doc.file:
-                attachments.append(doc.file)
+        try:
+            documents = resolve_email_attachment_documents(
+                request, client, attachment_ids)
+        except AttachmentResolutionError as e:
+            return Response({'error': e.message}, status=e.status_code)
+        attachments = [doc.file for doc in documents if doc.file]
 
     # Send email
     success, result = EmailService.send_email(
@@ -489,15 +492,14 @@ def send_obligation_notice(request):
         attachments.extend(email_attachments)
 
     if attachment_ids:
-        documents = ClientDocument.objects.filter(
-            id__in=attachment_ids,
-            client=client,
-            is_current=True
+        from accounting.services.access import (
+            AttachmentResolutionError, resolve_email_attachment_documents,
         )
-        if len(documents) != len(set(attachment_ids)):
-            return Response(
-                {'error': 'Μη έγκυρα ή ξένα συνημμένα.'},
-                status=status.HTTP_400_BAD_REQUEST)
+        try:
+            documents = resolve_email_attachment_documents(
+                request, client, attachment_ids)
+        except AttachmentResolutionError as e:
+            return Response({'error': e.message}, status=e.status_code)
         for doc in documents:
             if doc.file and doc.file.path not in attachments:
                 attachments.append(doc.file.path)
@@ -588,94 +590,112 @@ def complete_and_notify(request, obligation_id):
     if isinstance(attach_to_email, str):
         attach_to_email = attach_to_email.lower() == 'true'
 
-    # Έλεγχοι permissions εγγράφων ΠΡΙΝ από οποιαδήποτε μεταβολή
+    # === ΟΛΟΙ οι permission/consistency έλεγχοι ΠΡΙΝ από κάθε μεταβολή ===
     document_id = request.data.get('document_id')
     if document_id and not check_model_perms(request, 'accounting.change_clientdocument'):
         return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
     if 'file' in request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
         return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
-    # Handle document attachment from existing document
+    # Existing document: scoped + current· ξένο/ανύπαρκτο → ίδιο ουδέτερο 404
+    existing_document = None
     if document_id:
-        try:
-            document = ClientDocument.objects.get(id=document_id, client=client)
-            document.obligation = obligation
-            document.save()
-        except ClientDocument.DoesNotExist:
+        existing_document = ClientDocument.objects.filter(
+            id=document_id, client=client, is_current=True).first()
+        if existing_document is None:
             return Response(
                 {'error': 'Το έγγραφο δεν βρέθηκε.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-    # Handle file upload
+    # File validation (χωρίς storage write ακόμη)
+    uploaded_file = None
     if 'file' in request.FILES and save_to_client_folder:
         uploaded_file = request.FILES['file']
-
-        # Validate file
         allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
         ext = os.path.splitext(uploaded_file.name)[1].lower()
-
         if ext not in allowed_extensions:
             return Response(
-                {'error': f'Μη επιτρεπτός τύπος αρχείου.'},
+                {'error': 'Μη επιτρεπτός τύπος αρχείου.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         if uploaded_file.size > 10 * 1024 * 1024:
             return Response(
                 {'error': 'Το αρχείο είναι μεγαλύτερο από 10MB.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Determine category
-        category = 'general'
-        if obligation.obligation_type:
-            type_code = obligation.obligation_type.code.upper()
-            if 'ΦΠΑ' in type_code:
-                category = 'vat'
-            elif 'ΜΥΦ' in type_code:
-                category = 'myf'
-            elif 'ΑΠΔ' in type_code:
-                category = 'payroll'
-            elif 'Ε1' in type_code or 'Ε3' in type_code:
-                category = 'tax'
-
-        document = ClientDocument.objects.create(
-            client=client,
-            obligation=obligation,
-            file=uploaded_file,
-            document_category=category,
-            description=f'Υποχρέωση {obligation.obligation_type.name} {obligation.month:02d}/{obligation.year}'
-        )
-
-    # Mark obligation as completed
-    obligation.status = 'completed'
-    obligation.completed_date = timezone.now().date()
-    obligation.completed_by = request.user
-
-    if request.data.get('notes'):
-        obligation.notes = request.data.get('notes')
-
-    if request.data.get('time_spent'):
-        try:
-            obligation.time_spent = float(request.data.get('time_spent'))
-        except (ValueError, TypeError):
-            pass
-
-    obligation.save()
-
-    # Send email notification if requested
+    # Template resolution ΠΡΙΝ την ολοκλήρωση: explicit invalid/inactive
+    # template_id → ουδέτερο 404, ΧΩΡΙΣ silent fallback
+    template = None
     if send_email_flag and client.email:
         template_id = request.data.get('email_template_id')
-
         if template_id:
-            try:
-                template = EmailTemplate.objects.get(id=template_id, is_active=True)
-            except EmailTemplate.DoesNotExist:
-                template = EmailTemplate.get_template_for_obligation(obligation)
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+            template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if template is None:
+                return Response(
+                    {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                    status=status.HTTP_404_NOT_FOUND)
         else:
             template = EmailTemplate.get_template_for_obligation(obligation)
 
+    # attach_to_email με υπάρχοντα documents → view_clientdocument
+    if send_email_flag and attach_to_email:
+        if not check_model_perms(request, 'accounting.view_clientdocument'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
+    # === Μεταβολές: document + completion ατομικά ===
+    from django.db import transaction
+    from .services import filing as _filing
+    with transaction.atomic():
+        if existing_document is not None:
+            existing_document.obligation = obligation
+            existing_document.full_clean()
+            existing_document.save()
+            document = existing_document
+
+        if uploaded_file is not None:
+            category = 'general'
+            if obligation.obligation_type:
+                type_code = obligation.obligation_type.code.upper()
+                if 'ΦΠΑ' in type_code:
+                    category = 'vat'
+                elif 'ΜΥΦ' in type_code:
+                    category = 'myf'
+                elif 'ΑΠΔ' in type_code:
+                    category = 'payroll'
+                elif 'Ε1' in type_code or 'Ε3' in type_code:
+                    category = 'tax'
+            document = _filing.create_client_document(
+                client=client,
+                uploaded_file=uploaded_file,
+                category=category,
+                obligation=obligation,
+                user=request.user,
+                description=(
+                    f'Υποχρέωση {obligation.obligation_type.name} '
+                    f'{obligation.month:02d}/{obligation.year}'
+                ),
+            )
+
+        # Mark obligation as completed
+        obligation.status = 'completed'
+        obligation.completed_date = timezone.now().date()
+        obligation.completed_by = request.user
+        if request.data.get('notes'):
+            obligation.notes = request.data.get('notes')
+        if request.data.get('time_spent'):
+            try:
+                obligation.time_spent = float(request.data.get('time_spent'))
+            except (ValueError, TypeError):
+                pass
+        obligation.save()
+
+    # Send email notification if requested (μετά το commit της ολοκλήρωσης)
+    if send_email_flag and client.email:
         if template:
             # Collect attachments only if attach_to_email is true
             attachments = []
@@ -761,16 +781,21 @@ def bulk_complete_with_notify(request):
     obligation_ids = serializer.validated_data['obligation_ids']
     send_notifications = serializer.validated_data['send_notifications']
 
-    if send_notifications and not check_model_perms(request, 'accounting.send_client_email'):
-        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+    if send_notifications:
+        if not check_model_perms(request, 'accounting.send_client_email'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        # Τα notifications περιλαμβάνουν attachments (include_attachment=True)
+        if not check_model_perms(request, 'accounting.view_clientdocument'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
+    from django.db import transaction
     from django.utils import timezone
 
     # Get obligations that can be completed (μόνο προσβάσιμες)
-    obligations = accessible_obligations(request.user).filter(
+    obligations = list(accessible_obligations(request.user).filter(
         id__in=obligation_ids,
         status__in=['pending', 'overdue']
-    ).select_related('client', 'obligation_type')
+    ).select_related('client', 'obligation_type'))
 
     completed_count = 0
     email_results = {
@@ -780,14 +805,17 @@ def bulk_complete_with_notify(request):
         'details': []
     }
 
-    for obligation in obligations:
-        # Mark as completed
-        obligation.status = 'completed'
-        obligation.completed_date = timezone.now().date()
-        obligation.completed_by = request.user
-        obligation.save()
-        completed_count += 1
+    # Ολόκληρη η ολοκλήρωση atomic — permission/validation failure δεν
+    # αφήνει μερικώς ολοκληρωμένες υποχρεώσεις
+    with transaction.atomic():
+        for obligation in obligations:
+            obligation.status = 'completed'
+            obligation.completed_date = timezone.now().date()
+            obligation.completed_by = request.user
+            obligation.save()
+            completed_count += 1
 
+    for obligation in obligations:
         # Send notification if requested
         if send_notifications:
             client = obligation.client
@@ -911,33 +939,55 @@ def bulk_complete_with_documents(request):
     if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
         return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
-    # Parse optional template_id for email
+    # Parse optional template_id — explicit invalid/inactive → απόρριψη
+    # (ΟΧΙ silent fallback), με view_emailtemplate perm
     template_id = request.data.get('template_id')
     if isinstance(template_id, str) and template_id:
         try:
             template_id = int(template_id)
         except ValueError:
-            template_id = None
+            return Response(
+                {'error': 'Μη έγκυρο πρότυπο.'},
+                status=status.HTTP_400_BAD_REQUEST)
 
-    # Get override template if specified
     override_template = None
     if template_id:
-        try:
-            override_template = EmailTemplate.objects.get(id=template_id, is_active=True)
-        except EmailTemplate.DoesNotExist:
-            pass  # Will fallback to auto-select
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        override_template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True).first()
+        if override_template is None:
+            return Response(
+                {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND)
 
     # Get obligations (μόνο προσβάσιμες)
-    obligations = accessible_obligations(request.user).filter(
+    obligations = list(accessible_obligations(request.user).filter(
         id__in=obligation_ids,
         status__in=['pending', 'overdue']
-    ).select_related('client', 'obligation_type')
+    ).select_related('client', 'obligation_type'))
 
-    if not obligations.exists():
+    if not obligations:
         return Response(
             {'error': 'Δεν βρέθηκαν υποχρεώσεις προς ολοκλήρωση.'},
             status=status.HTTP_404_NOT_FOUND
         )
+
+    allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
+
+    # === Whole-batch validation ΠΡΙΝ ολοκληρωθεί οποιαδήποτε υποχρέωση ===
+    for obligation in obligations:
+        uploaded_file = request.FILES.get(f'file_{obligation.id}')
+        if uploaded_file and save_to_folders:
+            ext = os.path.splitext(uploaded_file.name)[1].lower()
+            if ext not in allowed_extensions:
+                return Response(
+                    {'error': f'Μη επιτρεπτός τύπος αρχείου: {ext or "?"}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            if uploaded_file.size > 10 * 1024 * 1024:
+                return Response(
+                    {'error': 'Αρχείο μεγαλύτερο από 10MB.'},
+                    status=status.HTTP_400_BAD_REQUEST)
 
     results = []
     completed_count = 0
@@ -948,48 +998,51 @@ def bulk_complete_with_documents(request):
         'details': []
     }
 
-    allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
+    from django.db import transaction
+    from .services import filing as _filing
+
+    def _category_for(obligation):
+        category = 'general'
+        if obligation.obligation_type:
+            type_code = obligation.obligation_type.code.upper()
+            if 'ΦΠΑ' in type_code:
+                category = 'vat'
+            elif 'ΜΥΦ' in type_code:
+                category = 'myf'
+            elif 'ΑΠΔ' in type_code:
+                category = 'payroll'
+            elif 'Ε1' in type_code or 'Ε3' in type_code:
+                category = 'tax'
+        return category
+
+    # Ολοκλήρωση + document creation atomic (μέσω filing service)
+    documents_by_ob = {}
+    with transaction.atomic():
+        for obligation in obligations:
+            client = obligation.client
+            uploaded_file = request.FILES.get(f'file_{obligation.id}')
+            if uploaded_file and save_to_folders:
+                documents_by_ob[obligation.id] = _filing.create_client_document(
+                    client=client,
+                    uploaded_file=uploaded_file,
+                    category=_category_for(obligation),
+                    obligation=obligation,
+                    user=request.user,
+                    description=(
+                        f'Υποχρέωση {obligation.obligation_type.name} '
+                        f'{obligation.month:02d}/{obligation.year}'
+                    ),
+                )
+            obligation.status = 'completed'
+            obligation.completed_date = timezone.now().date()
+            obligation.completed_by = request.user
+            obligation.save()
+            completed_count += 1
 
     for obligation in obligations:
         client = obligation.client
-        document = None
+        document = documents_by_ob.get(obligation.id)
         email_sent = False
-
-        # Check for file specific to this obligation
-        file_key = f'file_{obligation.id}'
-        uploaded_file = request.FILES.get(file_key)
-
-        if uploaded_file and save_to_folders:
-            # Validate file
-            ext = os.path.splitext(uploaded_file.name)[1].lower()
-            if ext in allowed_extensions and uploaded_file.size <= 10 * 1024 * 1024:
-                # Determine category
-                category = 'general'
-                if obligation.obligation_type:
-                    type_code = obligation.obligation_type.code.upper()
-                    if 'ΦΠΑ' in type_code:
-                        category = 'vat'
-                    elif 'ΜΥΦ' in type_code:
-                        category = 'myf'
-                    elif 'ΑΠΔ' in type_code:
-                        category = 'payroll'
-                    elif 'Ε1' in type_code or 'Ε3' in type_code:
-                        category = 'tax'
-
-                document = ClientDocument.objects.create(
-                    client=client,
-                    obligation=obligation,
-                    file=uploaded_file,
-                    document_category=category,
-                    description=f'Υποχρέωση {obligation.obligation_type.name} {obligation.month:02d}/{obligation.year}'
-                )
-
-        # Mark obligation as completed
-        obligation.status = 'completed'
-        obligation.completed_date = timezone.now().date()
-        obligation.completed_by = request.user
-        obligation.save()
-        completed_count += 1
 
         # Send email if requested
         if send_emails:

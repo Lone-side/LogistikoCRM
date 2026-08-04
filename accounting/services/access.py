@@ -112,6 +112,46 @@ def require_model_perms(*perms):
     return decorator
 
 
+class AttachmentResolutionError(Exception):
+    """Σφάλμα επίλυσης email attachments (permission ή invalid/foreign ID)."""
+
+    def __init__(self, message, *, status_code=400):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+def resolve_email_attachment_documents(request, client, attachment_ids):
+    """
+    Κοινός, αυστηρός resolver email attachments (fail closed):
+    - απαιτεί accounting.view_clientdocument,
+    - δέχεται μόνο documents του συγκεκριμένου client,
+    - μόνο is_current=True,
+    - exact-set validation: κάθε ζητούμενο ID πρέπει να βρεθεί,
+    - σε οποιοδήποτε άκυρο/ξένο/stale ID → απόρριψη ΟΛΟΥ του request.
+
+    Επιστρέφει λίστα ClientDocument. Ρίχνει AttachmentResolutionError
+    (με status_code 403/400) πριν από κάθε αποστολή/μεταβολή.
+    """
+    from accounting.models import ClientDocument
+    if not attachment_ids:
+        return []
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        raise AttachmentResolutionError(
+            'Δεν έχετε δικαίωμα επισύναψης εγγράφων.', status_code=403)
+    # Κανονικοποίηση σε μοναδικά int IDs
+    try:
+        wanted = {int(i) for i in attachment_ids}
+    except (TypeError, ValueError):
+        raise AttachmentResolutionError('Μη έγκυρα συνημμένα.', status_code=400)
+    docs = list(ClientDocument.objects.filter(
+        id__in=wanted, client=client, is_current=True))
+    if len(docs) != len(wanted):
+        raise AttachmentResolutionError(
+            'Μη έγκυρα ή ξένα συνημμένα.', status_code=400)
+    return docs
+
+
 def mask_pii_value(value):
     """
     Μάσκαρε τιμή PII για audit log: κρατά μόνο τα 4 τελευταία ψηφία/χαρακτήρες.

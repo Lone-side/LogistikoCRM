@@ -527,13 +527,22 @@ def email_compose_view(request):
     # πελατών/υποχρεώσεων για τον σκοπό αυτόν
     if not check_model_perms(request, 'accounting.send_client_email'):
         return HttpResponseForbidden('Δεν έχετε δικαίωμα αποστολής email.')
+    # Child view permissions: υποχρεώσεις/attachments/templates εμφανίζονται
+    # μόνο με το αντίστοιχο view permission
+    can_view_obligations = check_model_perms(
+        request, 'accounting.view_monthlyobligation')
+    can_view_documents = check_model_perms(
+        request, 'accounting.view_clientdocument')
+    can_view_templates = check_model_perms(
+        request, 'accounting.view_emailtemplate')
+
     # Λήψη επιλεγμένων υποχρεώσεων
     obligation_ids = request.GET.getlist('ids')
     if not obligation_ids and request.method == 'POST':
         obligation_ids = request.POST.getlist('obligation_ids')
 
     obligations = []
-    if obligation_ids:
+    if obligation_ids and can_view_obligations:
         obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
@@ -549,7 +558,8 @@ def email_compose_view(request):
                 'attachments': [],
             }
         clients_obligations[client_id]['obligations'].append(ob)
-        if ob.attachment:
+        # Attachment names/URLs μόνο με view_clientdocument
+        if ob.attachment and can_view_documents:
             clients_obligations[client_id]['attachments'].append({
                 'obligation_id': ob.id,
                 'filename': os.path.basename(ob.attachment.name),
@@ -557,8 +567,11 @@ def email_compose_view(request):
                 'size': ob.attachment.size if hasattr(ob.attachment, 'size') else 0,
             })
 
-    # Email templates
-    templates = EmailTemplate.objects.filter(is_active=True).order_by('name')
+    # Email templates — μόνο με view_emailtemplate
+    templates = (
+        EmailTemplate.objects.filter(is_active=True).order_by('name')
+        if can_view_templates else EmailTemplate.objects.none()
+    )
 
     context = {
         'obligations': obligations,

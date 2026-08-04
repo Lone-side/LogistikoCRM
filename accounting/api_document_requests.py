@@ -153,9 +153,9 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
     queryset = DocumentRequest.objects.all()
     # Custom actions: αποστολή email θέλει send_client_email, το mark-item change
     action_perms = {
-        # Το create φτιάχνει και SharedLink + στέλνει αρχικό email
-        'create': ['accounting.add_documentrequest', 'accounting.add_sharedlink',
-                   'accounting.send_client_email'],
+        # Το create φτιάχνει request + SharedLink· το send_client_email
+        # απαιτείται ΜΟΝΟ όταν send_email=true (έλεγχος μέσα στο create).
+        'create': ['accounting.add_documentrequest', 'accounting.add_sharedlink'],
         'send_reminder': ['accounting.change_documentrequest', 'accounting.send_client_email'],
         'mark_item': ['accounting.change_documentrequest'],
     }
@@ -183,8 +183,22 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        from accounting.services.access import get_accessible_client_or_404
+        from accounting.services.access import (
+            check_model_perms, get_accessible_client_or_404,
+        )
         client = get_accessible_client_or_404(request.user, data['client_id'], request=request)
+
+        # send_email=true → απαιτείται send_client_email ΠΡΙΝ δημιουργηθεί
+        # request ή shared link (κανένα side effect χωρίς το permission)
+        wants_email = data['send_email'] and (client.email or '').strip()
+        if wants_email and not check_model_perms(
+            request, 'accounting.send_client_email'
+        ):
+            from rest_framework.response import Response as _Resp
+            return _Resp(
+                {'error': 'Δεν έχετε δικαίωμα αποστολής email.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         with transaction.atomic():
             shared_link = SharedLink(
@@ -218,7 +232,7 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
             ])
 
         email_scheduled = False
-        if data['send_email'] and (client.email or '').strip():
+        if wants_email:
             self._dispatch_initial_email(doc_request.pk)
             email_scheduled = True
 

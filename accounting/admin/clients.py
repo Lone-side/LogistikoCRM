@@ -580,11 +580,36 @@ class ClientProfileAdmin(admin.ModelAdmin):
         return super().changelist_view(request, extra_context)
 
 
+class ClientDocumentAdminForm(forms.ModelForm):
+    """Server-side validation του client/obligation/previous_version
+    invariant — τα raw_id dropdowns από μόνα τους δεν αρκούν (crafted
+    POST μπορεί να στείλει ID άλλου πελάτη)."""
+    class Meta:
+        model = ClientDocument
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        client = cleaned.get('client')
+        obligation = cleaned.get('obligation')
+        previous = cleaned.get('previous_version')
+        if client is not None and obligation is not None \
+                and obligation.client_id != client.id:
+            raise forms.ValidationError(
+                'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από το έγγραφο.')
+        if client is not None and previous is not None \
+                and previous.client_id != client.id:
+            raise forms.ValidationError(
+                'Η προηγούμενη έκδοση ανήκει σε διαφορετικό πελάτη.')
+        return cleaned
+
+
 @admin.register(ClientDocument)
 class ClientDocumentAdmin(admin.ModelAdmin):
     """
     Admin για έγγραφα πελατών με υποστήριξη versioning.
     """
+    form = ClientDocumentAdminForm
     list_display = [
         'filename',
         'client_link',

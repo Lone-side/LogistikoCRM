@@ -296,10 +296,18 @@ def create_client_document(client, uploaded_file, category='general', obligation
     Returns: ClientDocument
     Raises: ValidationError για μη αποδεκτό αρχείο
     """
+    from django.core.exceptions import ValidationError
     from accounting.models import ClientDocument
 
     validate_upload(uploaded_file)
     original_name = os.path.basename(uploaded_file.name or '') or 'unnamed_file'
+
+    # Data-integrity invariant ΠΡΙΝ από κάθε file I/O ή row: η υποχρέωση
+    # (αν δόθηκε) πρέπει να ανήκει στον ίδιο πελάτη
+    if obligation is not None and client is not None \
+            and obligation.client_id != client.id:
+        raise ValidationError(
+            'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από το έγγραφο.')
 
     if obligation:
         year = year or obligation.year
@@ -339,6 +347,7 @@ def create_client_document(client, uploaded_file, category='general', obligation
             _queue_text_extraction(doc)
             return doc
 
+    from django.db import transaction
     doc = ClientDocument(
         client=client,
         obligation=obligation,
@@ -352,7 +361,10 @@ def create_client_document(client, uploaded_file, category='general', obligation
         description=description,
         uploaded_by=user,
     )
-    doc.save()
+    # Αρχείο + database row atomic· το save() επιβάλλει το client/obligation
+    # invariant και ρίχνει ΠΡΙΝ γραφτεί οτιδήποτε σε storage/DB
+    with transaction.atomic():
+        doc.save()
     _queue_text_extraction(doc)
     return doc
 

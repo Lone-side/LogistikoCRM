@@ -40,15 +40,21 @@ class DocumentFilter(FilterSet):
         fields = ['client_id', 'obligation_id', 'category']
 
     def filter_year(self, queryset, name, value):
-        """Filter στο πεδίο year (έτος αναφοράς — συμφωνεί με τη δομή φακέλων)"""
+        """Filter στο πεδίο year — άκυρη τιμή → 400 (όχι 500)."""
         if value:
-            return queryset.filter(year=int(value))
+            try:
+                return queryset.filter(year=int(value))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({'year': 'Μη έγκυρο έτος.'})
         return queryset
 
     def filter_month(self, queryset, name, value):
-        """Filter στο πεδίο month (μήνας αναφοράς — συμφωνεί με τη δομή φακέλων)"""
+        """Filter στο πεδίο month — άκυρη τιμή → 400 (όχι 500)."""
         if value:
-            return queryset.filter(month=int(value))
+            try:
+                return queryset.filter(month=int(value))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({'month': 'Μη έγκυρος μήνας.'})
         return queryset
 
     def filter_search(self, queryset, name, value):
@@ -135,6 +141,29 @@ class DocumentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
         return obligation
 
+    def validate(self, attrs):
+        """
+        Cross-model invariant στο generic create/update: το client δεν
+        μπορεί να ζευγαρώσει με obligation/previous_version άλλου πελάτη.
+        Merge με το instance για partial updates.
+        """
+        instance = getattr(self, 'instance', None)
+        client = attrs.get('client', getattr(instance, 'client', None))
+        obligation = attrs.get(
+            'obligation', getattr(instance, 'obligation', None))
+        previous = attrs.get(
+            'previous_version', getattr(instance, 'previous_version', None))
+        if client is not None and obligation is not None \
+                and obligation.client_id != client.id:
+            raise serializers.ValidationError(
+                {'obligation': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη.'})
+        if client is not None and previous is not None \
+                and previous.client_id != client.id:
+            raise serializers.ValidationError(
+                {'previous_version': 'Η προηγούμενη έκδοση ανήκει σε '
+                                     'διαφορετικό πελάτη.'})
+        return attrs
+
 class DocumentUploadSerializer(serializers.Serializer):
     """Serializer for document upload"""
     file = serializers.FileField()
@@ -170,22 +199,9 @@ class DocumentUploadSerializer(serializers.Serializer):
 
         return value
 
-    def validate_client_id(self, value):
-        """Validate client exists"""
-        try:
-            ClientProfile.objects.get(id=value)
-        except ClientProfile.DoesNotExist:
-            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
-        return value
-
-    def validate_obligation_id(self, value):
-        """Validate obligation exists if provided"""
-        if value:
-            try:
-                MonthlyObligation.objects.get(id=value)
-            except MonthlyObligation.DoesNotExist:
-                raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
-        return value
+    # ΟΧΙ global existence checks εδώ — η ύπαρξη+πρόσβαση κρίνονται scoped
+    # στο view (get_accessible_client_or_404 / get_accessible_obligation_or_404)
+    # ώστε ξένο και ανύπαρκτο ID να μη διακρίνονται (neutral 404).
 
 
 # ============================================
@@ -210,7 +226,8 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     serializer_class = DocumentSerializer
     permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
     action_perms = {
-        'attach_to_obligation': ['accounting.change_clientdocument'],
+        'attach_to_obligation': ['accounting.change_clientdocument',
+                                 'accounting.view_monthlyobligation'],
         'detach_from_obligation': ['accounting.change_clientdocument'],
     }
     client_field = 'client__assigned_users'
@@ -304,6 +321,8 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 
         Body: { "obligation_id": 123 }
         """
+        from django.http import Http404
+        from accounting.services.access import get_accessible_obligation_or_404
         document = self.get_object()
         obligation_id = request.data.get('obligation_id')
 
@@ -313,22 +332,19 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            obligation = MonthlyObligation.objects.get(id=obligation_id)
-        except MonthlyObligation.DoesNotExist:
-            return Response(
-                {'error': 'Η υποχρέωση δεν βρέθηκε.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        # Scoped resolution: ξένη και ανύπαρκτη υποχρέωση → ίδιο ουδέτερο 404
+        obligation = get_accessible_obligation_or_404(
+            request.user, obligation_id, request=request
+        )
 
-        # Verify document belongs to same client
+        # Invariant: το έγγραφο και η υποχρέωση πρέπει να είναι ίδιου πελάτη.
+        # (Το document είναι ήδη scoped από το get_object.) Ασυμφωνία →
+        # ουδέτερο 404 ώστε να μη διακρίνεται από «δεν βρέθηκε».
         if document.client_id != obligation.client_id:
-            return Response(
-                {'error': 'Το έγγραφο ανήκει σε διαφορετικό πελάτη.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            raise Http404
 
         document.obligation = obligation
+        document.full_clean()
         document.save()
 
         serializer = DocumentSerializer(document, context={'request': request})

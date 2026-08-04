@@ -1947,7 +1947,43 @@ class ClientDocument(models.Model):
         version_str = f" (v{self.version})" if self.version > 1 else ""
         return f"{self.filename}{version_str} - {self.client.eponimia}"
 
+    def clean(self):
+        """
+        Κεντρικό data-integrity invariant (ισχύει σε API, Admin, tasks,
+        direct service calls — όποιος καλεί full_clean):
+        - όταν υπάρχει obligation: client_id == obligation.client_id
+        - όταν υπάρχει previous_version: client_id == previous_version.client_id
+        Παραβίαση → ValidationError ΠΡΙΝ γραφτεί row/αρχείο.
+        """
+        super().clean()
+        from django.core.exceptions import ValidationError
+        if self.obligation_id and self.client_id \
+                and self.obligation.client_id != self.client_id:
+            raise ValidationError({
+                'obligation': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από '
+                              'το έγγραφο.'
+            })
+        if self.previous_version_id and self.client_id \
+                and self.previous_version.client_id != self.client_id:
+            raise ValidationError({
+                'previous_version': 'Η προηγούμενη έκδοση ανήκει σε '
+                                    'διαφορετικό πελάτη.'
+            })
+
     def save(self, *args, **kwargs):
+        # Data-integrity invariant: πάντα, ακόμη κι όταν ο caller δεν
+        # κάλεσε ρητά full_clean (π.χ. bulk .create()). Δεν αντικαθιστά τα
+        # model-permission/scoping ελέγχους — είναι μόνο consistency guard.
+        if self.obligation_id and self.client_id \
+                and self.obligation.client_id != self.client_id:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από το έγγραφο.')
+        if self.previous_version_id and self.client_id \
+                and self.previous_version.client_id != self.client_id:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                'Η προηγούμενη έκδοση ανήκει σε διαφορετικό πελάτη.')
         # Auto-extract file info
         if self.file:
             # Κρατάμε το αρχικό όνομα
