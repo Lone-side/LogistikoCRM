@@ -126,26 +126,33 @@ class FolderStructurePreviewView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from accounting.models import ClientProfile
+        from accounting.services.access import (
+            check_model_perms, get_accessible_client_or_404,
+        )
 
         client_id = request.query_params.get('client_id')
         if not client_id:
-            # Demo structure
+            # Demo structure — δεν εκθέτει δεδομένα πραγματικού πελάτη
             return Response({
                 'structure': self._get_demo_structure()
             })
 
-        try:
-            client = ClientProfile.objects.get(pk=client_id)
-            settings = FilingSystemSettings.get_settings()
-            return Response({
-                'structure': self._get_client_structure(client, settings)
-            })
-        except ClientProfile.DoesNotExist:
+        # Fail closed: το preview επιστρέφει ΑΦΜ/επωνυμία πραγματικού πελάτη,
+        # άρα απαιτεί το view permission ΚΑΙ ανάθεση στον πελάτη. Ο έλεγχος
+        # perm προηγείται (403), ώστε ξένος πελάτης να μη διακρίνεται από
+        # έλλειψη δικαιώματος. Το get_accessible_client_or_404 γυρίζει 404
+        # τόσο για ανύπαρκτο όσο και για μη ανατεθειμένο πελάτη (no enumeration).
+        if not check_model_perms(request, 'accounting.view_clientprofile'):
             return Response(
-                {'error': 'Πελάτης δεν βρέθηκε'},
-                status=status.HTTP_404_NOT_FOUND
+                {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
+        client = get_accessible_client_or_404(
+            request.user, client_id, request=request)
+        settings = FilingSystemSettings.get_settings()
+        return Response({
+            'structure': self._get_client_structure(client, settings)
+        })
 
     def _get_demo_structure(self):
         settings = FilingSystemSettings.get_settings()
