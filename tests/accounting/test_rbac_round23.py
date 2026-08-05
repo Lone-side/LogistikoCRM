@@ -41,6 +41,20 @@ def pdf_upload(name='αρχείο.pdf', content=b'%PDF-1.4 test payload'):
     return SimpleUploadedFile(name, content, content_type='application/pdf')
 
 
+def close_stream(response):
+    """
+    Κλείνει το streaming file handle ΧΩΡΙΣ να καλέσει response.close().
+
+    Το `close()` ενός FileResponse πυροδοτεί το signal `request_finished`
+    που κλείνει το DB connection· μέσα σε TestCase αυτό σπάει ΟΛΑ τα
+    επόμενα tests της κλάσης σε PostgreSQL (InterfaceError). Εδώ κλείνουμε
+    μόνο το handle, ώστε να μη μείνει ανοιχτό αρχείο.
+    """
+    handle = getattr(response, 'file_to_stream', None)
+    if handle is not None and not handle.closed:
+        handle.close()
+
+
 def make_perm_user(username, codenames, clients=()):
     user = User.objects.create_user(username=username, password='x')
     for codename in codenames:
@@ -178,7 +192,73 @@ class UnlimitedLinkAtomicAccessTest(TestCase):
             self.assertEqual(downloads, 0)     # unlimited: όχι quota
             self.assertEqual(logs, 1)
         finally:
-            resp.close()
+            close_stream(resp)
+
+    def test_password_protected_access_follows_same_atomic_rule(self):
+        """
+        Password-protected link: ακόμη κι όταν ο κωδικός επαληθευτεί, μια
+        ανάκληση πριν την έκδοση του token ακυρώνει την πρόσβαση — κανένα
+        access_token, κανένας counter, κανένα success log.
+        """
+        self.link.set_password('μυστικό')
+        self.link.save(update_fields=['password_hash'])
+        real_guard = SharedLink._revocation_guard_q
+
+        def revoke_then_guard(link_self):
+            SharedLink.objects.filter(pk=self.link.pk).update(is_active=False)
+            return real_guard(link_self)
+
+        with mock.patch.object(SharedLink, '_revocation_guard_q',
+                               revoke_then_guard):
+            resp = self.web.post(f'/accounting/share/{self.link.token}/',
+                                 {'password': 'μυστικό'}, format='json')
+
+        self.assertEqual(resp.status_code, 410, resp.content[:200])
+        self.assertNotIn('access_token', resp.data)
+        self.assertEqual(self._counts(), (0, 0, 0))
+
+    def test_password_protected_access_succeeds_with_valid_link(self):
+        self.link.set_password('μυστικό')
+        self.link.save(update_fields=['password_hash'])
+        resp = self.web.post(f'/accounting/share/{self.link.token}/',
+                             {'password': 'μυστικό'}, format='json')
+        self.assertEqual(resp.status_code, 200, resp.content[:200])
+        self.assertIn('access_token', resp.data)
+        views, _d, logs = self._counts()
+        self.assertEqual((views, logs), (1, 1))
+
+    def test_limited_link_preview_still_works(self):
+        """
+        Regression: τα links ΜΕ max_downloads συνεχίζουν να λειτουργούν
+        κανονικά μέσω του atomic try_record_download (δεν τα άλλαξε η
+        προσθήκη του try_record_access για τα unlimited).
+        """
+        SharedLink.objects.filter(pk=self.link.pk).update(max_downloads=2)
+        self.link.refresh_from_db()
+        resp = self.web.get(f'/accounting/share/{self.link.token}/preview/')
+        try:
+            self.assertEqual(resp.status_code, 200)
+            views, downloads, logs = self._counts()
+            # Με όριο λήψεων το preview δεσμεύει slot (ισοδύναμο με λήψη)
+            self.assertEqual((views, downloads, logs), (1, 1, 1))
+        finally:
+            close_stream(resp)
+
+    def test_limited_link_preview_rejected_after_revocation(self):
+        SharedLink.objects.filter(pk=self.link.pk).update(max_downloads=2)
+        self.link.refresh_from_db()
+        real_guard = SharedLink._revocation_guard_q
+
+        def revoke_then_guard(link_self):
+            SharedLink.objects.filter(pk=self.link.pk).update(is_active=False)
+            return real_guard(link_self)
+
+        with mock.patch.object(SharedLink, '_revocation_guard_q',
+                               revoke_then_guard):
+            resp = self.web.get(
+                f'/accounting/share/{self.link.token}/preview/')
+        self.assertEqual(resp.status_code, 410)
+        self.assertEqual(self._counts(), (0, 0, 0))
 
     def test_public_get_issues_token_when_link_valid(self):
         resp = self.web.get(f'/accounting/share/{self.link.token}/')
