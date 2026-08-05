@@ -66,12 +66,53 @@ def post_action(test_case, model, action, objects):
     return response
 
 
+def post_action_raw(test_case, model, action, objects):
+    """POST χωρίς assertion status — για fail-closed actions που γυρίζουν 403."""
+    return test_case.client.post(
+        changelist_url(model),
+        {'action': action,
+         '_selected_action': [str(obj.pk) for obj in objects]},
+        secure=True,
+    )
+
+
 def available_actions(model, user):
     """Τα action names που το admin προσφέρει στον χρήστη."""
     from django.test import RequestFactory
     request = RequestFactory().get(changelist_url(model), secure=True)
     request.user = user
     return list(site._registry[model].get_actions(request).keys())
+
+
+
+class _OwnedMixin:
+    """Shared owner client + assigned-staff factory.
+
+    Το cross-side access check των cascade deletes απαιτεί ανάθεση, οπότε
+    τα positive-deletion tests πρέπει να τρέχουν με ανατεθειμένο χρήστη
+    και αντικείμενα δεμένα σε πελάτη — ώστε να περνούν ΚΑΙ με
+    ENFORCE_CLIENT_ASSIGNMENT=True (production config), όχι μόνο με το
+    flag off. Οι assertions παραμένουν ίδιες.
+    """
+    def setUp(self):
+        super().setUp()
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='OWNER')
+        self._call_seq = 0
+
+    def _su(self, username, *perms):
+        user = make_staff(username, *perms)
+        self.owner.assigned_users.add(user)
+        return user
+
+    def _mk_call(self, **extra):
+        self._call_seq += 1
+        params = dict(
+            call_id=f'OWN-{self._call_seq}', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.owner)
+        params.update(extra)
+        return VoIPCall.objects.create(**params)
 
 
 class AdminActionPermissionTestMixin:
@@ -465,7 +506,7 @@ class ClientProfileActionPermissionTest(TestCase):
         self.assertFalse(self.profile.is_active)
 
 
-class CascadeDeleteRealityTest(TestCase):
+class CascadeDeleteRealityTest(_OwnedMixin, TestCase):
     """Τα cascade actions διαγράφουν ΠΡΑΓΜΑΤΙΚΑ και τα δύο μοντέλα.
 
     Το Ticket.call είναι SET_NULL — πριν το fix, το «Διαγραφή με tickets»
@@ -474,16 +515,14 @@ class CascadeDeleteRealityTest(TestCase):
     """
 
     def _pair(self):
-        call = VoIPCall.objects.create(
-            phone_number='2101234567', direction='incoming',
-            status='missed', started_at=timezone.now())
+        call = self._mk_call()
         ticket = Ticket.objects.create(
-            call=call, title='Δοκιμή', description='Περιγραφή',
-            status='open')
+            client=self.owner, call=call, title='Δοκιμή',
+            description='Περιγραφή', status='open')
         return call, ticket
 
     def test_delete_with_tickets_removes_both_rows(self):
-        user = make_staff('casc_call', 'view_voipcall', 'delete_voipcall',
+        user = self._su('casc_call', 'view_voipcall', 'delete_voipcall',
                           'delete_ticket', 'change_ticket')
         call, ticket = self._pair()
         call_id, ticket_id = call.pk, ticket.pk
@@ -495,7 +534,7 @@ class CascadeDeleteRealityTest(TestCase):
         self.assertFalse(Ticket.objects.filter(pk=ticket_id).exists())
 
     def test_delete_with_calls_removes_both_rows(self):
-        user = make_staff('casc_tk', 'view_ticket', 'delete_ticket',
+        user = self._su('casc_tk', 'view_ticket', 'delete_ticket',
                           'delete_voipcall', 'change_voipcall')
         call, ticket = self._pair()
         call_id, ticket_id = call.pk, ticket.pk
@@ -524,7 +563,7 @@ class CascadeDeleteRealityTest(TestCase):
         """Αποτυχία στο δεύτερο βήμα → rollback, κανένα row δεν χάνεται."""
         from unittest.mock import patch
 
-        user = make_staff('casc_atomic', 'view_voipcall', 'delete_voipcall',
+        user = self._su('casc_atomic', 'view_voipcall', 'delete_voipcall',
                           'delete_ticket', 'change_ticket')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -550,17 +589,15 @@ class CascadeDeleteRealityTest(TestCase):
         self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
 
 
-class BuiltinDeletePathsTest(TestCase):
+class BuiltinDeletePathsTest(_OwnedMixin, TestCase):
     """Built-in delete_selected / object delete_view: ο χρήστης χωρίς το
     permission του ΔΕΥΤΕΡΟΥ μοντέλου δεν διαγράφει/μεταβάλλει τίποτα."""
 
     def _pair(self):
-        call = VoIPCall.objects.create(
-            phone_number='2101234567', direction='incoming',
-            status='missed', started_at=timezone.now())
+        call = self._mk_call()
         ticket = Ticket.objects.create(
-            call=call, title='Δοκιμή', description='Περιγραφή',
-            status='open')
+            client=self.owner, call=call, title='Δοκιμή',
+            description='Περιγραφή', status='open')
         return call, ticket
 
     def test_builtin_delete_selected_call_requires_change_ticket(self):
@@ -590,7 +627,7 @@ class BuiltinDeletePathsTest(TestCase):
         self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
 
     def test_builtin_delete_selected_with_both_perms_works(self):
-        user = make_staff('bi_ok', 'view_ticket', 'delete_ticket',
+        user = self._su('bi_ok', 'view_ticket', 'delete_ticket',
                           'change_voipcall')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -632,16 +669,14 @@ class BuiltinDeletePathsTest(TestCase):
         self.assertFalse(Ticket.objects.filter(pk=ticket.pk).exists())
 
 
-class TicketDeleteViewDeleteCallTest(TestCase):
+class TicketDeleteViewDeleteCallTest(_OwnedMixin, TestCase):
     """TicketAdmin.delete_view με delete_call=1."""
 
     def _pair(self):
-        call = VoIPCall.objects.create(
-            phone_number='2101234567', direction='incoming',
-            status='missed', started_at=timezone.now())
+        call = self._mk_call()
         ticket = Ticket.objects.create(
-            call=call, title='Δοκιμή', description='Περιγραφή',
-            status='open')
+            client=self.owner, call=call, title='Δοκιμή',
+            description='Περιγραφή', status='open')
         return call, ticket
 
     def _delete_url(self, ticket):
@@ -649,7 +684,7 @@ class TicketDeleteViewDeleteCallTest(TestCase):
 
     def test_delete_call_without_delete_voipcall_denied(self):
         """Αρνητικό: delete_ticket + change_voipcall, ΟΧΙ delete_voipcall."""
-        user = make_staff('dv_no', 'view_ticket', 'delete_ticket',
+        user = self._su('dv_no', 'view_ticket', 'delete_ticket',
                           'change_voipcall')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -663,7 +698,7 @@ class TicketDeleteViewDeleteCallTest(TestCase):
         self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
 
     def test_delete_call_with_both_perms_removes_both_rows(self):
-        user = make_staff('dv_yes', 'view_ticket', 'delete_ticket',
+        user = self._su('dv_yes', 'view_ticket', 'delete_ticket',
                           'delete_voipcall', 'change_voipcall')
         call, ticket = self._pair()
         call_id, ticket_id = call.pk, ticket.pk
@@ -753,7 +788,7 @@ class VoIPCallLogAuditTrailTest(TestCase):
         self.assertEqual(log.action, 'started')
 
 
-class TicketDeleteSignalRollbackTest(TestCase):
+class TicketDeleteSignalRollbackTest(_OwnedMixin, TestCase):
     """Αποτυχία ΒΔ στο pre_delete signal → rollback, το ticket επιβιώνει.
 
     Πριν το fix, το signal κατάπινε ΚΑΘΕ exception: το ticket διαγραφόταν
@@ -764,14 +799,12 @@ class TicketDeleteSignalRollbackTest(TestCase):
         from unittest.mock import patch
         from django.db import DatabaseError
 
-        user = make_staff('sig_rb', 'view_ticket', 'delete_ticket',
+        user = self._su('sig_rb', 'view_ticket', 'delete_ticket',
                           'change_voipcall')
-        call = VoIPCall.objects.create(
-            phone_number='2101234567', direction='incoming',
-            status='missed', started_at=timezone.now(),
-            ticket_created=True)
+        call = self._mk_call(ticket_created=True)
         ticket = Ticket.objects.create(
-            call=call, title='Δοκιμή', description='-', status='open')
+            client=self.owner, call=call, title='Δοκιμή',
+            description='-', status='open')
         self.client.force_login(user)
 
         with patch.object(VoIPCall, 'save',
@@ -921,15 +954,14 @@ class VoIPCallLogScopingTest(TestCase):
         self.assertIn(self.legacy_log.pk, visible)
 
 
-class AdminDeletionAuditLogTest(TestCase):
+class AdminDeletionAuditLogTest(_OwnedMixin, TestCase):
     """Τα custom deletes γράφουν επίσημα admin LogEntry deletion records."""
 
     def _pair(self):
-        call = VoIPCall.objects.create(
-            phone_number='2101234567', direction='incoming',
-            status='missed', started_at=timezone.now())
+        call = self._mk_call()
         ticket = Ticket.objects.create(
-            call=call, title='Δοκιμή', description='-', status='open')
+            client=self.owner, call=call, title='Δοκιμή',
+            description='-', status='open')
         return call, ticket
 
     def _deletion_entries(self, model, object_id):
@@ -941,7 +973,7 @@ class AdminDeletionAuditLogTest(TestCase):
             object_id=str(object_id), action_flag=DELETION)
 
     def test_delete_view_with_call_writes_two_log_entries(self):
-        user = make_staff('al_dv', 'view_ticket', 'delete_ticket',
+        user = self._su('al_dv', 'view_ticket', 'delete_ticket',
                           'delete_voipcall', 'change_voipcall')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -956,7 +988,7 @@ class AdminDeletionAuditLogTest(TestCase):
         self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 1)
 
     def test_delete_with_tickets_logs_both_models(self):
-        user = make_staff('al_cwt', 'view_voipcall', 'delete_voipcall',
+        user = self._su('al_cwt', 'view_voipcall', 'delete_voipcall',
                           'delete_ticket', 'change_ticket')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -968,7 +1000,7 @@ class AdminDeletionAuditLogTest(TestCase):
 
     def test_delete_without_tickets_logs_only_calls(self):
         """Το ticket αποσυνδέεται — ΔΕΝ πρέπει να γραφτεί deletion entry."""
-        user = make_staff('al_cnt', 'view_voipcall', 'delete_voipcall',
+        user = self._su('al_cnt', 'view_voipcall', 'delete_voipcall',
                           'change_ticket')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -980,7 +1012,7 @@ class AdminDeletionAuditLogTest(TestCase):
         self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
 
     def test_delete_without_calls_logs_only_tickets(self):
-        user = make_staff('al_tnc', 'view_ticket', 'delete_ticket',
+        user = self._su('al_tnc', 'view_ticket', 'delete_ticket',
                           'change_voipcall')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -992,7 +1024,7 @@ class AdminDeletionAuditLogTest(TestCase):
         self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
 
     def test_delete_with_calls_logs_both_models(self):
-        user = make_staff('al_twc', 'view_ticket', 'delete_ticket',
+        user = self._su('al_twc', 'view_ticket', 'delete_ticket',
                           'delete_voipcall', 'change_voipcall')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -1006,7 +1038,7 @@ class AdminDeletionAuditLogTest(TestCase):
         """Αποτυχία μέσα στο atomic → ούτε rows ούτε deletion entries."""
         from unittest.mock import patch
 
-        user = make_staff('al_rb', 'view_voipcall', 'delete_voipcall',
+        user = self._su('al_rb', 'view_voipcall', 'delete_voipcall',
                           'delete_ticket', 'change_ticket')
         call, ticket = self._pair()
         self.client.force_login(user)
@@ -1032,20 +1064,18 @@ class AdminDeletionAuditLogTest(TestCase):
         self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 0)
 
 
-class TicketDeleteSignalNonDatabaseErrorTest(TestCase):
+class TicketDeleteSignalNonDatabaseErrorTest(_OwnedMixin, TestCase):
     """Το signal κάνει fail closed για ΚΑΘΕ exception, όχι μόνο DatabaseError."""
 
     def test_runtime_error_rolls_back_ticket_delete(self):
         from unittest.mock import patch
 
-        user = make_staff('sig_rt', 'view_ticket', 'delete_ticket',
+        user = self._su('sig_rt', 'view_ticket', 'delete_ticket',
                           'change_voipcall')
-        call = VoIPCall.objects.create(
-            phone_number='2101234567', direction='incoming',
-            status='missed', started_at=timezone.now(),
-            ticket_created=True)
+        call = self._mk_call(ticket_created=True)
         ticket = Ticket.objects.create(
-            call=call, title='Δοκιμή', description='-', status='open')
+            client=self.owner, call=call, title='Δοκιμή',
+            description='-', status='open')
         self.client.force_login(user)
 
         with patch.object(VoIPCall, 'save',
@@ -1060,3 +1090,370 @@ class TicketDeleteSignalNonDatabaseErrorTest(TestCase):
         self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
         call.refresh_from_db()
         self.assertTrue(call.ticket_created)
+
+
+# ============================================================================
+# Γύρος Δ — adversarial review PR #179
+# ============================================================================
+
+class VoIPCallLogXSSTest(TestCase):
+    """logs_display: το user-controlled description ΔΕΝ γίνεται ενεργό HTML."""
+
+    def test_malicious_description_is_escaped(self):
+        from accounting.models import VoIPCallLog
+
+        call = VoIPCall.objects.create(
+            call_id='XSS-1', phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now())
+        payload = '<img src=x onerror=alert(1)>'
+        VoIPCallLog.objects.create(
+            call=call, action='ticket_created',
+            description=f'Ticket #1 created: {payload}')
+
+        admin_instance = site._registry[VoIPCall]
+        html = str(admin_instance.logs_display(call))
+
+        # Το payload εμφανίζεται escaped, όχι ως ενεργό tag
+        self.assertNotIn('<img src=x onerror=alert(1)>', html)
+        self.assertIn('&lt;img', html)
+        self.assertIn('onerror=alert(1)&gt;', html)
+
+
+class VoIPCallLogViewSetScopingTest(TestCase):
+    """API `voip-call-logs`: model permission + snapshot-client scoping."""
+
+    def setUp(self):
+        from accounting.models import VoIPCallLog
+
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.other = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        own_call = VoIPCall.objects.create(
+            call_id='VL-OWN', phone_number='2101111111', direction='incoming',
+            status='missed', started_at=timezone.now(), client=self.owner)
+        foreign_call = VoIPCall.objects.create(
+            call_id='VL-FOREIGN', phone_number='2102222222',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.other)
+        self.own_log = VoIPCallLog.objects.create(
+            call=own_call, action='started')
+        self.foreign_log = VoIPCallLog.objects.create(
+            call=foreign_call, action='started')
+        # Legacy orphan χωρίς client snapshot
+        self.orphan_log = VoIPCallLog.objects.create(
+            call=None, action='ended')
+
+    def _list_ids(self, user):
+        self.client.force_login(user)
+        resp = self.client.get('/accounting/api/v1/voip-call-logs/', secure=True)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        results = data['results'] if isinstance(data, dict) else data
+        return {row['id'] for row in results}
+
+    def test_read_only_user_without_perm_forbidden(self):
+        user = make_staff('vl_noperm')  # χωρίς view_voipcalllog
+        self.client.force_login(user)
+        resp = self.client.get('/accounting/api/v1/voip-call-logs/', secure=True)
+        self.assertEqual(resp.status_code, 403)
+
+    def test_assigned_user_sees_only_own_client_logs(self):
+        from django.test import override_settings
+
+        user = make_staff('vl_assigned', 'view_voipcalllog')
+        self.owner.assigned_users.add(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            ids = self._list_ids(user)
+        self.assertIn(self.own_log.pk, ids)
+        self.assertNotIn(self.foreign_log.pk, ids)
+        self.assertNotIn(self.orphan_log.pk, ids)  # client=None fail closed
+
+    def test_foreign_user_cannot_retrieve_detail(self):
+        from django.test import override_settings
+
+        user = make_staff('vl_foreign', 'view_voipcalllog')
+        self.other.assigned_users.add(user)
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self.client.get(
+                f'/accounting/api/v1/voip-call-logs/{self.own_log.pk}/',
+                secure=True)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_orphan_log_not_visible_to_scoped_user_detail(self):
+        from django.test import override_settings
+
+        user = make_staff('vl_orphan', 'view_voipcalllog')
+        self.owner.assigned_users.add(user)
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self.client.get(
+                f'/accounting/api/v1/voip-call-logs/{self.orphan_log.pk}/',
+                secure=True)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_superuser_sees_all_including_orphan(self):
+        from django.test import override_settings
+
+        superuser = User.objects.create_superuser('vl_super', password='x')
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            ids = self._list_ids(superuser)
+        self.assertEqual(
+            ids, {self.own_log.pk, self.foreign_log.pk, self.orphan_log.pk})
+
+    def test_global_access_user_sees_all(self):
+        from django.test import override_settings
+
+        user = make_staff('vl_global', 'view_voipcalllog', 'view_all_clients')
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            ids = self._list_ids(user)
+        self.assertIn(self.foreign_log.pk, ids)
+        self.assertIn(self.orphan_log.pk, ids)
+
+
+class VoIPCallLogImmutableTest(TestCase):
+    """VoIPCallLog immutable audit record — κανένα write path από admin."""
+
+    def _log(self):
+        from accounting.models import VoIPCallLog
+        owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        call = VoIPCall.objects.create(
+            phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(), client=owner,
+            call_id='IMM-ABC123')
+        return VoIPCallLog.objects.create(call=call, action='started',
+                                          description='αρχικό')
+
+    def test_change_view_post_cannot_mutate_any_field(self):
+        from accounting.models import VoIPCallLog
+
+        # Χρήστης ΜΕ change permission — δεν πρέπει να αλλάξει τίποτα
+        user = User.objects.create_superuser('imm_admin', password='x')
+        # superuser για να φτάσει το POST· ο έλεγχος είναι has_change=False
+        log = self._log()
+        before = VoIPCallLog.objects.get(pk=log.pk)
+        self.client.force_login(user)
+
+        url = reverse('admin:accounting_voipcalllog_change', args=[log.pk])
+        other = ClientProfile.objects.create(afm='111111111', eponimia='Ξ')
+        resp = self.client.post(url, {
+            'client': str(other.pk),
+            'phone_number': '9999999999',
+            'call_reference': 'HACKED',
+            'description': 'tampered',
+            'action': 'ended',
+        }, secure=True)
+
+        self.assertIn(resp.status_code, (403, 302))
+        after = VoIPCallLog.objects.get(pk=log.pk)
+        self.assertEqual(after.client_id, before.client_id)
+        self.assertEqual(after.phone_number, before.phone_number)
+        self.assertEqual(after.call_reference, before.call_reference)
+        self.assertEqual(after.description, before.description)
+        self.assertEqual(after.action, before.action)
+
+    def test_admin_declares_no_add_change_delete(self):
+        from accounting.models import VoIPCallLog
+
+        admin_instance = site._registry[VoIPCallLog]
+        req_user = User.objects.create_superuser('imm_check', password='x')
+        from django.test import RequestFactory
+        request = RequestFactory().get('/', secure=True)
+        request.user = req_user
+        self.assertFalse(admin_instance.has_add_permission(request))
+        self.assertFalse(admin_instance.has_change_permission(request))
+        self.assertFalse(admin_instance.has_delete_permission(request))
+
+    def test_serializer_has_no_write_path(self):
+        from accounting.serializers import VoIPCallLogSerializer
+
+        log = self._log()
+        ser = VoIPCallLogSerializer(
+            log, data={'description': 'tampered', 'action': 'ended'},
+            partial=True)
+        ser.is_valid()  # description/action είναι read-only ή αγνοούνται
+        # Το ViewSet είναι ReadOnlyModelViewSet — καμία create/update route.
+        # Επιβεβαίωση ότι τα κρίσιμα πεδία δεν είναι writable:
+        writable = {
+            name for name, f in ser.fields.items() if not f.read_only}
+        self.assertNotIn('client', writable)
+        self.assertNotIn('phone_number', writable)
+        self.assertNotIn('call_reference', writable)
+
+
+class CrossClientCascadeDeleteTest(TestCase):
+    """Finding 3: cascade deletes fail-closed σε ξένα/unassigned related rows."""
+
+    def setUp(self):
+        self.mine = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΔΙΚΟΣ')
+        self.theirs = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΞΕΝΟΣ')
+
+    def _deletion_entries(self, model, object_id):
+        from django.contrib.admin.models import DELETION, LogEntry
+        from django.contrib.contenttypes.models import ContentType
+        return LogEntry.objects.filter(
+            content_type=ContentType.objects.get_for_model(model),
+            object_id=str(object_id), action_flag=DELETION)
+
+    _seq = 0
+
+    def _call(self, client_profile):
+        CrossClientCascadeDeleteTest._seq += 1
+        return VoIPCall.objects.create(
+            call_id=f'CALL-{CrossClientCascadeDeleteTest._seq}',
+            phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(), client=client_profile)
+
+    def _ticket(self, client_profile, call=None):
+        return Ticket.objects.create(
+            client=client_profile, call=call, title='t',
+            description='-', status='open')
+
+    def test_unassigned_call_with_foreign_ticket_fails_closed(self):
+        """Σενάριο 1: unassigned call (κοινά ορατή) + ticket ξένου πελάτη."""
+        from django.test import override_settings
+
+        user = make_staff('cc1', 'view_voipcall', 'delete_voipcall',
+                          'delete_ticket', 'change_ticket')
+        self.mine.assigned_users.add(user)
+        call = self._call(None)  # unassigned → ορατή στον scoped χρήστη
+        foreign_ticket = self._ticket(self.theirs, call=call)
+
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = post_action_raw(
+                self, VoIPCall, 'delete_with_tickets', [call])
+        self.assertEqual(resp.status_code, 403)
+
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertTrue(Ticket.objects.filter(pk=foreign_ticket.pk).exists())
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 0)
+        self.assertEqual(
+            self._deletion_entries(Ticket, foreign_ticket.pk).count(), 0)
+
+    def test_own_ticket_with_foreign_call_fails_closed(self):
+        """Σενάριο 2: ticket προσβάσιμου πελάτη + call ξένου πελάτη."""
+        from django.test import override_settings
+
+        user = make_staff('cc2', 'view_ticket', 'delete_ticket',
+                          'delete_voipcall', 'change_voipcall')
+        self.mine.assigned_users.add(user)
+        foreign_call = self._call(self.theirs)
+        ticket = self._ticket(self.mine, call=foreign_call)
+
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = post_action_raw(self, Ticket, 'delete_with_calls', [ticket])
+        self.assertEqual(resp.status_code, 403)
+
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertTrue(VoIPCall.objects.filter(pk=foreign_call.pk).exists())
+
+    def test_inconsistent_ticket_client_differs_from_call(self):
+        """Σενάριο 3: legacy ασυνέπεια ticket.client != call.client."""
+        from django.test import override_settings
+
+        user = make_staff('cc3', 'view_voipcall', 'delete_voipcall',
+                          'delete_ticket', 'change_ticket')
+        self.mine.assigned_users.add(user)
+        call = self._call(self.mine)          # δικιά μου κλήση
+        ticket = self._ticket(self.theirs, call=call)  # ticket ξένου πελάτη
+
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = post_action_raw(
+                self, VoIPCall, 'delete_with_tickets', [call])
+        self.assertEqual(resp.status_code, 403)
+
+        # Fail closed: το ξένο ticket μπλοκάρει ΟΛΗ την ενέργεια
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+
+    def test_mixed_bulk_one_allowed_one_foreign_no_partial(self):
+        """Σενάριο 4: mixed selection — καμία μερική επιτυχία."""
+        from django.test import override_settings
+
+        # Και οι δύο κλήσεις ΟΡΑΤΕΣ στον scoped χρήστη (η μία assigned,
+        # η άλλη unassigned/triage), αλλά η unassigned έχει ticket ξένου
+        # πελάτη → όλο το batch fail closed, καμία μερική διαγραφή.
+        user = make_staff('cc4', 'view_voipcall', 'delete_voipcall',
+                          'delete_ticket', 'change_ticket')
+        self.mine.assigned_users.add(user)
+        good = self._call(self.mine)
+        good_ticket = self._ticket(self.mine, call=good)
+        unassigned = self._call(None)          # ορατή (triage)
+        foreign_ticket = self._ticket(self.theirs, call=unassigned)
+
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = post_action_raw(
+                self, VoIPCall, 'delete_with_tickets', [good, unassigned])
+        self.assertEqual(resp.status_code, 403)
+
+        # Τίποτα δεν διαγράφεται (fail closed για ολόκληρο το batch)
+        self.assertTrue(VoIPCall.objects.filter(pk=good.pk).exists())
+        self.assertTrue(VoIPCall.objects.filter(pk=unassigned.pk).exists())
+        self.assertTrue(Ticket.objects.filter(pk=good_ticket.pk).exists())
+        self.assertTrue(Ticket.objects.filter(pk=foreign_ticket.pk).exists())
+
+    def test_delete_without_calls_foreign_call_fails_closed(self):
+        """Σενάριο 5-variant: το ticket μου, η κλήση του (mutated) → 403."""
+        from django.test import override_settings
+
+        user = make_staff('cc5', 'view_ticket', 'delete_ticket',
+                          'change_voipcall')
+        self.mine.assigned_users.add(user)
+        foreign_call = self._call(self.theirs)
+        foreign_call.ticket_created = True
+        foreign_call.save(update_fields=['ticket_created'])
+        ticket = self._ticket(self.mine, call=foreign_call)
+
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = post_action_raw(
+                self, Ticket, 'delete_without_calls', [ticket])
+        self.assertEqual(resp.status_code, 403)
+
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+        foreign_call.refresh_from_db()
+        self.assertTrue(foreign_call.ticket_created)  # αμετάβλητη
+
+    def test_see_all_user_can_cascade_delete_foreign(self):
+        """Θετικό control: see-all χρήστης δεν μπλοκάρεται."""
+        from django.test import override_settings
+
+        user = make_staff('cc6', 'view_voipcall', 'delete_voipcall',
+                          'delete_ticket', 'change_ticket', 'view_all_clients')
+        call = self._call(self.theirs)
+        ticket = self._ticket(self.theirs, call=call)
+
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            post_action(self, VoIPCall, 'delete_with_tickets', [call])
+
+        self.assertFalse(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertFalse(Ticket.objects.filter(pk=ticket.pk).exists())
+
+    def test_delete_view_foreign_call_fails_closed(self):
+        """delete_view delete_call=1 με κλήση ξένου πελάτη → 403, τίποτα."""
+        from django.test import override_settings
+
+        user = make_staff('cc7', 'view_ticket', 'delete_ticket',
+                          'delete_voipcall', 'change_voipcall')
+        self.mine.assigned_users.add(user)
+        foreign_call = self._call(self.theirs)
+        ticket = self._ticket(self.mine, call=foreign_call)
+
+        self.client.force_login(user)
+        url = reverse('admin:accounting_ticket_delete', args=[ticket.pk])
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self.client.post(
+                url, {'delete_call': '1', 'post': 'yes'}, secure=True)
+
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertTrue(VoIPCall.objects.filter(pk=foreign_call.pk).exists())

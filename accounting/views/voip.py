@@ -35,7 +35,10 @@ import logging
 import json
 import csv
 
-from ..permissions import INSECURE_DEFAULT_TOKEN, IsVoIPMonitor, IsLocalRequest
+from ..permissions import (
+    INSECURE_DEFAULT_TOKEN, IsVoIPMonitor, IsLocalRequest,
+    ClientModelPermissions,
+)
 from ..models import (
     ClientProfile, VoIPCall, VoIPCallLog, Ticket
 )
@@ -557,13 +560,28 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
 
 class VoIPCallLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Read-only ViewSet for call logs
+    Read-only ViewSet for call logs (audit trail).
+
+    RBAC: απαιτεί το model permission `view_voipcalllog` και εφαρμόζει
+    client scoping μέσω του snapshot `client` (επιβιώνει της διαγραφής
+    της κλήσης). Fail closed: logs με `client=None` (unassigned/legacy
+    orphan) βλέπουν ΜΟΝΟ superusers / χρήστες με global client access —
+    ΠΟΤΕ scoped χρήστης. Δεν χρησιμοποιείται το nullable `call__client`.
     """
-    queryset = VoIPCallLog.objects.all()
     serializer_class = VoIPCallLogSerializer
-    permission_classes = [permissions.IsAdminUser]  # SECURITY: Restrict to admin users only
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions]
     filterset_fields = ['call', 'action']
     ordering = ['-created_at']
+
+    def get_queryset(self):
+        from accounting.mixins import user_sees_all_clients
+        qs = VoIPCallLog.objects.all()
+        if user_sees_all_clients(self.request.user):
+            return qs
+        # Scoping στο snapshot client· client__isnull αποκλείεται (fail closed)
+        return qs.filter(
+            client__assigned_users=self.request.user
+        ).distinct()
 
 
 # ============================================

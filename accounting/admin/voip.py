@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 
 from django.urls import reverse
-from django.utils.html import format_html, escape
+from django.utils.html import format_html, format_html_join, escape
 from django.contrib import admin
 from .scoping import ClientScopedAdminMixin
 from django.http import HttpResponse
@@ -28,6 +28,44 @@ from ..models import (
 )
 
 logger = logging.getLogger(__name__)
+
+def _require_access(request, objects, *, strict):
+    """Fail closed object/client access validation για cascade deletes.
+
+    Το Django model permission δεν αρκεί: τα cascade actions αγγίζουν και
+    τα δύο μοντέλα μέσω global queries (Ticket.filter(call__in=...),
+    VoIPCall.filter(id__in=...)). Ένας scoped χρήστης θα μπορούσε έτσι να
+    διαγράψει/τροποποιήσει αντικείμενο ξένου πελάτη ή ασυνεπές legacy row.
+
+    - strict=False (PRIMARY, ήδη changelist-scoped): επιτρέπει
+      unassigned (client=None, triage) ή ανατεθειμένο· ξένος → 403.
+    - strict=True (CROSS-SIDE, το άλλο μοντέλο μέσω της σχέσης): ΜΟΝΟ
+      ανατεθειμένο. client=None (ambiguous ownership / legacy orphan) ή
+      ξένος → 403 — καμία σιωπηλή cascade-διαγραφή/μεταβολή.
+
+    See-all χρήστες/superusers περνούν πάντα. Καμία μερική επιτυχία:
+    η πρώτη μη προσβάσιμη εγγραφή ρίχνει PermissionDenied πριν από κάθε
+    delete/mutation.
+    """
+    from django.core.exceptions import PermissionDenied
+    from accounting.mixins import user_sees_all_clients
+    from accounting.services.access import user_can_access_client
+    if user_sees_all_clients(request.user):
+        return
+    for obj in objects:
+        client = obj.client
+        if client is None:
+            if strict:
+                # Καμία εσωτερική λεπτομέρεια (id/ΑΦΜ) στο μήνυμα
+                raise PermissionDenied(
+                    'Η ενέργεια αγγίζει συνδεδεμένα αντικείμενα χωρίς '
+                    'σαφή ανάθεση και απορρίφθηκε.')
+            continue
+        if not user_can_access_client(request.user, client):
+            raise PermissionDenied(
+                'Η ενέργεια περιλαμβάνει αντικείμενα εκτός της '
+                'ανάθεσής σας και απορρίφθηκε.')
+
 
 def _log_admin_deletions(request, queryset):
     """Επίσημα admin LogEntry deletion records — ΜΟΝΟ για όσα διαγράφονται.
@@ -193,12 +231,26 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     ticket_badge.short_description = 'Τίκετ'
 
     def logs_display(self, obj):
+        # ΑΣΦΑΛΕΙΑ: το log.description περιέχει user-controlled περιεχόμενο
+        # (π.χ. το title του ticket μέσω create_ticket). ΠΟΤΕ f-string +
+        # format_html(html) — αυτό κάνει mark_safe χωρίς escaping → stored
+        # XSS. Χρήση format_html_join με placeholders: κάθε argument
+        # (action, timestamp, description) γίνεται escaped.
         logs = obj.logs.all().order_by('-created_at')[:10]
-        html = '<div style="max-height: 300px; overflow-y: auto;">'
-        for log in logs:
-            html += f'<div style="border-left: 3px solid #2563eb; padding: 8px; margin: 5px 0;"><strong>{log.get_action_display()}</strong><br><small style="color: #666;">{log.created_at.strftime("%d/%m %H:%M")} - {log.description}</small></div>'
-        html += '</div>'
-        return format_html(html)
+        rows = format_html_join(
+            '',
+            '<div style="border-left: 3px solid #2563eb; padding: 8px; '
+            'margin: 5px 0;"><strong>{}</strong><br>'
+            '<small style="color: #666;">{} - {}</small></div>',
+            (
+                (log.get_action_display(),
+                 log.created_at.strftime('%d/%m %H:%M'),
+                 log.description)
+                for log in logs
+            ),
+        )
+        return format_html(
+            '<div style="max-height: 300px; overflow-y: auto;">{}</div>', rows)
     logs_display.short_description = 'Ιστορικό'
 
     # Actions
@@ -251,6 +303,31 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         return (self.has_delete_permission(request)
                 and request.user.has_perm('accounting.change_ticket'))
 
+    def delete_queryset(self, request, queryset):
+        # built-in delete_selected: η διαγραφή κλήσεων ΜΕΤΑΒΑΛΛΕΙ (SET_NULL)
+        # τα συνδεδεμένα tickets — cross-side strict validation, atomic
+        from django.db import transaction
+        call_ids = list(queryset.values_list('pk', flat=True))
+        with transaction.atomic():
+            calls = list(VoIPCall.objects.select_for_update()
+                         .filter(pk__in=call_ids))
+            tickets = list(Ticket.objects.select_for_update()
+                           .filter(call_id__in=call_ids))
+            _require_access(request, calls, strict=False)
+            _require_access(request, tickets, strict=True)
+            super().delete_queryset(
+                request, VoIPCall.objects.filter(pk__in=call_ids))
+
+    def delete_model(self, request, obj):
+        # standard object delete view: ίδιο cross-side validation
+        from django.db import transaction
+        with transaction.atomic():
+            tickets = list(Ticket.objects.select_for_update()
+                           .filter(call_id=obj.pk))
+            _require_access(request, [obj], strict=False)
+            _require_access(request, tickets, strict=True)
+            super().delete_model(request, obj)
+
     def export_calls_csv(self, request, queryset):
         """Export to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
@@ -284,12 +361,23 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         συναλλαγή (καμία μερική διαγραφή).
         """
         from django.db import transaction
+        call_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
-            tickets = Ticket.objects.filter(call__in=queryset)
+            # Lock και τις δύο πλευρές πριν από validation/delete (TOCTOU)
+            calls = list(VoIPCall.objects.select_for_update()
+                         .filter(pk__in=call_ids))
+            tickets = (Ticket.objects.select_for_update()
+                       .filter(call_id__in=call_ids))
+            tickets_list = list(tickets)
+            # Fail closed: κάθε κλήση ΚΑΙ κάθε ticket πρέπει να είναι
+            # προσβάσιμο — αλλιώς 403 χωρίς καμία διαγραφή
+            _require_access(request, calls, strict=False)
+            _require_access(request, tickets_list, strict=True)
             _log_admin_deletions(request, tickets)
-            _log_admin_deletions(request, queryset)
+            _log_admin_deletions(
+                request, VoIPCall.objects.filter(pk__in=call_ids))
             ticket_count, _ = tickets.delete()
-            count, _ = queryset.delete()
+            count, _ = VoIPCall.objects.filter(pk__in=call_ids).delete()
         self.message_user(
             request,
             f'{count} κλήσεις και {ticket_count} tickets διαγράφηκαν',
@@ -302,16 +390,25 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     def delete_without_tickets(self, request, queryset):
         """Διαγραφή κλήσεων χωρίς τα tickets (αποσύνδεση πρώτα)"""
         from django.db import transaction
-        count = queryset.count()
+        call_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
-            # Deletion log ΜΟΝΟ για τις κλήσεις — τα tickets απλώς
-            # αποσυνδέονται, δεν διαγράφονται
-            _log_admin_deletions(request, queryset)
+            calls = list(VoIPCall.objects.select_for_update()
+                         .filter(pk__in=call_ids))
+            # Τα tickets ΜΕΤΑΒΑΛΛΟΝΤΑΙ (call=None) — απαιτούν κι αυτά access
+            tickets = (Ticket.objects.select_for_update()
+                       .filter(call_id__in=call_ids))
+            _require_access(request, calls, strict=False)
+            _require_access(request, list(tickets), strict=True)
+            count = len(calls)
+            # Deletion log ΜΟΝΟ για τις κλήσεις — τα tickets αποσυνδέονται
+            _log_admin_deletions(
+                request, VoIPCall.objects.filter(pk__in=call_ids))
             # Αποσύνδεση tickets πρώτα
-            Ticket.objects.filter(call__in=queryset).update(call=None)
+            tickets.update(call=None)
             # Ενημέρωση ticket_created
-            queryset.update(ticket_created=False)
-            queryset.delete()
+            VoIPCall.objects.filter(pk__in=call_ids).update(
+                ticket_created=False)
+            VoIPCall.objects.filter(pk__in=call_ids).delete()
         self.message_user(
             request,
             f'{count} κλήσεις διαγράφηκαν (tickets διατηρήθηκαν)',
@@ -357,12 +454,22 @@ class VoIPCallLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
 
     list_display = ['call_link', 'action_badge', 'description_short', 'created_at_formatted']
     list_filter = ['action', 'created_at']
-    search_fields = ['call__phone_number', 'description']
-    readonly_fields = ['call', 'action', 'description', 'created_at']
+    search_fields = ['phone_number', 'call_reference', 'description']
+    # Immutable audit record: ΚΑΘΕ πεδίο (incl. snapshots) readonly
+    readonly_fields = [
+        'call', 'client', 'call_reference', 'phone_number',
+        'action', 'description', 'created_at',
+    ]
 
     ordering = ['-created_at']
 
     def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        # Immutable audit trail — κανένα write path από το admin.
+        # Επιστρέφει False ώστε crafted POST στο change view → 403
+        # (η προβολή γίνεται μέσω view permission, read-only).
         return False
 
     def has_delete_permission(self, request, obj=None):
@@ -635,6 +742,32 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         return (self.has_delete_permission(request)
                 and request.user.has_perm('accounting.delete_voipcall'))
 
+    def delete_queryset(self, request, queryset):
+        # built-in delete_selected: το pre_delete signal ΜΕΤΑΒΑΛΛΕΙ τις
+        # συνδεδεμένες κλήσεις — cross-side strict validation, atomic
+        from django.db import transaction
+        ticket_ids = list(queryset.values_list('pk', flat=True))
+        with transaction.atomic():
+            tickets = list(Ticket.objects.select_for_update()
+                           .filter(pk__in=ticket_ids))
+            call_ids = [t.call_id for t in tickets if t.call_id]
+            calls = list(VoIPCall.objects.select_for_update()
+                         .filter(id__in=call_ids))
+            _require_access(request, tickets, strict=False)
+            _require_access(request, calls, strict=True)
+            super().delete_queryset(
+                request, Ticket.objects.filter(pk__in=ticket_ids))
+
+    def delete_model(self, request, obj):
+        # standard object delete view: ίδιο cross-side validation
+        from django.db import transaction
+        with transaction.atomic():
+            calls = (list(VoIPCall.objects.select_for_update()
+                          .filter(pk=obj.call_id)) if obj.call_id else [])
+            _require_access(request, [obj], strict=False)
+            _require_access(request, calls, strict=True)
+            super().delete_model(request, obj)
+
     def export_tickets_csv(self, request, queryset):
         """Export to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
@@ -688,13 +821,23 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         συναλλαγή (καμία μερική διαγραφή).
         """
         from django.db import transaction
-        call_ids = [c for c in queryset.values_list('call_id', flat=True) if c]
+        ticket_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
-            calls = VoIPCall.objects.filter(id__in=call_ids)
-            _log_admin_deletions(request, queryset)
-            _log_admin_deletions(request, calls)
-            ticket_count, _ = queryset.delete()
-            call_count, _ = calls.delete()
+            tickets = list(Ticket.objects.select_for_update()
+                           .filter(pk__in=ticket_ids))
+            call_ids = [t.call_id for t in tickets if t.call_id]
+            calls = (VoIPCall.objects.select_for_update()
+                     .filter(id__in=call_ids))
+            calls_list = list(calls)
+            # Fail closed: κάθε ticket ΚΑΙ κάθε κλήση προσβάσιμα
+            _require_access(request, tickets, strict=False)
+            _require_access(request, calls_list, strict=True)
+            _log_admin_deletions(
+                request, Ticket.objects.filter(pk__in=ticket_ids))
+            _log_admin_deletions(
+                request, VoIPCall.objects.filter(id__in=call_ids))
+            ticket_count, _ = Ticket.objects.filter(pk__in=ticket_ids).delete()
+            call_count, _ = VoIPCall.objects.filter(id__in=call_ids).delete()
         self.message_user(
             request,
             f'{ticket_count} tickets και {call_count} κλήσεις διαγράφηκαν',
@@ -707,11 +850,22 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     def delete_without_calls(self, request, queryset):
         """Διαγραφή tickets χωρίς τις κλήσεις (signal θα ενημερώσει calls)"""
         from django.db import transaction
-        count = queryset.count()
+        ticket_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
+            tickets = list(Ticket.objects.select_for_update()
+                           .filter(pk__in=ticket_ids))
+            # Το pre_delete signal ΤΡΟΠΟΠΟΙΕΙ τις συνδεδεμένες κλήσεις →
+            # απαιτούν κι αυτές access
+            call_ids = [t.call_id for t in tickets if t.call_id]
+            calls = list(VoIPCall.objects.select_for_update()
+                         .filter(id__in=call_ids))
+            _require_access(request, tickets, strict=False)
+            _require_access(request, calls, strict=True)
+            count = len(tickets)
             # Deletion log ΜΟΝΟ για τα tickets — οι κλήσεις διατηρούνται
-            _log_admin_deletions(request, queryset)
-            queryset.delete()
+            _log_admin_deletions(
+                request, Ticket.objects.filter(pk__in=ticket_ids))
+            Ticket.objects.filter(pk__in=ticket_ids).delete()
         self.message_user(
             request,
             f'{count} tickets διαγράφηκαν (κλήσεις διατηρήθηκαν)',
@@ -743,15 +897,20 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
                         and request.user.has_perm(
                             'accounting.delete_voipcall')):
                     raise PermissionDenied
-                call = obj.call
-                obj_repr, obj_pk = str(obj), obj.pk
+                obj_repr, obj_pk, call_pk = str(obj), obj.pk, obj.call_id
                 with transaction.atomic():
-                    _log_admin_deletions(
-                        request, Ticket.objects.filter(pk=obj.pk))
-                    _log_admin_deletions(
-                        request, VoIPCall.objects.filter(pk=call.pk))
-                    obj.delete()
-                    call.delete()
+                    # Lock + fail-closed access validation και για τα δύο
+                    # μοντέλα (η κλήση μπορεί να ανήκει σε ξένο πελάτη)
+                    ticket = (Ticket.objects.select_for_update()
+                              .filter(pk=obj_pk))
+                    call_qs = (VoIPCall.objects.select_for_update()
+                               .filter(pk=call_pk))
+                    _require_access(request, list(ticket), strict=False)
+                    _require_access(request, list(call_qs), strict=True)
+                    _log_admin_deletions(request, ticket)
+                    _log_admin_deletions(request, call_qs)
+                    ticket.delete()
+                    call_qs.delete()
                 self.message_user(
                     request, 'Ticket και κλήση διαγράφηκαν',
                     messages.SUCCESS)
