@@ -29,6 +29,18 @@ from ..models import (
 
 logger = logging.getLogger(__name__)
 
+def _log_admin_deletions(request, queryset):
+    """Επίσημα admin LogEntry deletion records — ΜΟΝΟ για όσα διαγράφονται.
+
+    Καλείται ΠΡΙΝ το delete(), μέσα στο ίδιο transaction.atomic():
+    σε rollback δεν μένουν ούτε rows ούτε παραπλανητικά log entries.
+    """
+    from django.contrib.admin.models import DELETION, LogEntry
+    if queryset.exists():
+        LogEntry.objects.log_actions(
+            request.user.pk, queryset, DELETION, single_object=False)
+
+
 
 @admin.register(VoIPCall)
 class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
@@ -274,6 +286,8 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         from django.db import transaction
         with transaction.atomic():
             tickets = Ticket.objects.filter(call__in=queryset)
+            _log_admin_deletions(request, tickets)
+            _log_admin_deletions(request, queryset)
             ticket_count, _ = tickets.delete()
             count, _ = queryset.delete()
         self.message_user(
@@ -290,6 +304,9 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         from django.db import transaction
         count = queryset.count()
         with transaction.atomic():
+            # Deletion log ΜΟΝΟ για τις κλήσεις — τα tickets απλώς
+            # αποσυνδέονται, δεν διαγράφονται
+            _log_admin_deletions(request, queryset)
             # Αποσύνδεση tickets πρώτα
             Ticket.objects.filter(call__in=queryset).update(call=None)
             # Ενημέρωση ticket_created
@@ -331,8 +348,11 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
 
 @admin.register(VoIPCallLog)
 class VoIPCallLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
-    client_scope_field = "call__client"
-    allow_unassigned = True
+    # Scoping μέσω του snapshot client — επιβιώνει της διαγραφής της
+    # κλήσης. Fail closed: logs χωρίς client (legacy orphans ή κλήσεις
+    # χωρίς αντιστοίχιση) βλέπουν ΜΟΝΟ see-all χρήστες/superusers.
+    client_scope_field = "client"
+    allow_unassigned = False
     """VoIP Call Logs - Audit Trail"""
 
     list_display = ['call_link', 'action_badge', 'description_short', 'created_at_formatted']
@@ -351,6 +371,9 @@ class VoIPCallLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     def call_link(self, obj):
         if obj.call_id is None:
             # Η κλήση έχει διαγραφεί — το log διατηρείται ως audit trail
+            label = obj.phone_number or obj.call_reference or ''
+            if label:
+                return f'📞 (διαγραμμένη κλήση: {label})'
             return '📞 (διαγραμμένη κλήση)'
         url = reverse('admin:accounting_voipcall_change', args=[obj.call.id])
         return format_html(
@@ -667,8 +690,11 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         from django.db import transaction
         call_ids = [c for c in queryset.values_list('call_id', flat=True) if c]
         with transaction.atomic():
+            calls = VoIPCall.objects.filter(id__in=call_ids)
+            _log_admin_deletions(request, queryset)
+            _log_admin_deletions(request, calls)
             ticket_count, _ = queryset.delete()
-            call_count, _ = VoIPCall.objects.filter(id__in=call_ids).delete()
+            call_count, _ = calls.delete()
         self.message_user(
             request,
             f'{ticket_count} tickets και {call_count} κλήσεις διαγράφηκαν',
@@ -683,6 +709,8 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         from django.db import transaction
         count = queryset.count()
         with transaction.atomic():
+            # Deletion log ΜΟΝΟ για τα tickets — οι κλήσεις διατηρούνται
+            _log_admin_deletions(request, queryset)
             queryset.delete()
         self.message_user(
             request,
@@ -718,6 +746,10 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
                 call = obj.call
                 obj_repr, obj_pk = str(obj), obj.pk
                 with transaction.atomic():
+                    _log_admin_deletions(
+                        request, Ticket.objects.filter(pk=obj.pk))
+                    _log_admin_deletions(
+                        request, VoIPCall.objects.filter(pk=call.pk))
                     obj.delete()
                     call.delete()
                 self.message_user(

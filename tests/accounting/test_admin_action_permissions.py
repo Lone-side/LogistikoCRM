@@ -787,3 +787,276 @@ class TicketDeleteSignalRollbackTest(TestCase):
         self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
         call.refresh_from_db()
         self.assertTrue(call.ticket_created)
+
+
+class VoIPCallLogSnapshotTest(TestCase):
+    """Snapshot πεδία: γεμίζουν στη δημιουργία, επιβιώνουν της διαγραφής."""
+
+    def _call(self, client_profile=None):
+        return VoIPCall.objects.create(
+            phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(),
+            client=client_profile, call_id='ABC123')
+
+    def test_snapshot_populated_on_create(self):
+        from accounting.models import VoIPCallLog
+
+        owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        call = self._call(owner)
+        log = VoIPCallLog.objects.create(
+            call=call, action='started', description='έναρξη')
+
+        self.assertEqual(log.client_id, owner.pk)
+        self.assertEqual(log.call_reference, 'ABC123')
+        self.assertEqual(log.phone_number, '2101234567')
+
+    def test_snapshot_survives_call_delete_and_str_is_safe(self):
+        from accounting.models import VoIPCallLog
+
+        owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        call = self._call(owner)
+        log = VoIPCallLog.objects.create(call=call, action='started')
+
+        call.delete()
+        log.refresh_from_db()
+
+        self.assertIsNone(log.call_id)
+        self.assertEqual(log.client_id, owner.pk)
+        self.assertEqual(log.phone_number, '2101234567')
+        self.assertIn('2101234567', str(log))  # κανένα exception
+
+    def test_str_without_phone_uses_reference(self):
+        from accounting.models import VoIPCallLog
+
+        log = VoIPCallLog.objects.create(
+            call=None, call_reference='ABC123', action='started')
+        self.assertIn('Διαγραμμένη κλήση ABC123', str(log))
+
+    def test_call_link_shows_deleted_call_without_exception(self):
+        from accounting.models import VoIPCallLog
+
+        call = self._call()
+        log = VoIPCallLog.objects.create(call=call, action='started')
+        call.delete()
+        log.refresh_from_db()
+
+        admin_instance = site._registry[VoIPCallLog]
+        text = admin_instance.call_link(log)
+        self.assertIn('διαγραμμένη κλήση', text)
+        self.assertIn('2101234567', text)
+
+    def test_serializer_call_display_null_safe(self):
+        from accounting.models import VoIPCallLog
+        from accounting.serializers import VoIPCallLogSerializer
+
+        call = self._call()
+        log = VoIPCallLog.objects.create(call=call, action='started')
+        call.delete()
+        log.refresh_from_db()
+
+        data = VoIPCallLogSerializer(log).data
+        self.assertEqual(data['call_display'], '2101234567')
+
+
+class VoIPCallLogScopingTest(TestCase):
+    """Fail-closed scoping μέσω snapshot client (ENFORCE_CLIENT_ASSIGNMENT)."""
+
+    def setUp(self):
+        from accounting.models import VoIPCallLog
+
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.other = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        call = VoIPCall.objects.create(
+            phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(), client=self.owner)
+        self.orphan_log = VoIPCallLog.objects.create(
+            call=call, action='started')
+        call.delete()
+        self.orphan_log.refresh_from_db()
+        # Legacy orphan: ούτε call ούτε client snapshot
+        self.legacy_log = VoIPCallLog.objects.create(
+            call=None, action='ended', description='legacy')
+
+    def _visible_ids(self, user):
+        from accounting.models import VoIPCallLog
+        from django.test import RequestFactory
+
+        request = RequestFactory().get('/', secure=True)
+        request.user = user
+        admin_instance = site._registry[VoIPCallLog]
+        return set(admin_instance.get_queryset(request)
+                   .values_list('id', flat=True))
+
+    def test_assigned_user_sees_orphan_log_of_own_client(self):
+        from django.test import override_settings
+
+        user = make_staff('log_owner', 'view_voipcalllog')
+        self.owner.assigned_users.add(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            visible = self._visible_ids(user)
+        self.assertIn(self.orphan_log.pk, visible)
+        self.assertNotIn(self.legacy_log.pk, visible)
+
+    def test_foreign_user_does_not_see_orphan_log(self):
+        from django.test import override_settings
+
+        user = make_staff('log_foreign', 'view_voipcalllog')
+        self.other.assigned_users.add(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            visible = self._visible_ids(user)
+        self.assertNotIn(self.orphan_log.pk, visible)
+        self.assertNotIn(self.legacy_log.pk, visible)
+
+    def test_superuser_sees_legacy_orphan_logs(self):
+        from django.test import override_settings
+
+        superuser = User.objects.create_superuser('log_super', password='x')
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            visible = self._visible_ids(superuser)
+        self.assertIn(self.orphan_log.pk, visible)
+        self.assertIn(self.legacy_log.pk, visible)
+
+
+class AdminDeletionAuditLogTest(TestCase):
+    """Τα custom deletes γράφουν επίσημα admin LogEntry deletion records."""
+
+    def _pair(self):
+        call = VoIPCall.objects.create(
+            phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now())
+        ticket = Ticket.objects.create(
+            call=call, title='Δοκιμή', description='-', status='open')
+        return call, ticket
+
+    def _deletion_entries(self, model, object_id):
+        from django.contrib.admin.models import DELETION, LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        return LogEntry.objects.filter(
+            content_type=ContentType.objects.get_for_model(model),
+            object_id=str(object_id), action_flag=DELETION)
+
+    def test_delete_view_with_call_writes_two_log_entries(self):
+        user = make_staff('al_dv', 'view_ticket', 'delete_ticket',
+                          'delete_voipcall', 'change_voipcall')
+        call, ticket = self._pair()
+        self.client.force_login(user)
+
+        self.client.post(
+            reverse('admin:accounting_ticket_delete', args=[ticket.pk]),
+            {'delete_call': '1', 'post': 'yes'}, secure=True)
+
+        self.assertFalse(Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertFalse(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 1)
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 1)
+
+    def test_delete_with_tickets_logs_both_models(self):
+        user = make_staff('al_cwt', 'view_voipcall', 'delete_voipcall',
+                          'delete_ticket', 'change_ticket')
+        call, ticket = self._pair()
+        self.client.force_login(user)
+
+        post_action(self, VoIPCall, 'delete_with_tickets', [call])
+
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 1)
+        self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 1)
+
+    def test_delete_without_tickets_logs_only_calls(self):
+        """Το ticket αποσυνδέεται — ΔΕΝ πρέπει να γραφτεί deletion entry."""
+        user = make_staff('al_cnt', 'view_voipcall', 'delete_voipcall',
+                          'change_ticket')
+        call, ticket = self._pair()
+        self.client.force_login(user)
+
+        post_action(self, VoIPCall, 'delete_without_tickets', [call])
+
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 1)
+        self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 0)
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+
+    def test_delete_without_calls_logs_only_tickets(self):
+        user = make_staff('al_tnc', 'view_ticket', 'delete_ticket',
+                          'change_voipcall')
+        call, ticket = self._pair()
+        self.client.force_login(user)
+
+        post_action(self, Ticket, 'delete_without_calls', [ticket])
+
+        self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 1)
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 0)
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
+
+    def test_delete_with_calls_logs_both_models(self):
+        user = make_staff('al_twc', 'view_ticket', 'delete_ticket',
+                          'delete_voipcall', 'change_voipcall')
+        call, ticket = self._pair()
+        self.client.force_login(user)
+
+        post_action(self, Ticket, 'delete_with_calls', [ticket])
+
+        self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 1)
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 1)
+
+    def test_rollback_leaves_no_misleading_log_entries(self):
+        """Αποτυχία μέσα στο atomic → ούτε rows ούτε deletion entries."""
+        from unittest.mock import patch
+
+        user = make_staff('al_rb', 'view_voipcall', 'delete_voipcall',
+                          'delete_ticket', 'change_ticket')
+        call, ticket = self._pair()
+        self.client.force_login(user)
+
+        real_delete = VoIPCall.objects.filter(pk=call.pk).__class__.delete
+
+        def boom(qs):
+            if qs.model is VoIPCall:
+                raise RuntimeError('προσομοίωση αποτυχίας')
+            return real_delete(qs)
+
+        with patch('django.db.models.QuerySet.delete', boom):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    changelist_url(VoIPCall),
+                    {'action': 'delete_with_tickets',
+                     '_selected_action': [str(call.pk)]},
+                    secure=True)
+
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertEqual(self._deletion_entries(VoIPCall, call.pk).count(), 0)
+        self.assertEqual(self._deletion_entries(Ticket, ticket.pk).count(), 0)
+
+
+class TicketDeleteSignalNonDatabaseErrorTest(TestCase):
+    """Το signal κάνει fail closed για ΚΑΘΕ exception, όχι μόνο DatabaseError."""
+
+    def test_runtime_error_rolls_back_ticket_delete(self):
+        from unittest.mock import patch
+
+        user = make_staff('sig_rt', 'view_ticket', 'delete_ticket',
+                          'change_voipcall')
+        call = VoIPCall.objects.create(
+            phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(),
+            ticket_created=True)
+        ticket = Ticket.objects.create(
+            call=call, title='Δοκιμή', description='-', status='open')
+        self.client.force_login(user)
+
+        with patch.object(VoIPCall, 'save',
+                          side_effect=RuntimeError('προσομοίωση')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    changelist_url(Ticket),
+                    {'action': 'delete_without_calls',
+                     '_selected_action': [str(ticket.pk)]},
+                    secure=True)
+
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
+        call.refresh_from_db()
+        self.assertTrue(call.ticket_created)

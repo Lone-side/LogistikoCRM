@@ -1508,17 +1508,51 @@ class VoIPCallLog(models.Model):
         verbose_name='Κλήση'
     )
     
+    # Snapshot της κλήσης — επιβιώνει της διαγραφής της (audit trail):
+    # scoping/εμφάνιση δεν εξαρτώνται από το nullable call FK
+    client = models.ForeignKey(
+        'ClientProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='voip_call_logs',
+        verbose_name='Πελάτης (snapshot)',
+    )
+    call_reference = models.CharField(
+        'Αναφορά Κλήσης (snapshot)', max_length=100, blank=True, default='')
+    phone_number = models.CharField(
+        'Τηλέφωνο (snapshot)', max_length=30, blank=True, default='')
+
     action = models.CharField('Ενέργεια', max_length=50, choices=ACTION_CHOICES)
     description = models.TextField('Περιγραφή', blank=True)
     created_at = models.DateTimeField('Χρονοσήμανση', auto_now_add=True)
-    
+
     class Meta:
         verbose_name = 'Καταγραφή Κλήσης'
         verbose_name_plural = 'Καταγραφές Κλήσεων'
         ordering = ['-created_at']
-    
+
+    def save(self, *args, **kwargs):
+        # Αυτόματο snapshot κατά τη δημιουργία — καλύπτει όλα τα call sites
+        if self._state.adding and self.call_id is not None:
+            call = self.call
+            if not self.client_id:
+                self.client_id = call.client_id
+            if not self.call_reference:
+                self.call_reference = str(call.call_id or call.pk)
+            if not self.phone_number:
+                self.phone_number = call.phone_number or ''
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.call.phone_number} - {self.get_action_display()}"
+        phone = self.phone_number or (
+            self.call.phone_number if self.call_id else '')
+        if phone:
+            return f"{phone} - {self.get_action_display()}"
+        if self.call_reference:
+            return (f"Διαγραμμένη κλήση {self.call_reference} - "
+                    f"{self.get_action_display()}")
+        return f"Διαγραμμένη κλήση - {self.get_action_display()}"
 
 
 class Ticket(models.Model):
