@@ -7,6 +7,8 @@ Handles:
 - Auto-creation of ClientObligation for new clients
 """
 import logging
+
+from django.db import DatabaseError
 from django.db.models.signals import pre_delete, post_save
 from django.dispatch import receiver
 from django.conf import settings
@@ -90,5 +92,11 @@ def cleanup_orphan_call_on_ticket_delete(sender, instance, **kwargs):
                 call.ticket_id = None
                 call.save(update_fields=['ticket_created', 'ticket_id'])
                 logger.info(f"Call {call.call_id}: ticket_created reset to False")
+        except DatabaseError:
+            # Αποτυχία στη ΒΔ πρέπει να κάνει rollback ΟΛΗ τη διαγραφή
+            # (το atomic του caller) — όχι σιωπηλά ticket χωρίς ενημερωμένη
+            # κλήση (ticket_created=True με ανύπαρκτο ticket)
+            logger.exception('Αποτυχία ενημέρωσης κλήσης κατά τη διαγραφή ticket')
+            raise
         except Exception as e:
             logger.warning(f"Could not update call on ticket delete: {e}")

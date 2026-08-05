@@ -1497,9 +1497,13 @@ class VoIPCallLog(models.Model):
         ('status_changed', 'Αλλαγή κατάστασης'),
     ]
     
+    # Audit trail: η διαγραφή της κλήσης ΔΕΝ διαγράφει τα logs
+    # (SET_NULL — τα VoIPCallLogAdmin has_delete/change επιστρέφουν False)
     call = models.ForeignKey(
         VoIPCall,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='logs',
         verbose_name='Κλήση'
     )

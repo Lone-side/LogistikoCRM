@@ -141,6 +141,14 @@ class ScheduledEmailAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
 
     actions = ['send_now', 'cancel_emails']
 
+    def has_send_email_permission(self, request):
+        # Το send_now ΔΕΝ στέλνει απλώς email: μεταβάλλει το ScheduledEmail
+        # (status/sent_at, mark_as_failed σε αποτυχία). Απαιτούνται ΚΑΙ τα
+        # δύο — το dedicated send permission του API ΚΑΙ το change του
+        # μοντέλου (AND μέσω handler· λίστα permissions θα ήταν OR).
+        return (request.user.has_perm('accounting.send_client_email')
+                and super().has_change_permission(request))
+
     def get_queryset(self, request):
         from django.db.models import Count
         return super().get_queryset(request).annotate(
@@ -225,7 +233,7 @@ class ScheduledEmailAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         return '—'
     actions_column.short_description = 'Ενέργειες'
 
-    @admin.action(description='🚀 Αποστολή Τώρα')
+    @admin.action(description='🚀 Αποστολή Τώρα', permissions=['send_email'])
     def send_now(self, request, queryset):
         try:
             from accounting.services.email_service import send_scheduled_email
@@ -248,7 +256,7 @@ class ScheduledEmailAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         except ImportError:
             messages.error(request, '❌ Το email service δεν είναι διαθέσιμο')
 
-    @admin.action(description='🚫 Ακύρωση')
+    @admin.action(description='🚫 Ακύρωση', permissions=['change'])
     def cancel_emails(self, request, queryset):
         updated = queryset.filter(status='pending').update(status='cancelled')
         messages.success(request, f'🚫 Ακυρώθηκαν {updated} emails!')

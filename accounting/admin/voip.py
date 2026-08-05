@@ -195,22 +195,49 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         self.message_user(request, f'✅ {updated} κλήσεις σημειώθηκαν ως κλειστές!')
         logger.info(f"{request.user} marked {updated} calls as closed")
     mark_as_closed.short_description = '✅ Κλείσιμο'
+    mark_as_closed.allowed_permissions = ('change',)
 
     def mark_as_follow_up(self, request, queryset):
         updated = queryset.update(resolution='follow_up')
         self.message_user(request, f'📞 {updated} κλήσεις χρειάζονται follow-up!')
         logger.info(f"{request.user} marked {updated} calls as follow_up")
     mark_as_follow_up.short_description = '📞 Follow-up'
+    mark_as_follow_up.allowed_permissions = ('change',)
 
     def mark_as_pending(self, request, queryset):
         updated = queryset.update(resolution='pending')
         self.message_user(request, f'⏳ {updated} κλήσεις σημειώθηκαν ως εκρεμμότητες!')
         logger.info(f"{request.user} marked {updated} calls as pending")
     mark_as_pending.short_description = '⏳ Εκκρεμεί'
+    mark_as_pending.allowed_permissions = ('change',)
 
     def has_export_permission(self, request):
         # Τηλέφωνα + επωνυμίες πελατών — θέλει το ξεχωριστό export permission
         return request.user.has_perm('accounting.export_clientprofile')
+
+    def has_delete_permission(self, request, obj=None):
+        # Η διαγραφή κλήσης ΤΡΟΠΟΠΟΙΕΙ το συνδεδεμένο Ticket (SET_NULL
+        # στο Ticket.call) — καλύπτει και τα built-in delete_selected /
+        # object delete_view. Χωρίς ticket, αρκεί το delete_voipcall.
+        base = super().has_delete_permission(request, obj)
+        if not base:
+            return False
+        if obj is not None and not (
+                hasattr(obj, 'ticket') and obj.ticket is not None):
+            return True
+        return request.user.has_perm('accounting.change_ticket')
+
+    def has_delete_cascade_tickets_permission(self, request):
+        # Η ενέργεια διαγράφει κλήσεις ΚΑΙ τα tickets τους — AND των δύο
+        # delete permissions μέσω custom handler (τα πολλαπλά
+        # allowed_permissions στο Django λειτουργούν ως OR)
+        return (self.has_delete_permission(request)
+                and request.user.has_perm('accounting.delete_ticket'))
+
+    def has_delete_detach_tickets_permission(self, request):
+        # Διαγράφει κλήσεις και ΤΡΟΠΟΠΟΙΕΙ tickets (call=None)
+        return (self.has_delete_permission(request)
+                and request.user.has_perm('accounting.change_ticket'))
 
     def export_calls_csv(self, request, queryset):
         """Export to CSV"""
@@ -238,31 +265,44 @@ class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
 
     # Bulk delete actions
     def delete_with_tickets(self, request, queryset):
-        """Διαγραφή κλήσεων μαζί με τα tickets τους (CASCADE)"""
-        count = queryset.count()
-        ticket_count = Ticket.objects.filter(call__in=queryset).count()
-        queryset.delete()
+        """Διαγραφή κλήσεων ΚΑΙ των tickets τους.
+
+        Το Ticket.call είναι SET_NULL — η διαγραφή της κλήσης ΔΕΝ
+        διαγράφει το ticket· τα tickets διαγράφονται ρητά, στην ίδια
+        συναλλαγή (καμία μερική διαγραφή).
+        """
+        from django.db import transaction
+        with transaction.atomic():
+            tickets = Ticket.objects.filter(call__in=queryset)
+            ticket_count, _ = tickets.delete()
+            count, _ = queryset.delete()
         self.message_user(
             request,
             f'{count} κλήσεις και {ticket_count} tickets διαγράφηκαν',
             messages.SUCCESS
         )
     delete_with_tickets.short_description = 'Διαγραφή με tickets'
+    # Cascade: διαγράφει ΚΑΙ Tickets → απαιτούνται και τα δύο delete perms
+    delete_with_tickets.allowed_permissions = ('delete_cascade_tickets',)
 
     def delete_without_tickets(self, request, queryset):
         """Διαγραφή κλήσεων χωρίς τα tickets (αποσύνδεση πρώτα)"""
+        from django.db import transaction
         count = queryset.count()
-        # Αποσύνδεση tickets πρώτα
-        Ticket.objects.filter(call__in=queryset).update(call=None)
-        # Ενημέρωση ticket_created
-        queryset.update(ticket_created=False)
-        queryset.delete()
+        with transaction.atomic():
+            # Αποσύνδεση tickets πρώτα
+            Ticket.objects.filter(call__in=queryset).update(call=None)
+            # Ενημέρωση ticket_created
+            queryset.update(ticket_created=False)
+            queryset.delete()
         self.message_user(
             request,
             f'{count} κλήσεις διαγράφηκαν (tickets διατηρήθηκαν)',
             messages.SUCCESS
         )
     delete_without_tickets.short_description = 'Διαγραφή χωρίς tickets'
+    # Αποσυνδέει tickets (change_ticket) και διαγράφει κλήσεις
+    delete_without_tickets.allowed_permissions = ('delete_detach_tickets',)
 
     # Custom delete view
     def save_model(self, request, obj, form, change):
@@ -309,6 +349,9 @@ class VoIPCallLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         return False
 
     def call_link(self, obj):
+        if obj.call_id is None:
+            # Η κλήση έχει διαγραφεί — το log διατηρείται ως audit trail
+            return '📞 (διαγραμμένη κλήση)'
         url = reverse('admin:accounting_voipcall_change', args=[obj.call.id])
         return format_html(
             '<a href="{}" style="color: #2563eb; font-weight: 600;">📞 {}</a>',
@@ -521,11 +564,13 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         updated = queryset.update(status='assigned')
         self.message_user(request, f'✅ {updated} tickets marked as assigned')
     mark_as_assigned.short_description = '✅ Assigned'
+    mark_as_assigned.allowed_permissions = ('change',)
 
     def mark_as_in_progress(self, request, queryset):
         updated = queryset.update(status='in_progress')
         self.message_user(request, f'⏳ {updated} tickets marked as in progress')
     mark_as_in_progress.short_description = '⏳ In Progress'
+    mark_as_in_progress.allowed_permissions = ('change',)
 
     def mark_as_resolved(self, request, queryset):
         updated = 0
@@ -534,6 +579,7 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
             updated += 1
         self.message_user(request, f'✅ {updated} tickets resolved')
     mark_as_resolved.short_description = '✅ Resolved'
+    mark_as_resolved.allowed_permissions = ('change',)
 
     def mark_as_closed(self, request, queryset):
         updated = 0
@@ -542,10 +588,29 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
             updated += 1
         self.message_user(request, f'🔒 {updated} tickets closed')
     mark_as_closed.short_description = '🔒 Closed'
+    mark_as_closed.allowed_permissions = ('change',)
 
     def has_export_permission(self, request):
         # Επωνυμίες πελατών στο CSV — θέλει το ξεχωριστό export permission
         return request.user.has_perm('accounting.export_clientprofile')
+
+    def has_delete_permission(self, request, obj=None):
+        # Το pre_delete signal του Ticket ΤΡΟΠΟΠΟΙΕΙ το συνδεδεμένο
+        # VoIPCall (ticket_created=False) — καλύπτει και τα built-in
+        # delete_selected / object delete_view. Χωρίς κλήση, αρκεί το
+        # delete_ticket.
+        base = super().has_delete_permission(request, obj)
+        if not base:
+            return False
+        if obj is not None and obj.call_id is None:
+            return True
+        return request.user.has_perm('accounting.change_voipcall')
+
+    def has_delete_cascade_calls_permission(self, request):
+        # Η ενέργεια διαγράφει tickets ΚΑΙ τις κλήσεις τους — AND μέσω
+        # custom handler (τα πολλαπλά allowed_permissions είναι OR)
+        return (self.has_delete_permission(request)
+                and request.user.has_perm('accounting.delete_voipcall'))
 
     def export_tickets_csv(self, request, queryset):
         """Export to CSV"""
@@ -593,28 +658,39 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
 
     # Bulk delete actions
     def delete_with_calls(self, request, queryset):
-        """Διαγραφή tickets μαζί με τις κλήσεις τους"""
-        call_ids = list(queryset.values_list('call_id', flat=True))
-        count = queryset.count()
-        # Διαγραφή κλήσεων (cascade θα διαγράψει και τα tickets)
-        VoIPCall.objects.filter(id__in=call_ids).delete()
+        """Διαγραφή tickets ΚΑΙ των κλήσεών τους.
+
+        Το Ticket.call είναι SET_NULL — η διαγραφή των κλήσεων ΔΕΝ
+        διαγράφει τα tickets· διαγράφονται και τα δύο ρητά, στην ίδια
+        συναλλαγή (καμία μερική διαγραφή).
+        """
+        from django.db import transaction
+        call_ids = [c for c in queryset.values_list('call_id', flat=True) if c]
+        with transaction.atomic():
+            ticket_count, _ = queryset.delete()
+            call_count, _ = VoIPCall.objects.filter(id__in=call_ids).delete()
         self.message_user(
             request,
-            f'{count} tickets και κλήσεις διαγράφηκαν',
+            f'{ticket_count} tickets και {call_count} κλήσεις διαγράφηκαν',
             messages.SUCCESS
         )
     delete_with_calls.short_description = 'Διαγραφή με κλήσεις'
+    # Διαγράφει ΚΑΙ VoIPCall rows → απαιτούνται και τα δύο delete perms
+    delete_with_calls.allowed_permissions = ('delete_cascade_calls',)
 
     def delete_without_calls(self, request, queryset):
         """Διαγραφή tickets χωρίς τις κλήσεις (signal θα ενημερώσει calls)"""
+        from django.db import transaction
         count = queryset.count()
-        queryset.delete()
+        with transaction.atomic():
+            queryset.delete()
         self.message_user(
             request,
             f'{count} tickets διαγράφηκαν (κλήσεις διατηρήθηκαν)',
             messages.SUCCESS
         )
     delete_without_calls.short_description = 'Διαγραφή χωρίς κλήσεις'
+    delete_without_calls.allowed_permissions = ('delete',)
 
     # Custom delete view
     def delete_view(self, request, object_id, extra_context=None):
@@ -630,11 +706,23 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         # Handle POST with delete_call checkbox
         if request.method == 'POST' and request.POST.get('delete_call') == '1':
             if obj and obj.call:
+                from django.core.exceptions import PermissionDenied
+                from django.db import transaction
+                # Fail closed: delete_ticket (+ scoping μέσω του
+                # has_delete_permission) ΚΑΙ delete_voipcall — η επιλογή
+                # διαγράφει και τα δύο μοντέλα
+                if not (self.has_delete_permission(request, obj)
+                        and request.user.has_perm(
+                            'accounting.delete_voipcall')):
+                    raise PermissionDenied
                 call = obj.call
-                obj.call = None
-                obj.save()
-                call.delete()
-                self.message_user(request, 'Ticket και κλήση διαγράφηκαν', messages.SUCCESS)
-                return self.response_delete(request, obj.__str__(), obj.pk)
+                obj_repr, obj_pk = str(obj), obj.pk
+                with transaction.atomic():
+                    obj.delete()
+                    call.delete()
+                self.message_user(
+                    request, 'Ticket και κλήση διαγράφηκαν',
+                    messages.SUCCESS)
+                return self.response_delete(request, obj_repr, obj_pk)
 
         return super().delete_view(request, object_id, extra_context)
