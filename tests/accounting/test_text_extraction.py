@@ -62,6 +62,15 @@ class SuggestCategoryTest(TestCase):
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA, DOCUMENT_OCR_SYNC=True)
 class ProcessDocumentTest(TestCase):
+    def _doc_user(self):
+        """Χρήστης γραφείου (Γύρος 20: user=None μόνο με portal capability)."""
+        from django.contrib.auth import get_user_model
+        U = get_user_model()
+        user = U.objects.filter(username='tx_doc_user').first()
+        if user is None:
+            user = U.objects.create_superuser('tx_doc_user', 'tx@t.com', 'x')
+        return user
+
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
@@ -80,6 +89,7 @@ class ProcessDocumentTest(TestCase):
                 client=self.client_profile,
                 uploaded_file=SimpleUploadedFile(name, content),
                 category='vat', year=2026, month=3,
+                user=self._doc_user(),
             )
         doc.refresh_from_db()
         return doc
@@ -100,12 +110,17 @@ class ProcessDocumentTest(TestCase):
         self.assertTrue(doc.afm_mismatch)
 
     def test_corrupt_pdf_fails_without_breaking_upload(self):
-        doc = self._create_doc('bad.pdf', b'not a real pdf at all')
+        doc = self._create_doc(
+            'bad.pdf', b'%PDF-1.4\ngarbage without valid xref\n')
         self.assertEqual(doc.ocr_status, 'failed')
         self.assertTrue(ClientDocument.objects.filter(id=doc.id).exists())
 
     def test_non_pdf_skipped(self):
-        doc = self._create_doc('data.zip', b'PK\x03\x04')
+        import io as _io, zipfile as _zip
+        _buf = _io.BytesIO()
+        with _zip.ZipFile(_buf, 'w') as _zf:
+            _zf.writestr('a.txt', 'x')
+        doc = self._create_doc('data.zip', _buf.getvalue())
         self.assertEqual(doc.ocr_status, 'skipped')
 
     def test_txt_extracted(self):
@@ -116,6 +131,15 @@ class ProcessDocumentTest(TestCase):
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA, DOCUMENT_OCR_SYNC=True)
 class ContentSearchAndSuggestTest(TestCase):
+    def _doc_user(self):
+        """Χρήστης γραφείου (Γύρος 20: user=None μόνο με portal capability)."""
+        from django.contrib.auth import get_user_model
+        U = get_user_model()
+        user = U.objects.filter(username='tx_doc_user').first()
+        if user is None:
+            user = U.objects.create_superuser('tx_doc_user', 'tx@t.com', 'x')
+        return user
+
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
@@ -137,6 +161,7 @@ class ContentSearchAndSuggestTest(TestCase):
                 client=self.client_profile,
                 uploaded_file=SimpleUploadedFile('doc.pdf', pdf),
                 category='general', year=2026, month=1,
+                user=self._doc_user(),
             )
         url = f'/accounting/api/v1/clients/{self.client_profile.id}/documents/'
         resp = self.client.get(url, {'search': 'ΜΟΝΑΔΙΚΗΛΕΞΗ'})

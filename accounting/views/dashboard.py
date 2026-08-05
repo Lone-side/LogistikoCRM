@@ -30,6 +30,9 @@ from .helpers import (
 )
 
 import logging
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,10 @@ def dashboard_view(request):
     Enhanced Dashboard with comprehensive filtering and statistics
     Features: Advanced filters, real-time stats, bulk operations support
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     now = timezone.now()
 
     # ========== FILTER PARAMETERS ==========
@@ -64,12 +71,11 @@ def dashboard_view(request):
     logger.info(f"Dashboard accessed by {request.user.username} with filters: {filter_params}")
 
     # ========== STATISTICS (UNFILTERED) ==========
-    stats = _calculate_dashboard_stats()
+    stats = _calculate_dashboard_stats(request.user)
 
     # ========== BUILD FILTERED QUERY ==========
     upcoming_query = _build_filtered_query(
-        filter_params, filter_client_id, filter_type_id, now
-    )
+        filter_params, filter_client_id, filter_type_id, now, request.user)
 
     # ========== APPLY SORTING ==========
     sort_mapping = {
@@ -87,7 +93,7 @@ def dashboard_view(request):
     upcoming_count = upcoming_query.count()
 
     # ========== OVERDUE OBLIGATIONS ==========
-    overdue_query = MonthlyObligation.objects.filter(
+    overdue_query = accessible_obligations(request.user).filter(
         deadline__lt=now.date(),
         status__in=['pending', 'overdue']
     ).select_related('client', 'obligation_type')
@@ -102,7 +108,7 @@ def dashboard_view(request):
     overdue_count = overdue_query.count()
 
     # ========== FILTER OPTIONS ==========
-    all_clients = ClientProfile.objects.all().order_by('eponimia').values('id', 'eponimia', 'afm')
+    all_clients = accessible_clients(request.user).all().order_by('eponimia').values('id', 'eponimia', 'afm')
     all_types = ObligationType.objects.filter(is_active=True).order_by('name')
 
     # ========== PREPARE CONTEXT ==========
@@ -146,6 +152,10 @@ def reports_view(request):
     """
     Comprehensive analytics dashboard with charts and statistics
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     now = timezone.now()
     # Ασφαλής μετατροπή + clamp 1..36 (άκυρο input → default 6)
     months_back = _safe_int(request.GET.get('months')) or 6
@@ -153,16 +163,16 @@ def reports_view(request):
     start_date = (now - timedelta(days=30*months_back)).date()
 
     # Monthly completion statistics
-    monthly_stats = _calculate_monthly_completion_stats(start_date)
+    monthly_stats = _calculate_monthly_completion_stats(start_date, request.user)
 
     # Client performance metrics
-    client_stats = _calculate_client_performance(start_date)
+    client_stats = _calculate_client_performance(start_date, request.user)
 
     # Time tracking summary
-    time_stats = _calculate_time_stats(start_date)
+    time_stats = _calculate_time_stats(start_date, request.user)
 
     # Revenue calculations
-    revenue_data = _calculate_revenue(start_date)
+    revenue_data = _calculate_revenue(start_date, request.user)
 
     # Obligation type statistics
     type_stats = _calculate_type_stats(start_date)
@@ -174,7 +184,7 @@ def reports_view(request):
     chart_data = _format_chart_data(monthly_stats)
 
     # Get clients for PDF export dropdown
-    clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+    clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
 
     # Year choices for monthly report
     current_year = now.year

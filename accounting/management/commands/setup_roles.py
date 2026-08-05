@@ -16,23 +16,65 @@ from django.core.management.base import BaseCommand
 
 ROLES = {
     'Διαχειριστής': {
-        'app_all': ['accounting'],
+        'app_all': ['accounting', 'mydata', 'inventory'],
         'extra': ['view_all_clients', 'view_client_credential_secret'],
+        # Backup: μόνο ο Διαχειριστής — το σκέτο is_staff ΔΕΝ αρκεί πλέον
+        # στα backup endpoints (πλήρες dump βάσης + media)
+        'settings_app': [
+            'view_backupsettings', 'change_backupsettings',
+            'can_create_backup', 'can_restore_backup', 'can_download_backup',
+        ],
     },
     'Λογιστής': {
         'codenames': [
             'add_clientprofile', 'change_clientprofile', 'view_clientprofile',
+            # Μαζική εξαγωγή στοιχείων πελατών (ο Βοηθός δεν το έχει)
+            'export_clientprofile',
             'add_clientdocument', 'change_clientdocument', 'view_clientdocument',
             'delete_clientdocument',
             'add_monthlyobligation', 'change_monthlyobligation', 'view_monthlyobligation',
+            'delete_monthlyobligation',
             'add_clientcredential', 'change_clientcredential', 'view_clientcredential',
+            'delete_clientcredential',
             'view_client_credential_secret',
+            # Υποχρεώσεις: προφίλ/τύποι/αναθέσεις
+            'view_obligationprofile', 'view_obligationtype', 'view_obligationgroup',
+            # Global ρυθμίσεις αρχειοθέτησης: μόνο view — create/change/delete
+            # μόνο ο Διαχειριστής (επηρεάζουν όλο το γραφείο)
+            'view_archiveconfiguration',
+            'add_clientobligation', 'change_clientobligation', 'view_clientobligation',
+            # Email: templates + αποστολή σε πελάτες
+            'add_emailtemplate', 'change_emailtemplate', 'view_emailtemplate',
+            'view_emaillog', 'send_client_email',
+            # Shared links / αιτήματα εγγράφων / tickets / VoIP
+            'add_sharedlink', 'change_sharedlink', 'view_sharedlink', 'delete_sharedlink',
+            'add_documenttag', 'change_documenttag', 'view_documenttag', 'delete_documenttag',
+            'add_documentrequest', 'change_documentrequest', 'view_documentrequest',
+            'delete_documentrequest',
+            'add_ticket', 'change_ticket', 'view_ticket', 'delete_ticket',
+            'add_voipcall', 'change_voipcall', 'view_voipcall', 'view_voipcalllog',
+            # myDATA
+            'add_mydatacredentials', 'change_mydatacredentials', 'view_mydatacredentials',
+            'delete_mydatacredentials',
+            'view_vatrecord', 'view_vatsynclog',
+            'add_vatperiodresult', 'change_vatperiodresult', 'view_vatperiodresult',
+            'sync_vatdata',
+            # Τιμολόγια: ανάγνωση (η υποβολή στην ΑΑΔΕ θέλει change_invoice + staff)
+            'view_invoice',
         ],
     },
     'Βοηθός': {
         'codenames': [
             'view_clientprofile', 'view_clientdocument',
             'view_monthlyobligation', 'view_clientcredential',
+            'view_obligationprofile', 'view_obligationtype', 'view_obligationgroup',
+            'view_clientobligation',
+            'view_emailtemplate', 'view_emaillog',
+            'view_sharedlink', 'view_documentrequest', 'view_documenttag',
+            'view_ticket', 'view_voipcall', 'view_voipcalllog',
+            'view_mydatacredentials', 'view_vatrecord', 'view_vatsynclog',
+            'view_vatperiodresult',
+            'view_invoice',
         ],
     },
 }
@@ -50,10 +92,24 @@ class Command(BaseCommand):
                 perms = Permission.objects.filter(
                     content_type__app_label__in=spec['app_all']
                 )
+            # Πάντα με app_label — σκέτο codename μπορεί μελλοντικά να
+            # ταιριάξει ομώνυμο permission άλλου app (π.χ. view_invoice)
+            role_apps = ('accounting', 'mydata', 'inventory')
             if 'codenames' in spec:
-                perms = Permission.objects.filter(codename__in=spec['codenames'])
+                perms = Permission.objects.filter(
+                    codename__in=spec['codenames'],
+                    content_type__app_label__in=role_apps,
+                )
             if 'extra' in spec:
-                perms = perms | Permission.objects.filter(codename__in=spec['extra'])
+                perms = perms | Permission.objects.filter(
+                    codename__in=spec['extra'],
+                    content_type__app_label__in=role_apps,
+                )
+            if 'settings_app' in spec:
+                perms = perms | Permission.objects.filter(
+                    codename__in=spec['settings_app'],
+                    content_type__app_label='settings',
+                )
 
             group.permissions.set(perms.distinct())
             verb = 'Δημιουργήθηκε' if created else 'Ενημερώθηκε'

@@ -15,6 +15,7 @@ import requests
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from xml.etree import ElementTree as ET
+from accounting.services.access import mask_pii_value
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +324,7 @@ class GSISClient:
             'Content-Type': 'application/soap+xml; charset=utf-8; action="http://gr/gsis/rgwspublic2/RgWsPublic2/rgWsPublic2AfmMethod"',
         }
 
-        logger.info(f"Looking up AFM: {afm}")
+        logger.info(f"Looking up AFM: {mask_pii_value(afm)}")
 
         try:
             # Authentication is in the SOAP Header (WS-Security), not HTTP Basic Auth

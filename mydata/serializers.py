@@ -69,6 +69,15 @@ class MyDataCredentialsSerializer(serializers.ModelSerializer):
         return 'sandbox' if obj.is_sandbox else 'production'
 
 
+    def validate_client(self, client):
+        """RBAC: το client FK δεν μπορεί να δείξει σε πελάτη εκτός ανάθεσης."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and client is not None and \
+                not user_can_access_client(request.user, client):
+            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
 class CredentialsUpdateSerializer(serializers.Serializer):
     """
     Serializer για update credentials.
@@ -303,6 +312,15 @@ class VATPeriodResultSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
 
+
+    def validate_client(self, client):
+        """RBAC: το client FK δεν μπορεί να δείξει σε πελάτη εκτός ανάθεσης."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and client is not None and \
+                not user_can_access_client(request.user, client):
+            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
 
 class VATPeriodResultDetailSerializer(VATPeriodResultSerializer):
     """Detailed serializer για VATPeriodResult."""

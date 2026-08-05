@@ -285,7 +285,7 @@ Should return:
 | `DEBUG` | ✅ Yes | False | Debug mode (True for dev, False for prod) |
 | `DB_ENGINE` | ✅ Yes | sqlite3 | Database backend |
 | `EMAIL_BACKEND_CONSOLE` | ✅ Yes | false | Use console email for development |
-| `DATA_ENCRYPTION_KEY_CURRENT` | 🔐 Prod | (legacy από SECRET_KEY) | Fernet key για κρυπτογράφηση δεδομένων (myDATA, SMTP, κωδικοί πελατών). Παραγωγή: `manage.py rotate_encryption_key --generate` |
+| `DATA_ENCRYPTION_KEY_CURRENT` | 🔐 Prod | (legacy από SECRET_KEY) | Fernet key για κρυπτογράφηση δεδομένων (myDATA, SMTP, κωδικοί πελατών). Παραγωγή: `python scripts/generate_fernet_key.py` (standalone — δεν φορτώνει Django settings, δουλεύει και σε καθαρό bootstrap) |
 | `DATA_ENCRYPTION_KEY_PREVIOUS` | Optional | — | Προηγούμενο κλειδί, μόνο κατά το rotation |
 | `DATA_ENCRYPTION_KEY_ID` | Optional | — | Αναγνωριστικό ενεργού κλειδιού |
 | `ENFORCE_CLIENT_ASSIGNMENT` | Optional | False | Όταν True, οι χρήστες βλέπουν μόνο ανατεθειμένους πελάτες (RBAC) |

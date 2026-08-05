@@ -161,8 +161,12 @@ class PortalDocumentRequestTest(TestCase):
 )
 class DocumentRequestAPITest(TestCase):
     def setUp(self):
+        from tests.utils.helpers import grant_accounting_model_perms, grant_extra_perms
         self.user = User.objects.create_user(
             'staff1', 'staff1@office.gr', 'pass12345', is_staff=True
+        )
+        self.user = grant_extra_perms(
+            grant_accounting_model_perms(self.user), 'send_client_email'
         )
         self.client.force_login(self.user)
         self.client_profile = make_client()
@@ -208,7 +212,10 @@ class DocumentRequestAPITest(TestCase):
 
     def test_visible_to_other_office_users(self):
         self._create()
-        other = User.objects.create_user('other', 'o@office.gr', 'pass12345')
+        from tests.utils.helpers import grant_accounting_model_perms
+        other = grant_accounting_model_perms(
+            User.objects.create_user('other', 'o@office.gr', 'pass12345')
+        )
         self.client.force_login(other)
         resp = self.client.get('/accounting/api/v1/document-requests/')
         data = resp.json()
@@ -342,7 +349,9 @@ class NotificationsEndpointTest(TestCase):
     def test_portal_upload_notification_within_48h(self):
         from accounting.models import SharedLinkAccess
 
-        user = User.objects.create_user('staff1', 's@office.gr', 'pass12345')
+        # Το endpoint απαιτεί πλέον view_monthlyobligation + scoping —
+        # εδώ ελέγχεται το 48ωρο παράθυρο, οπότε superuser
+        user = User.objects.create_superuser('staff1', 's@office.gr', 'pass12345')
         self.client.force_login(user)
         client_profile = make_client()
         link = make_link(client_profile, user)

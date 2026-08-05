@@ -5,6 +5,7 @@ Export/Import API for LogistikoCRM
 Handles Excel export and import for clients matching the admin template.
 """
 import io
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -19,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import ClientProfile, ObligationType, ObligationProfile, ClientObligation
+from .services.access import accessible_clients, require_model_perms
 
 try:
     import openpyxl
@@ -26,6 +28,8 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
+
+logger = logging.getLogger(__name__)
 
 
 # ==============================================================================
@@ -66,9 +70,10 @@ def export_clients_template(request):
         os.unlink(tmp_path)
         return response
 
-    except Exception as e:
+    except Exception:
+        logger.exception('Σφάλμα δημιουργίας template')
         return Response(
-            {'error': f'Σφάλμα δημιουργίας template: {str(e)}'},
+            {'error': 'Σφάλμα δημιουργίας template'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -79,6 +84,7 @@ def export_clients_template(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.export_clientprofile')
 def export_clients_csv(request):
     """
     GET /api/v1/export/clients/csv/
@@ -128,7 +134,8 @@ def export_clients_csv(request):
             cell.font = header_font
 
         # Data rows
-        clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+        # Μόνο πελάτες στους οποίους έχει πρόσβαση ο χρήστης (RBAC scoping)
+        clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
 
         # Map eidos_ipoxreou to Greek
         eidos_map = {
@@ -192,9 +199,10 @@ def export_clients_csv(request):
 
         return response
 
-    except Exception as e:
+    except Exception:
+        logger.exception('Σφάλμα εξαγωγής πελατών')
         return Response(
-            {'error': f'Σφάλμα εξαγωγής: {str(e)}'},
+            {'error': 'Σφάλμα εξαγωγής'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -205,6 +213,7 @@ def export_clients_csv(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.add_clientprofile', 'accounting.change_clientprofile')
 @parser_classes([MultiPartParser, FormParser])
 def import_clients_csv(request):
     """
@@ -306,13 +315,23 @@ def import_clients_csv(request):
         skipped_count = 0
         errors = []
 
+        # Η εισαγωγή credentials είναι ρητή επιλογή — ΔΕΝ γίνεται σιωπηλά
+        import_credentials = str(
+            request.data.get('import_credentials', '')
+        ).lower() in ('true', '1', 'yes')
+        has_add_cred = request.user.has_perm('accounting.add_clientcredential')
+        has_change_cred = request.user.has_perm('accounting.change_clientcredential')
+        credentials_note_added = False
+
         # Determine start row (skip example rows with AFM starting with 123456)
         start_row = 2
         first_afm_cell = ws.cell(2, 1).value
         if first_afm_cell and str(first_afm_cell).startswith('123456'):
             start_row = 3
 
-        with transaction.atomic():
+        # Per-row transactions (μέσα στον βρόχο) — μια γραμμή είτε
+        # ολοκληρώνεται πλήρως (client + credentials) είτε καθόλου
+        if True:
             for row_num in range(start_row, ws.max_row + 1):
                 # Parse row
                 row_data = {}
@@ -352,32 +371,94 @@ def import_clients_csv(request):
                     row_data['eidos_ipoxreou'] = 'professional'
 
                 # Τα credential πεδία πάνε στο ClientCredential (κρυπτογραφημένα)
+                from accounting.models import ClientCredential
                 from accounting.services.credentials import (
                     extract_legacy_credentials, store_client_credentials,
                 )
                 credentials = extract_legacy_credentials(row_data)
 
-                # Check if client exists
-                existing = ClientProfile.objects.filter(afm=afm).first()
+                if credentials and not import_credentials:
+                    # Χωρίς ρητό import_credentials=true τα secrets αγνοούνται
+                    credentials = {}
+                    if not credentials_note_added:
+                        errors.append(
+                            'Οι στήλες κωδικών αγνοήθηκαν — απαιτείται '
+                            'import_credentials=true για εισαγωγή credentials.'
+                        )
+                        credentials_note_added = True
+
+                # SECURITY: scoped lookup — δεν αποκαλύπτουμε αν το ΑΦΜ
+                # υπάρχει σε ξένο, μη ανατεθειμένο πελάτη
+                existing = accessible_clients(request.user).filter(afm=afm).first()
+
+                def _credential_perms_ok(client_obj):
+                    """add μόνο για νέα credentials, change μόνο για υπάρχοντα."""
+                    if not credentials:
+                        return True
+                    if client_obj is None:
+                        existing_services = set()
+                    else:
+                        existing_services = set(
+                            ClientCredential.objects.filter(
+                                client=client_obj, label=''
+                            ).values_list('service', flat=True)
+                        )
+                    needs_add = any(s not in existing_services for s in credentials)
+                    needs_change = any(s in existing_services for s in credentials)
+                    return not (
+                        (needs_add and not has_add_cred)
+                        or (needs_change and not has_change_cred)
+                    )
 
                 if existing:
                     if mode == 'update':
-                        # Update existing client
-                        for field, value in row_data.items():
-                            if field != 'afm' and value:
-                                setattr(existing, field, value)
-                        existing.save()
-                        if credentials:
-                            store_client_credentials(existing, credentials, updated_by=request.user)
+                        if not _credential_perms_ok(existing):
+                            errors.append(
+                                f'Γραμμή {row_num}: χωρίς δικαίωμα credentials — '
+                                f'η γραμμή παραλείφθηκε'
+                            )
+                            skipped_count += 1
+                            continue
+                        # Transactional γραμμή: client update + credentials μαζί
+                        with transaction.atomic():
+                            for field, value in row_data.items():
+                                if field != 'afm' and value:
+                                    setattr(existing, field, value)
+                            existing.save()
+                            if credentials:
+                                store_client_credentials(
+                                    existing, credentials, updated_by=request.user)
                         updated_count += 1
                     else:
                         skipped_count += 1
                 else:
-                    # Create new client
-                    row_data['is_active'] = True
-                    new_client = ClientProfile.objects.create(**row_data)
-                    if credentials:
-                        store_client_credentials(new_client, credentials, updated_by=request.user)
+                    if not _credential_perms_ok(None):
+                        errors.append(
+                            f'Γραμμή {row_num}: χωρίς δικαίωμα credentials — '
+                            f'η γραμμή παραλείφθηκε'
+                        )
+                        skipped_count += 1
+                        continue
+                    # Create new client (transactional γραμμή). IntegrityError
+                    # (π.χ. το ΑΦΜ ανήκει σε μη προσβάσιμο πελάτη) → ίδιο
+                    # ουδέτερο μήνυμα με κάθε αποτυχία — χωρίς enumeration
+                    from django.db import IntegrityError
+                    try:
+                        with transaction.atomic():
+                            new_client = ClientProfile.objects.create(**row_data)
+                            from accounting.mixins import user_sees_all_clients
+                            if not user_sees_all_clients(request.user):
+                                new_client.assigned_users.add(request.user)
+                            if credentials:
+                                store_client_credentials(
+                                    new_client, credentials,
+                                    updated_by=request.user)
+                    except IntegrityError:
+                        errors.append(
+                            f'Γραμμή {row_num}: Η εισαγωγή του ΑΦΜ απέτυχε — '
+                            f'παραλείφθηκε')
+                        skipped_count += 1
+                        continue
                     created_count += 1
 
         return Response({
@@ -389,9 +470,12 @@ def import_clients_csv(request):
             'message': f'Δημιουργήθηκαν {created_count} πελάτες. Ενημερώθηκαν {updated_count}. Παραλείφθηκαν {skipped_count}.'
         })
 
-    except Exception as e:
+    except Exception:
+        # Χωρίς raw exception text στον χρήστη — μπορεί να περιέχει τιμές
+        # πεδίων (π.χ. από IntegrityError)
+        logger.exception('Σφάλμα κατά την εισαγωγή πελατών από Excel')
         return Response(
-            {'error': f'Σφάλμα κατά την ανάγνωση του αρχείου: {str(e)}'},
+            {'error': 'Σφάλμα κατά την ανάγνωση του αρχείου.'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -464,6 +548,7 @@ def clean_value(value, field_name):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_obligationprofile')
 def export_obligation_profiles_csv(request):
     """Export obligation profiles - kept for compatibility."""
     from django.http import HttpResponse
@@ -487,6 +572,7 @@ def export_obligation_profiles_csv(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_obligationtype')
 def export_obligation_types_csv(request):
     """Export obligation types - kept for compatibility."""
     from django.http import HttpResponse
@@ -512,6 +598,11 @@ def export_obligation_types_csv(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms(
+    'accounting.view_clientprofile', 'accounting.export_clientprofile',
+    'accounting.view_clientobligation', 'accounting.view_obligationprofile',
+    'accounting.view_obligationtype',
+)
 def export_client_obligations_csv(request):
     """Export client obligation assignments."""
     from django.http import HttpResponse
@@ -525,7 +616,9 @@ def export_client_obligations_csv(request):
     writer = csv.writer(response)
     writer.writerow(['ΑΦΜ', 'Επωνυμία', 'Profiles', 'Τύποι'])
 
-    cos = ClientObligation.objects.all().select_related('client').prefetch_related(
+    cos = ClientObligation.objects.filter(
+        client__in=accessible_clients(request.user)
+    ).select_related('client').prefetch_related(
         'obligation_profiles', 'obligation_types'
     )
     for co in cos:
@@ -538,6 +631,10 @@ def export_client_obligations_csv(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms(
+    'accounting.add_clientobligation', 'accounting.change_clientobligation',
+    'accounting.view_obligationprofile', 'accounting.view_obligationtype',
+)
 @parser_classes([MultiPartParser, FormParser])
 def import_client_obligations_csv(request):
     """Import client obligation assignments from CSV."""
@@ -570,7 +667,7 @@ def import_client_obligations_csv(request):
                 if not afm:
                     continue
 
-                client = ClientProfile.objects.filter(afm=afm).first()
+                client = accessible_clients(request.user).filter(afm=afm).first()
                 if not client:
                     errors.append(f'Γραμμή {row_num}: ΑΦΜ {afm} δεν βρέθηκε')
                     continue
@@ -607,5 +704,7 @@ def import_client_obligations_csv(request):
             'message': f'Ενημερώθηκαν {updated_count}, δημιουργήθηκαν {created_count}.'
         })
 
-    except Exception as e:
-        return Response({'error': f'Σφάλμα: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception:
+        logger.exception('Σφάλμα εισαγωγής αναθέσεων υποχρεώσεων')
+        return Response({'error': 'Σφάλμα εισαγωγής αρχείου'},
+                        status=status.HTTP_400_BAD_REQUEST)

@@ -9,6 +9,7 @@ import logging
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 
@@ -20,7 +21,7 @@ TASMOTA_PORT = getattr(settings, 'TASMOTA_PORT', 80)
 TIMEOUT = 2  # 2 seconds
 
 
-@login_required
+@staff_member_required
 @require_http_methods(["GET"])
 def door_status(request):
     """Check door status - ON or OFF"""
@@ -63,14 +64,14 @@ def door_status(request):
         }, status=503)
 
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error: {e}", exc_info=True)
         return JsonResponse({
             "success": False,
-            "error": str(e)
+            "error": "Σφάλμα επικοινωνίας με τη συσκευή"
         }, status=500)
 
 
-@login_required
+@staff_member_required
 @require_http_methods(["POST"])
 def open_door(request):
     """
@@ -117,14 +118,14 @@ def open_door(request):
         }, status=503)
 
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error: {e}", exc_info=True)
         return JsonResponse({
             "success": False,
-            "error": str(e)
+            "error": "Σφάλμα επικοινωνίας με τη συσκευή"
         }, status=500)
 
 
-@login_required
+@staff_member_required
 @require_http_methods(["GET", "POST"])
 def door_control(request):
     """Unified door control endpoint - requires authentication"""

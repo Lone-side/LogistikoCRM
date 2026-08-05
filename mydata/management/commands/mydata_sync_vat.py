@@ -368,7 +368,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.ERROR(f"  Unexpected error: {str(e)}")
             )
-            logger.exception(f"Unexpected error syncing VAT for {client.afm}")
+            logger.exception(f"Unexpected error syncing VAT for client id={client.pk}")
             if sync_log:
                 sync_log.mark_failed(str(e))
             return 0, 0, 1

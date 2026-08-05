@@ -11,6 +11,7 @@ import json
 import logging
 from datetime import datetime
 
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.contrib.admin.views.decorators import staff_member_required
@@ -46,6 +47,13 @@ def check_existing_document(request):
     Returns:
         JSON με πληροφορίες για υπάρχον έγγραφο ή null
     """
+    # RBAC: ανάγνωση στοιχείων εγγράφου απαιτεί view_clientdocument
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
+
     client_id = request.GET.get('client_id')
     obligation_id = request.GET.get('obligation_id')
     category = request.GET.get('category')
@@ -58,22 +66,39 @@ def check_existing_document(request):
         }, status=400)
 
     try:
-        # Build query
-        qs = ClientDocument.objects.filter(
-            client_id=client_id,
-            is_current=True
+        # ΚΟΙΝΟΣ exact-conflict helper — ίδια σημασιολογία με το filing
+        # service (πλήρες key, χωρίς αυθαίρετο first σε πολλαπλά current)
+        from accounting.services import filing as _filing
+        from accounting.services.access import (
+            accessible_clients, get_accessible_obligation_or_404,
         )
-
+        from django.http import Http404 as _H404
+        client = accessible_clients(request.user).filter(
+            id=int(client_id)).first()
+        if client is None:
+            return JsonResponse({'error': 'Ο πελάτης δεν βρέθηκε.'},
+                                status=404)
+        obligation = None
         if obligation_id:
-            qs = qs.filter(obligation_id=obligation_id)
-        if category and category != 'general':
-            qs = qs.filter(document_category=category)
-        if year:
-            qs = qs.filter(year=int(year))
-        if month:
-            qs = qs.filter(month=int(month))
-
-        existing = qs.select_related('uploaded_by').first()
+            try:
+                obligation = get_accessible_obligation_or_404(
+                    request.user, int(obligation_id), request=request)
+            except _H404:
+                return JsonResponse({'error': 'Η υποχρέωση δεν βρέθηκε.'},
+                                    status=404)
+        year_i = int(year) if year else None
+        month_i = int(month) if month else None
+        try:
+            existing = ClientDocument.check_existing(
+                client=client, obligation=obligation,
+                category=category or 'general',
+                year=year_i, month=month_i)
+        except _filing.MultipleCurrentDocumentsError:
+            # Corrupted multiple-current κατάσταση → controlled conflict
+            return JsonResponse({
+                'error': 'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                         'συνδυασμό — απαιτείται χειροκίνητη διόρθωση.',
+            }, status=409)
 
         if existing:
             return JsonResponse({
@@ -97,11 +122,13 @@ def check_existing_document(request):
                 'document': None
             })
 
-    except Exception as e:
-        logger.error(f"Error checking existing document: {e}", exc_info=True)
-        return JsonResponse({
-            'error': str(e)
-        }, status=500)
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Μη έγκυρες παράμετροι.'}, status=400)
+    except Exception:
+        logger.exception("Error checking existing document")
+        return JsonResponse(
+            {'error': 'Σφάλμα κατά τον έλεγχο υπάρχοντος εγγράφου.'},
+            status=500)
 
 
 # =============================================================================
@@ -127,6 +154,14 @@ def upload_document_with_version(request):
     Returns:
         JSON με πληροφορίες του νέου εγγράφου
     """
+    # Upload/νέα έκδοση = write: απαιτείται add_clientdocument
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse({
+            'success': False,
+            'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'
+        }, status=403)
+
     if 'file' not in request.FILES:
         return JsonResponse({
             'success': False,
@@ -153,10 +188,15 @@ def upload_document_with_version(request):
     from .services import filing
 
     try:
-        client = get_object_or_404(ClientProfile, id=client_id)
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_obligation_or_404,
+        )
+        client = get_accessible_client_or_404(request.user, client_id, request=request)
         obligation = None
         if obligation_id:
-            obligation = get_object_or_404(MonthlyObligation, id=obligation_id)
+            obligation = get_accessible_obligation_or_404(
+                request.user, obligation_id, request=request
+            )
 
         # Determine year/month
         if not year or not month:
@@ -168,16 +208,35 @@ def upload_document_with_version(request):
                 year = year or now.year
                 month = month or now.month
 
-        year = int(year)
-        month = int(month)
+        try:
+            year = int(year)
+            month = int(month)
+        except (TypeError, ValueError):
+            return JsonResponse({
+                'success': False,
+                'error': 'Μη έγκυρο έτος ή μήνας.'
+            }, status=400)
+        if not (2000 <= year <= 2100) or not (1 <= month <= 12):
+            return JsonResponse({
+                'success': False,
+                'error': 'Μη έγκυρο έτος ή μήνας.'
+            }, status=400)
 
-        # Check for existing document
-        existing = ClientDocument.check_existing(
-            client=client,
-            obligation=obligation,
-            category=category if category != 'general' else None
-        )
-        has_conflict = bool(existing and existing.year == year and existing.month == month)
+        # Exact conflict key — ΚΟΙΝΟΣ helper· corrupted multiple-current
+        # → controlled 409 (όχι αυθαίρετη επιλογή row)
+        from accounting.services import filing as _filing
+        try:
+            existing = ClientDocument.check_existing(
+                client=client, obligation=obligation, category=category,
+                year=year, month=month,
+            )
+        except _filing.MultipleCurrentDocumentsError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                         'συνδυασμό — απαιτείται χειροκίνητη διόρθωση.',
+            }, status=409)
+        has_conflict = existing is not None
 
         if has_conflict and version_action not in ('new_version', 'replace'):
             # auto - return info that file exists
@@ -206,10 +265,14 @@ def upload_document_with_version(request):
                 on_existing='replace' if version_action == 'replace' else 'version',
             )
         except ValidationError as e:
-            return JsonResponse({
-                'success': False,
-                'error': '; '.join(e.messages)
-            }, status=400)
+            # Κοινό contract: MultipleCurrentDocumentsError → 409, ποτέ 400
+            message, code = filing.document_error_status(e)
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
+        except (_filing.DocumentKeyConflict, _filing.DocumentGone) as e:
+            message, code = _filing.document_error_status(e)
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
 
         if has_conflict and version_action == 'replace':
             action, message = 'replaced', 'Το αρχείο αντικαταστάθηκε'
@@ -228,11 +291,18 @@ def upload_document_with_version(request):
             response['previous_version'] = previous_version
         return JsonResponse(response)
 
-    except Exception as e:
-        logger.error(f"Error uploading document: {e}", exc_info=True)
+    except PermissionDenied:
+        # Το permission matrix του filing (create/version/replace) —
+        # π.χ. add-only χρήστης που προσπαθεί version/replace
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'
+        }, status=403)
+    except Exception:
+        logger.exception("Error uploading document")
+        return JsonResponse({
+            'success': False,
+            'error': 'Σφάλμα κατά τη μεταφόρτωση του εγγράφου.'
         }, status=500)
 
 
@@ -249,7 +319,12 @@ def document_preview(request, document_id):
     Returns:
         JSON με URL και metadata για preview
     """
-    document = get_object_or_404(ClientDocument, id=document_id)
+    from accounting.services.access import check_model_perms, get_accessible_document_or_404
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
+    document = get_accessible_document_or_404(request.user, document_id, request=request)
 
     # Determine preview type
     preview_type = 'unknown'
@@ -298,7 +373,8 @@ def _document_to_dict(doc):
         'version': doc.version,
         'is_current': doc.is_current,
         'url': signed_media_url(doc.file) if doc.file else None,
-        'folder_path': doc.folder_path,
+        # ΟΧΙ folder_path/file.path: absolute filesystem paths δεν εκτίθενται
+        # σε JSON, και το file.path δεν υπάρχει σε μη-local storage backends
         'uploaded_at': doc.uploaded_at.strftime('%d/%m/%Y %H:%M'),
         'uploaded_by': doc.uploaded_by.get_full_name() if doc.uploaded_by else None,
     }
@@ -324,6 +400,14 @@ def suggest_document_metadata(request):
     from settings.models import FilingSystemSettings
     from .services import filing, text_extraction
 
+    # RBAC: το suggest τρέχει μόνο ως προετοιμασία upload — απαιτεί το
+    # ίδιο permission με το upload (add_clientdocument)
+    from accounting.services.access import accessible_clients, check_model_perms
+    if not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403
+        )
+
     if 'file' not in request.FILES:
         return JsonResponse({'error': 'Δεν επιλέχθηκε αρχείο'}, status=400)
 
@@ -336,7 +420,9 @@ def suggest_document_metadata(request):
     client = None
     client_id = request.POST.get('client_id')
     if client_id:
-        client = ClientProfile.objects.filter(id=client_id).first()
+        # Μόνο προσβάσιμος πελάτης — όχι global lookup (θα αποκάλυπτε
+        # ΑΦΜ match/όνομα ξένου πελάτη μέσω του suggested_filename)
+        client = accessible_clients(request.user).filter(id=client_id).first()
 
     # Εξαγωγή in-memory, μόνο πρώτες σελίδες
     text, _status = text_extraction.extract_text_from_file(

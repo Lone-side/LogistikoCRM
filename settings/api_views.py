@@ -12,14 +12,9 @@ from django.http import FileResponse
 from .models import BackupSettings, BackupHistory
 from .backup_utils import create_backup, restore_backup, get_backup_list, validate_backup_file
 
+import logging
 
-class HasBackupPermission:
-    """Custom permission mixin for backup operations."""
-
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        return True
+logger = logging.getLogger(__name__)
 
 
 class BackupSettingsAPIView(APIView):
@@ -27,7 +22,10 @@ class BackupSettingsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        """Επιστρέφει τις ρυθμίσεις backup."""
+        """Επιστρέφει τις ρυθμίσεις backup (μόνο με view permission —
+        περιλαμβάνει server filesystem path)."""
+        if not request.user.has_perm('settings.view_backupsettings'):
+            return Response({'error': 'Permission denied'}, status=403)
         settings_obj = BackupSettings.get_settings()
         return Response({
             'backup_path': settings_obj.backup_path,
@@ -71,6 +69,8 @@ class BackupListAPIView(APIView):
 
     def get(self, request):
         """Επιστρέφει λίστα με τα διαθέσιμα backups."""
+        if not request.user.has_perm('settings.view_backupsettings'):
+            return Response({'error': 'Permission denied'}, status=403)
         backups = BackupHistory.objects.all().values(
             'id', 'filename', 'file_size', 'includes_db', 'includes_media',
             'created_at', 'notes', 'restored_at'
@@ -96,7 +96,7 @@ class BackupCreateAPIView(APIView):
     def post(self, request):
         """Δημιουργεί νέο backup."""
         # Staff users or users with specific permission
-        if not (request.user.is_staff or request.user.has_perm('settings.can_create_backup')):
+        if not request.user.has_perm('settings.can_create_backup'):
             return Response({'error': 'Permission denied'}, status=403)
 
         notes = request.data.get('notes', '')
@@ -117,8 +117,9 @@ class BackupCreateAPIView(APIView):
                     'file_size_display': backup.file_size_display(),
                 }
             })
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        except Exception:
+            logger.exception('Backup operation failed')
+            return Response({'error': 'Η λειτουργία backup απέτυχε'}, status=500)
 
 
 class BackupDownloadAPIView(APIView):
@@ -128,7 +129,7 @@ class BackupDownloadAPIView(APIView):
     def get(self, request, pk):
         """Download backup file."""
         # Staff users or users with specific permission
-        if not (request.user.is_staff or request.user.has_perm('settings.can_download_backup')):
+        if not request.user.has_perm('settings.can_download_backup'):
             return Response({'error': 'Permission denied'}, status=403)
 
         try:
@@ -156,7 +157,7 @@ class BackupRestoreAPIView(APIView):
     def post(self, request, pk):
         """Restore backup."""
         # Staff users or users with specific permission
-        if not (request.user.is_staff or request.user.has_perm('settings.can_restore_backup')):
+        if not request.user.has_perm('settings.can_restore_backup'):
             return Response({'error': 'Permission denied'}, status=403)
 
         mode = request.data.get('mode', 'replace')
@@ -182,8 +183,9 @@ class BackupRestoreAPIView(APIView):
                     response_data['safety_backup_id'] = result['safety_backup_id']
                 return Response(response_data)
             return Response({'error': result.get('error', 'Restore failed')}, status=500)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        except Exception:
+            logger.exception('Backup operation failed')
+            return Response({'error': 'Η λειτουργία backup απέτυχε'}, status=500)
 
 
 class BackupUploadRestoreAPIView(APIView):
@@ -194,7 +196,7 @@ class BackupUploadRestoreAPIView(APIView):
     def post(self, request):
         """Upload και restore backup."""
         # Staff users or users with specific permission
-        if not (request.user.is_staff or request.user.has_perm('settings.can_restore_backup')):
+        if not request.user.has_perm('settings.can_restore_backup'):
             return Response({'error': 'Permission denied'}, status=403)
 
         if 'file' not in request.FILES:
@@ -264,5 +266,6 @@ class BackupUploadRestoreAPIView(APIView):
                     response_data['safety_backup_id'] = result['safety_backup_id']
                 return Response(response_data)
             return Response({'error': result.get('error', 'Restore failed')}, status=500)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        except Exception:
+            logger.exception('Backup operation failed')
+            return Response({'error': 'Η λειτουργία backup απέτυχε'}, status=500)

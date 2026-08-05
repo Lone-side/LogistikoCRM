@@ -6,7 +6,7 @@ Description: Custom permissions for VoIP and internal services
 """
 import hmac
 import logging
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, DjangoModelPermissions
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -47,12 +47,11 @@ class IsVoIPMonitor(BasePermission):
             logger.info(f"IsVoIPMonitor: ✅ GRANTED - Valid API key (IP: {self._get_client_ip(request)})")
             return True
         else:
-            # Log mismatch with masked tokens for debugging
-            provided_masked = api_key[:4] + '...' if len(api_key) > 4 else '****'
-            expected_masked = expected_token[:4] + '...' if len(expected_token) > 4 else '****'
+            # ΔΕΝ καταγράφεται κανένα τμήμα του πραγματικού token (ούτε
+            # prefix) — attacker-triggerable log line
             logger.warning(
                 f"IsVoIPMonitor: ❌ DENIED - Token mismatch "
-                f"(provided: {provided_masked}, expected: {expected_masked}, IP: {self._get_client_ip(request)})"
+                f"(IP: {self._get_client_ip(request)})"
             )
             return False
 
@@ -68,28 +67,32 @@ class IsLocalRequest(BasePermission):
     """
     Permission that allows requests from localhost/loopback addresses.
 
-    Useful as a fallback for internal services running on the same machine.
+    Useful as a fallback for internal services running on the same machine
+    ΜΟΝΟ σε development. Πίσω από reverse proxy στον ίδιο server το
+    REMOTE_ADDR εξωτερικού request φαίνεται loopback, οπότε σε production
+    το fallback απενεργοποιείται (VOIP_ALLOW_LOCALHOST, default: DEBUG)
+    και απαιτείται πάντα X-API-Key.
 
-    Allowed IPs:
-    - 127.0.0.1 (IPv4 loopback)
-    - localhost (resolved)
+    Allowed IPs (μόνο με ενεργό flag):
+    - 127.0.0.0/8 (IPv4 loopback)
     - ::1 (IPv6 loopback)
-    - 0.0.0.0 (some Windows configurations)
 
     Usage in ViewSet:
         permission_classes = [IsAuthenticated | IsVoIPMonitor | IsLocalRequest]
     """
 
-    # Extended list to cover all localhost variants
     ALLOWED_IPS = {
         '127.0.0.1',      # IPv4 loopback
-        'localhost',       # hostname
         '::1',            # IPv6 loopback
-        '0.0.0.0',        # Some Windows configs
         '::ffff:127.0.0.1',  # IPv6-mapped IPv4 loopback
     }
 
     def has_permission(self, request, view):
+        if not getattr(settings, 'VOIP_ALLOW_LOCALHOST', settings.DEBUG):
+            logger.info("IsLocalRequest: ❌ DENIED - localhost fallback disabled "
+                        "(VOIP_ALLOW_LOCALHOST off) — απαιτείται X-API-Key")
+            return False
+
         remote_addr = request.META.get('REMOTE_ADDR', 'unknown')
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
 
@@ -112,6 +115,24 @@ class IsLocalRequest(BasePermission):
         return False
 
 
+class ServiceWriteOnly(BasePermission):
+    """
+    Περιορίζει τους service callers (Fritz monitor API-key, localhost) στις
+    ελάχιστες ενέργειες που χρειάζονται: δημιουργία/ενημέρωση κλήσης.
+    Χρήστες με session/JWT δεν περιορίζονται εδώ (έχουν δικό τους RBAC path).
+    """
+
+    SERVICE_ALLOWED_ACTIONS = {'create', 'update', 'partial_update', 'end_call'}
+
+    def has_permission(self, request, view):
+        # Authenticated χρήστες ΔΕΝ περνούν από το service clause — αλλιώς
+        # στο OR composition (user RBAC) | (service gate) κάθε logged-in
+        # χρήστης από loopback θα παρέκαμπτε τα model/action permissions.
+        if request.user and request.user.is_authenticated:
+            return False
+        return getattr(view, 'action', None) in self.SERVICE_ALLOWED_ACTIONS
+
+
 class CanAccessClient(BasePermission):
     """
     Object-level permission: πρόσβαση μόνο σε ανατεθειμένους πελάτες.
@@ -127,5 +148,78 @@ class CanAccessClient(BasePermission):
             return True
         client = obj if hasattr(obj, 'assigned_users') else getattr(obj, 'client', None)
         if client is None:
-            return True
+            # Fail closed: αντικείμενο χωρίς πελάτη είναι ορατό μόνο σε
+            # see-all χρήστες — αλλιώς scoped χρήστες θα έβλεπαν τα πάντα
+            # μέσω μοντέλων χωρίς .client.
+            return False
         return client.assigned_users.filter(pk=request.user.pk).exists()
+
+
+class RequiredModelPerms(BasePermission):
+    """
+    Για APIViews χωρίς queryset (stats, browse, recent): επιβάλλει τα
+    Django model permissions που δηλώνει το view στο `required_perms`,
+    π.χ. required_perms = ['accounting.view_clientdocument'].
+    """
+
+    def has_permission(self, request, view):
+        perms = getattr(view, 'required_perms', [])
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.has_perms(perms):
+            return True
+        from accounting.services.access import _audit_deny
+        _audit_deny(
+            request.user, request,
+            f'{request.method} {request.path}: λείπουν δικαιώματα {sorted(perms)}',
+        )
+        return False
+
+
+class IsSeeAllAdmin(BasePermission):
+    """
+    Superuser ή κάτοχος accounting.view_all_clients (ρόλος Διαχειριστή).
+
+    Για ενέργειες που δεν επιτρέπονται σε scoped ρόλους (π.χ. διαγραφή
+    πελάτη με όλο το ιστορικό του) — το σκέτο is_staff ΔΕΝ αρκεί, γιατί
+    ένας staff Λογιστής παραμένει scoped χρήστης χωρίς δικαίωμα διαγραφής.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user and user.is_authenticated
+            and (user.is_superuser or user.has_perm('accounting.view_all_clients'))
+        )
+
+
+class ClientModelPermissions(DjangoModelPermissions):
+    """
+    DjangoModelPermissions με απαίτηση view_* και στα GET/HEAD.
+
+    Επιβάλλει τα Django model permissions των ρόλων (setup_roles):
+    ο «Βοηθός» (read-only group) παίρνει 403 σε POST/PUT/PATCH/DELETE.
+    Superusers περνούν πάντα (has_perm=True για όλα).
+    """
+
+    perms_map = {
+        'GET': ['%(app_label)s.view_%(model_name)s'],
+        'OPTIONS': [],
+        'HEAD': ['%(app_label)s.view_%(model_name)s'],
+        'POST': ['%(app_label)s.add_%(model_name)s'],
+        'PUT': ['%(app_label)s.change_%(model_name)s'],
+        'PATCH': ['%(app_label)s.change_%(model_name)s'],
+        'DELETE': ['%(app_label)s.delete_%(model_name)s'],
+    }
+
+    def has_permission(self, request, view):
+        # Custom actions: το HTTP method δεν αντιστοιχεί πάντα στο σωστό
+        # model permission (π.χ. POST bulk-delete → delete_*, όχι add_*).
+        # Κάθε ViewSet μπορεί να δηλώσει view.action_perms = {action: [perms]}.
+        action = getattr(view, 'action', None)
+        override = getattr(view, 'action_perms', {}).get(action)
+        if override is not None:
+            if not (request.user and request.user.is_authenticated):
+                return False
+            return request.user.has_perms(override)
+        return super().has_permission(request, view)

@@ -20,6 +20,9 @@ from ..models import (
 )
 
 import logging
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +38,14 @@ def calendar_view(request):
     Προβολή ημερολογίου υποχρεώσεων με FullCalendar
     Features: Month/Week/List views, filters, color-coded status
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     today = timezone.now().date()
 
     # Get all clients for filter dropdown
-    clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+    clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
 
     # Get all obligation types for filter dropdown
     obligation_types = ObligationType.objects.filter(is_active=True).order_by('name')
@@ -50,14 +57,14 @@ def calendar_view(request):
     else:
         next_month_start = today.replace(month=today.month + 1, day=1)
 
-    month_obligations = MonthlyObligation.objects.filter(
+    month_obligations = accessible_obligations(request.user).filter(
         deadline__gte=current_month_start,
         deadline__lt=next_month_start
     )
 
     stats = {
         'pending_count': month_obligations.filter(status='pending').count(),
-        'overdue_count': MonthlyObligation.objects.filter(
+        'overdue_count': accessible_obligations(request.user).filter(
             status='pending',
             deadline__lt=today
         ).count(),
@@ -82,6 +89,9 @@ def calendar_events_api(request):
     API endpoint for FullCalendar events
     Returns JSON with obligations formatted for FullCalendar
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse({'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     # Get date range from FullCalendar
     start_str = request.GET.get('start', '')
     end_str = request.GET.get('end', '')
@@ -111,7 +121,7 @@ def calendar_events_api(request):
         end_date = start_date + timedelta(days=31)
 
     # Build query
-    queryset = MonthlyObligation.objects.filter(
+    queryset = accessible_obligations(request.user).filter(
         deadline__gte=start_date,
         deadline__lte=end_date
     ).select_related('client', 'obligation_type')

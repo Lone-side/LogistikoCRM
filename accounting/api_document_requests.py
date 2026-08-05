@@ -17,10 +17,12 @@ from django.utils import timezone
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
+
+from .permissions import ClientModelPermissions
 from rest_framework.response import Response
 
 from .models import (
-    ClientDocument, ClientProfile, DocumentRequest, DocumentRequestItem,
+    ClientDocument, DocumentRequest, DocumentRequestItem,
     SharedLink,
 )
 
@@ -111,10 +113,10 @@ class DocumentRequestCreateSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True, default='')
     send_email = serializers.BooleanField(required=False, default=True)
 
-    def validate_client_id(self, value):
-        if not ClientProfile.objects.filter(pk=value).exists():
-            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε')
-        return value
+    # ΟΧΙ validate_client_id με global existence check: θα επέτρεπε
+    # enumeration (400 «δεν βρέθηκε» vs 404 «δεν έχεις πρόσβαση»). Η ύπαρξη
+    # ΚΑΙ η πρόσβαση ελέγχονται μαζί στο view με get_accessible_client_or_404
+    # — ανύπαρκτος και μη προσβάσιμος πελάτης δίνουν πανομοιότυπο 404.
 
     def validate_items(self, value):
         valid_categories = dict(ClientDocument.CATEGORY_CHOICES)
@@ -134,22 +136,40 @@ class DocumentRequestCreateSerializer(serializers.Serializer):
 # VIEWSET
 # ============================================
 
+class MarkItemInputSerializer(serializers.Serializer):
+    """Validated input για το mark_item — αυστηρό boolean parsing."""
+    item_id = serializers.IntegerField(min_value=1)
+    is_received = serializers.BooleanField(default=True)
+
+
 class DocumentRequestViewSet(viewsets.ModelViewSet):
     """
     /api/v1/document-requests/
     Create: φτιάχνει αίτημα + SharedLink (allow_upload) + αρχικό email.
     Actions: send-reminder, mark-item.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     serializer_class = DocumentRequestSerializer
+    queryset = DocumentRequest.objects.all()
+    # Custom actions: αποστολή email θέλει send_client_email, το mark-item change
+    action_perms = {
+        # Το create φτιάχνει request + SharedLink· το send_client_email
+        # απαιτείται ΜΟΝΟ όταν send_email=true (έλεγχος μέσα στο create).
+        'create': ['accounting.add_documentrequest', 'accounting.add_sharedlink'],
+        'send_reminder': ['accounting.change_documentrequest', 'accounting.send_client_email'],
+        'mark_item': ['accounting.change_documentrequest'],
+    }
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
+        from accounting.mixins import user_sees_all_clients
         qs = (
             DocumentRequest.objects
             .select_related('client', 'shared_link', 'created_by')
             .prefetch_related('items')
         )
+        if not user_sees_all_clients(self.request.user):
+            qs = qs.filter(client__assigned_users=self.request.user).distinct()
         client_id = self.request.query_params.get('client')
         if client_id and client_id.isdigit():
             qs = qs.filter(client_id=int(client_id))
@@ -163,7 +183,27 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        client = ClientProfile.objects.get(pk=data['client_id'])
+        from accounting.services.access import (
+            check_model_perms, get_accessible_client_or_404,
+        )
+        client = get_accessible_client_or_404(request.user, data['client_id'], request=request)
+
+        # Authorization βάσει του ΖΗΤΟΥΜΕΝΟΥ action (send_email=true), όχι
+        # της τρέχουσας ύπαρξης email στον πελάτη — ο έλεγχος γίνεται ΠΡΙΝ
+        # δημιουργηθεί request ή shared link (κανένα side effect χωρίς perm).
+        # Η ΔΥΝΑΤΟΤΗΤΑ dispatch (έχει email;) κρίνεται ξεχωριστά μετά.
+        send_email_requested = data['send_email']
+        if send_email_requested and not check_model_perms(
+            request, 'accounting.send_client_email'
+        ):
+            from rest_framework.response import Response as _Resp
+            return _Resp(
+                {'error': 'Δεν έχετε δικαίωμα αποστολής email.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        # Documented συμπεριφορά: send_email=true χωρίς email πελάτη →
+        # το αίτημα δημιουργείται ΧΩΡΙΣ dispatch και email_sent=False.
+        wants_email = send_email_requested and bool((client.email or '').strip())
 
         with transaction.atomic():
             shared_link = SharedLink(
@@ -197,7 +237,7 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
             ])
 
         email_scheduled = False
-        if data['send_email'] and (client.email or '').strip():
+        if wants_email:
             self._dispatch_initial_email(doc_request.pk)
             email_scheduled = True
 
@@ -245,12 +285,6 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
                 {'error': 'Δεν υπάρχουν εκκρεμή έγγραφα'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if (doc_request.last_reminder_sent_at and
-                timezone.now() - doc_request.last_reminder_sent_at < MANUAL_REMINDER_COOLDOWN):
-            return Response(
-                {'error': 'Στάλθηκε υπενθύμιση πριν από λιγότερο από 1 ώρα'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         if not (doc_request.client.email or '').strip():
             return Response(
                 {'error': 'Ο πελάτης δεν έχει email'},
@@ -264,31 +298,60 @@ class DocumentRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Race-safe cooldown: ατομική ΔΕΣΜΕΥΣΗ του slot πριν την αποστολή
+        # (conditional UPDATE) — δύο ταυτόχρονα requests δεν στέλνουν δύο
+        # emails, γιατί μόνο το ένα κερδίζει το update.
+        from django.db.models import Q
+        now = timezone.now()
+        previous_sent_at = doc_request.last_reminder_sent_at
+        reserved = DocumentRequest.objects.filter(
+            Q(last_reminder_sent_at__isnull=True)
+            | Q(last_reminder_sent_at__lt=now - MANUAL_REMINDER_COOLDOWN),
+            pk=doc_request.pk,
+        ).update(
+            last_reminder_sent_at=now,
+            reminder_count=F('reminder_count') + 1,
+        )
+        if not reserved:
+            return Response(
+                {'error': 'Στάλθηκε υπενθύμιση πριν από λιγότερο από 1 ώρα'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        def _release_reservation():
+            # Σε αποτυχία email το cooldown/count επανέρχεται συνεπές
+            DocumentRequest.objects.filter(pk=doc_request.pk).update(
+                last_reminder_sent_at=previous_sent_at,
+                reminder_count=F('reminder_count') - 1,
+            )
+
         try:
             sent = _send_document_request_email(doc_request)
         except Exception as e:
+            _release_reservation()
             logger.error(f'Manual reminder failed for request {pk}: {e}')
             return Response(
                 {'error': 'Αποτυχία αποστολής email'},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         if not sent:
+            _release_reservation()
             return Response(
                 {'error': 'Το email δεν στάλθηκε — έλεγξε email πελάτη και σύνδεσμο'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        DocumentRequest.objects.filter(pk=doc_request.pk).update(
-            last_reminder_sent_at=timezone.now(),
-            reminder_count=F('reminder_count') + 1,
-        )
         return Response({'success': True, 'message': 'Η υπενθύμιση στάλθηκε'})
 
     @action(detail=True, methods=['post'], url_path='mark-item')
     def mark_item(self, request, pk=None):
         """Χειροκίνητο μαρκάρισμα item (π.χ. το έγγραφο ήρθε δια ζώσης)."""
         doc_request = self.get_object()
-        item_id = request.data.get('item_id')
-        is_received = bool(request.data.get('is_received', True))
+        # Πραγματικό BooleanField: "false"/"0"/false → False, άκυρη τιμή →
+        # 400 (πριν, το bool() σε raw τιμή έκανε το string "false" → True)
+        input_serializer = MarkItemInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        item_id = input_serializer.validated_data['item_id']
+        is_received = input_serializer.validated_data['is_received']
 
         item = doc_request.items.filter(pk=item_id).first()
         if item is None:

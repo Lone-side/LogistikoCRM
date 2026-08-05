@@ -52,7 +52,12 @@ from .helpers import (
 # ============================================
 # LOGGER CONFIGURATION
 # ============================================
+from accounting.services.access import mask_pii_value
+
 logger = logging.getLogger(__name__)
+
+from accounting.api_voip import _scope_by_client
+from accounting.permissions import ServiceWriteOnly
 
 
 # ============================================
@@ -64,12 +69,18 @@ def voip_dashboard(request):
     """
     Modern VoIP Dashboard with real-time updates
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_voipcall'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
     # Get recent calls with optimized query
-    calls = VoIPCall.objects.select_related('client').order_by('-started_at')[:50]
+    calls = _scope_by_client(
+        VoIPCall.objects.select_related('client'), request.user
+    ).order_by('-started_at')[:50]
 
     # Calculate statistics
     today = timezone.now().date()
-    stats = VoIPCall.objects.aggregate(
+    stats = _scope_by_client(VoIPCall.objects.all(), request.user).aggregate(
         total=Count('id'),
         missed=Count('id', filter=Q(status='missed')),
         completed=Count('id', filter=Q(status='completed')),
@@ -162,7 +173,7 @@ def fritz_webhook(request):
                            (f" - {client.eponimia}" if client else " - Άγνωστος")
             )
 
-            logger.info(f"VoIP: Created call {call.call_id} from {call.phone_number}")
+            logger.info(f"VoIP: Created call {call.call_id} from {mask_pii_value(call.phone_number)}")
 
             return JsonResponse({
                 'success': True,
@@ -228,7 +239,7 @@ def fritz_webhook(request):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         logger.error(f"Fritz webhook error: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': 'Παρουσιάστηκε σφάλμα'}, status=500)
 
 
 @staff_member_required
@@ -238,9 +249,14 @@ def voip_calls_api(request):
     """
     Real-time API for VoIP calls with AJAX support
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_voipcall'):
+        return JsonResponse({'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     try:
         # Get recent calls
-        calls = VoIPCall.objects.select_related('client').order_by('-started_at')[:30]
+        calls = _scope_by_client(
+            VoIPCall.objects.select_related('client'), request.user
+        ).order_by('-started_at')[:30]
 
         # Sort by priority (missed first)
         calls = sorted(calls, key=lambda x: (
@@ -255,14 +271,16 @@ def voip_calls_api(request):
             'success': True,
             'calls': data,
             'timestamp': timezone.now().isoformat(),
-            'total_missed': VoIPCall.objects.filter(status='missed').count(),
+            'total_missed': _scope_by_client(
+                VoIPCall.objects.all(), request.user
+            ).filter(status='missed').count(),
         })
 
     except Exception as e:
         logger.error(f"Error in voip_calls_api: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -271,7 +289,15 @@ def voip_calls_api(request):
 def voip_call_update(request, call_id):
     """Update VoIP call via AJAX"""
     try:
-        call = VoIPCall.objects.select_related('client').get(id=call_id)
+        from accounting.services.access import check_model_perms
+        if not check_model_perms(request, 'accounting.change_voipcall'):
+            return JsonResponse(
+                {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=403,
+            )
+        call = _scope_by_client(
+            VoIPCall.objects.select_related('client'), request.user
+        ).get(id=call_id)
     except VoIPCall.DoesNotExist:
         return JsonResponse({
             'success': False,
@@ -342,8 +368,15 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     - Localhost requests (127.0.0.1, ::1) for same-machine services
     """
     queryset = VoIPCall.objects.all()
+
+    def get_queryset(self):
+        return _scope_by_client(super().get_queryset(), self.request.user)
     serializer_class = VoIPCallSerializer
-    permission_classes = [permissions.IsAdminUser | IsVoIPMonitor | IsLocalRequest]
+    # Service callers (monitor/localhost): ΜΟΝΟ create/update/end_call
+    permission_classes = [
+        permissions.IsAdminUser
+        | ((IsVoIPMonitor | IsLocalRequest) & ServiceWriteOnly)
+    ]
     filterset_fields = ['direction', 'status', 'client', 'phone_number']
     search_fields = ['phone_number', 'client__eponimia', 'notes']
     ordering_fields = ['started_at', 'duration_seconds']
@@ -410,7 +443,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
                     description=f'Auto-created ticket #{ticket.id} for missed call'
                 )
 
-                logger.info(f"Created ticket #{ticket.id} for missed call from {voip_call.phone_number}")
+                logger.info(f"Created ticket #{ticket.id} for missed call {voip_call.call_id}")
 
             except Exception as e:
                 logger.error(f"Failed to create ticket for call {voip_call.id}: {e}")
@@ -459,7 +492,7 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error ending call: {e}", exc_info=True)
             return Response(
-                {'error': str(e)},
+                {'error': 'Παρουσιάστηκε σφάλμα'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -522,62 +555,6 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
             logger.error(f"Failed to send email: {e}")
 
 
-class VoIPCallsListView(ListView):
-    """
-    Django Class-Based View for VoIP calls listing
-    Alternative to the function-based voip_dashboard
-    """
-    model = VoIPCall
-    template_name = 'accounting/voip_calls_list.html'
-    context_object_name = 'calls'
-    paginate_by = 50
-
-    def get_queryset(self):
-        """Get filtered and sorted calls"""
-        queryset = VoIPCall.objects.select_related('client').all()
-
-        # Apply filters from GET parameters
-        status_filter = self.request.GET.get('status')
-        direction = self.request.GET.get('direction')
-        search = self.request.GET.get('search')
-
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
-        if direction:
-            queryset = queryset.filter(direction=direction)
-        if search:
-            queryset = queryset.filter(
-                Q(phone_number__icontains=search) |
-                Q(client__eponimia__icontains=search) |
-                Q(notes__icontains=search)
-            )
-
-        return queryset.order_by('-started_at')
-
-    def get_context_data(self, **kwargs):
-        """Add statistics to context"""
-        context = super().get_context_data(**kwargs)
-
-        # Calculate stats
-        context['total'] = VoIPCall.objects.count()
-        context['missed'] = VoIPCall.objects.filter(status='missed').count()
-        context['completed'] = VoIPCall.objects.filter(status='completed').count()
-
-        if context['total'] > 0:
-            context['success_rate'] = round(
-                (context['completed'] / context['total']) * 100
-            )
-        else:
-            context['success_rate'] = 0
-
-        # Add filter values
-        context['current_status'] = self.request.GET.get('status', '')
-        context['current_direction'] = self.request.GET.get('direction', '')
-        context['current_search'] = self.request.GET.get('search', '')
-
-        return context
-
-
 class VoIPCallLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Read-only ViewSet for call logs
@@ -599,36 +576,39 @@ def voip_statistics(request):
     """
     Advanced statistics για VoIP calls
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_voipcall'):
+        return JsonResponse({'error': 'Δεν έχετε δικαίωμα.'}, status=403)
     try:
         today = timezone.now().date()
         week_ago = today - timedelta(days=7)
 
         stats = {
             'today': {
-                'total': VoIPCall.objects.filter(started_at__date=today).count(),
-                'missed': VoIPCall.objects.filter(started_at__date=today, status='missed').count(),
-                'completed': VoIPCall.objects.filter(started_at__date=today, status='completed').count(),
+                'total': _scope_by_client(VoIPCall.objects.all(), request.user).filter(started_at__date=today).count(),
+                'missed': _scope_by_client(VoIPCall.objects.all(), request.user).filter(started_at__date=today, status='missed').count(),
+                'completed': _scope_by_client(VoIPCall.objects.all(), request.user).filter(started_at__date=today, status='completed').count(),
             },
             'week': {
-                'total': VoIPCall.objects.filter(started_at__date__gte=week_ago).count(),
-                'missed': VoIPCall.objects.filter(started_at__date__gte=week_ago, status='missed').count(),
-                'completed': VoIPCall.objects.filter(started_at__date__gte=week_ago, status='completed').count(),
+                'total': _scope_by_client(VoIPCall.objects.all(), request.user).filter(started_at__date__gte=week_ago).count(),
+                'missed': _scope_by_client(VoIPCall.objects.all(), request.user).filter(started_at__date__gte=week_ago, status='missed').count(),
+                'completed': _scope_by_client(VoIPCall.objects.all(), request.user).filter(started_at__date__gte=week_ago, status='completed').count(),
             },
             'by_client': list(
-                VoIPCall.objects.filter(client__isnull=False)
+                _scope_by_client(VoIPCall.objects.all(), request.user).filter(client__isnull=False)
                 .values('client__eponimia')
                 .annotate(count=Count('id'))
                 .order_by('-count')[:10]
             ),
             'by_resolution': list(
-                VoIPCall.objects.values('resolution')
+                _scope_by_client(VoIPCall.objects.all(), request.user).values('resolution')
                 .annotate(count=Count('id'))
                 .order_by('-count')
             ),
         }
 
         # Calculate average duration
-        durations = VoIPCall.objects.filter(
+        durations = _scope_by_client(VoIPCall.objects.all(), request.user).filter(
             status='completed',
             duration_seconds__gt=0
         ).values_list('duration_seconds', flat=True)[:100]
@@ -647,12 +627,18 @@ def voip_statistics(request):
 
     except Exception as e:
         logger.error(f"Error generating statistics: {e}")
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': 'Παρουσιάστηκε σφάλμα'}, status=500)
 
 
 @staff_member_required
 @require_POST
 def voip_bulk_action(request):
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_voipcall'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
     """
     Bulk update multiple VoIP calls
     """
@@ -672,7 +658,7 @@ def voip_bulk_action(request):
         updated = 0
         if action == 'resolution':
             if value in ['pending', 'closed', 'follow_up', '']:
-                updated = VoIPCall.objects.filter(id__in=call_ids).update(resolution=value)
+                updated = _scope_by_client(VoIPCall.objects.all(), request.user).filter(id__in=call_ids).update(resolution=value)
             else:
                 return JsonResponse({
                     'success': False,
@@ -681,7 +667,7 @@ def voip_bulk_action(request):
 
         elif action == 'status':
             if value in ['active', 'completed', 'missed', 'failed']:
-                updated = VoIPCall.objects.filter(id__in=call_ids).update(status=value)
+                updated = _scope_by_client(VoIPCall.objects.all(), request.user).filter(id__in=call_ids).update(status=value)
             else:
                 return JsonResponse({
                     'success': False,
@@ -689,7 +675,13 @@ def voip_bulk_action(request):
                 }, status=400)
 
         elif action == 'delete':
-            updated = VoIPCall.objects.filter(id__in=call_ids).delete()[0]
+            # Η διαγραφή απαιτεί delete_voipcall (όχι μόνο change)
+            if not check_model_perms(request, 'accounting.delete_voipcall'):
+                return JsonResponse(
+                    {'success': False, 'error': 'Δεν έχετε δικαίωμα διαγραφής κλήσεων.'},
+                    status=403,
+                )
+            updated = _scope_by_client(VoIPCall.objects.all(), request.user).filter(id__in=call_ids).delete()[0]
 
         else:
             return JsonResponse({
@@ -715,7 +707,7 @@ def voip_bulk_action(request):
         logger.error(f"Error in bulk action: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -724,6 +716,11 @@ def voip_export_csv(request):
     """
     Export VoIP calls to CSV
     """
+    # Τηλέφωνα/emails/επωνυμίες πελατών — θέλει το ξεχωριστό export permission
+    if not request.user.has_perm('accounting.export_clientprofile'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα εξαγωγής στοιχείων πελατών.'}, status=403
+        )
     try:
         # Create response
         response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -751,7 +748,9 @@ def voip_export_csv(request):
         ])
 
         # Get filtered calls
-        calls_query = VoIPCall.objects.select_related('client').all()
+        calls_query = _scope_by_client(
+            VoIPCall.objects.select_related('client').all(), request.user
+        )
 
         # Apply filters if provided
         status_filter = request.GET.get('status')
@@ -794,4 +793,4 @@ def voip_export_csv(request):
 
     except Exception as e:
         logger.error(f"Error exporting CSV: {e}", exc_info=True)
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({'success': False, 'error': 'Παρουσιάστηκε σφάλμα'}, status=500)

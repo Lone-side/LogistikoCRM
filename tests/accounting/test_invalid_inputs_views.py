@@ -20,9 +20,10 @@ from accounting.views.obligations import bulk_complete_view
 class InvalidInputsBase(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
+        from tests.utils.helpers import grant_accounting_model_perms
+        cls.staff = grant_accounting_model_perms(User.objects.create_user(
             username='staff_invalid', password='pass', is_staff=True,
-        )
+        ))
         cls.client_profile = ClientProfile.objects.create(
             afm='123456783',
             eponimia='ΠΕΛΑΤΗΣ ΤΕΣΤ',

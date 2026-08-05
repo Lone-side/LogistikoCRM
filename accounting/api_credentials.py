@@ -15,10 +15,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from common.models import AuditLog
+from accounting.services.access import mask_pii_value
 
 from .mixins import ClientScopedQuerysetMixin
-from .models import ClientCredential, ClientProfile
-from .permissions import CanAccessClient
+from .models import ClientCredential
+from .permissions import CanAccessClient, ClientModelPermissions
 
 
 class ClientCredentialSerializer(serializers.ModelSerializer):
@@ -76,7 +77,12 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
 
     serializer_class = ClientCredentialSerializer
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    # Το reveal είναι POST αλλά δεν είναι "add" — αρκεί view_clientcredential,
+    # το ειδικό view_client_credential_secret ελέγχεται μέσα στο action
+    action_perms = {
+        'reveal': ['accounting.view_clientcredential'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = None
 
@@ -88,10 +94,18 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         return super().get_queryset()
 
     def _get_client(self):
-        from django.shortcuts import get_object_or_404
-        client = get_object_or_404(ClientProfile, pk=self.kwargs['client_pk'])
-        self.check_object_permissions(self.request, client)
-        return client
+        # Scoped lookup — ΟΧΙ global get_object_or_404 + permission check:
+        # εκείνο έδινε 403 για υπαρκτό ξένο πελάτη και 404 για ανύπαρκτο,
+        # άρα client-ID enumeration. Τώρα: πανομοιότυπο 404 και στα δύο.
+        from accounting.services.access import get_accessible_client_or_404
+        return get_accessible_client_or_404(
+            self.request.user, self.kwargs['client_pk'], request=self.request,
+        )
+
+    def list(self, request, *args, **kwargs):
+        # 404 για ξένο/ανύπαρκτο πελάτη — όχι κενή λίστα που «δουλεύει»
+        self._get_client()
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         client = self._get_client()
@@ -124,6 +138,14 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         )
         instance.delete()
 
+    def get_throttles(self):
+        # Ξεχωριστό, αυστηρό όριο μόνο για την αποκάλυψη κωδικών
+        if getattr(self, 'action', None) == 'reveal':
+            from rest_framework.throttling import ScopedRateThrottle
+            self.throttle_scope = 'credential_reveal'
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
+
     @action(detail=True, methods=['post'])
     def reveal(self, request, client_pk=None, pk=None):
         """Αποκάλυψη secret — απαιτεί ειδικό permission, πάντα με audit."""
@@ -139,11 +161,39 @@ class ClientCredentialViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             )
 
         credential = self.get_object()
-        # Το audit γράφεται ΠΡΙΝ επιστραφεί η τιμή
+
+        # Αποκρυπτογράφηση ΠΡΙΝ το success audit — αποτυχία δεν πρέπει να
+        # μοιάζει με «δεν υπάρχει κωδικός» ούτε να καταγράφεται ως επιτυχία
+        secret = credential.secret
+        if credential.has_secret and not secret:
+            AuditLog.log(
+                user=request.user, action='view', obj=credential,
+                description=f'ΑΠΟΤΥΧΙΑ αποκρυπτογράφησης κωδικού '
+                            f'{credential.get_service_display()} '
+                            f'για πελάτη id={credential.client_id} '
+                            f'/ ΑΦΜ {mask_pii_value(credential.client.afm)} — έλεγξε τα '
+                            f'DATA_ENCRYPTION_KEY_* (λάθος/χαμένο κλειδί;)',
+                severity='high', request=request,
+            )
+            return Response(
+                {'detail': 'Αποτυχία αποκρυπτογράφησης κωδικού. '
+                           'Ειδοποιήστε τον διαχειριστή (encryption keys).'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Sanitize: χωρίς newlines/control chars στο audit, μασκαρισμένο ΑΦΜ
+        reason = str(request.data.get('reason', '') or '')
+        reason = ''.join(ch for ch in reason if ch.isprintable()).strip()[:200]
         AuditLog.log(
             user=request.user, action='view', obj=credential,
             description=f'Αποκάλυψη κωδικού {credential.get_service_display()} '
-                        f'για πελάτη {credential.client.afm}',
+                        f'για πελάτη id={credential.client_id} '
+                        f'/ ΑΦΜ {mask_pii_value(credential.client.afm)}'
+                        + (f' — αιτιολογία: {reason}' if reason else ''),
             severity='high', request=request,
         )
-        return Response({'secret': credential.secret or ''})
+        response = Response({'secret': secret or ''})
+        # Το secret δεν πρέπει να αποθηκευτεί σε caches/history
+        response['Cache-Control'] = 'no-store, private'
+        response['Pragma'] = 'no-cache'
+        return response

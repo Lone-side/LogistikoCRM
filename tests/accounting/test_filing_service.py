@@ -43,6 +43,11 @@ class FilingServiceBase(TestCase):
             doy="Α' ΑΘΗΝΩΝ",
         )
         self.filing_settings = FilingSystemSettings.get_settings()
+        # Γύρος 17: το versioning/replace απαιτεί πλέον permissions —
+        # τα tests εδώ ελέγχουν τη μηχανική, όχι το matrix
+        from django.contrib.auth import get_user_model
+        self.doc_user = get_user_model().objects.create_superuser(
+            f'filing_su_{self.id().split(".")[-1][:20]}', 'su@t.com', 'x')
 
 
 class ValidateUploadTest(FilingServiceBase):
@@ -70,7 +75,8 @@ class ValidateUploadTest(FilingServiceBase):
         self.filing_settings.save()
         with self.assertRaises(ValidationError):
             filing.validate_upload(SimpleUploadedFile('data.xlsx', b'PK'))
-        filing.validate_upload(SimpleUploadedFile('doc.pdf', b'%PDF'))
+        filing.validate_upload(SimpleUploadedFile(
+            'doc.pdf', b'%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n'))
 
 
 class GetDocumentDirTest(FilingServiceBase):
@@ -122,6 +128,7 @@ class EnsureFoldersTest(FilingServiceBase):
 
 class CreateClientDocumentTest(FilingServiceBase):
     def _upload(self, name='test.pdf', **kwargs):
+        kwargs.setdefault('user', self.doc_user)
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile(name, b'%PDF-1.4 test'),
@@ -200,7 +207,15 @@ class ObligationUploadEndpointTest(TestCase):
     def test_non_pdf_allowed_types_accepted(self):
         # Το παλιό endpoint δεχόταν μόνο PDF — τώρα ισχύουν οι ρυθμίσεις
         url = reverse('accounting:obligation_upload_file', args=[self.obligation.id])
-        resp = self.client.post(url, {'file': SimpleUploadedFile('data.xlsx', b'PK')})
+        # Γύρος 20: απαιτείται ΠΡΑΓΜΑΤΙΚΟ OOXML container (σκέτο 'PK'
+        # απορρίπτεται πλέον ως κατεστραμμένο)
+        import io as _io, zipfile as _zip
+        _buf = _io.BytesIO()
+        with _zip.ZipFile(_buf, 'w') as _zf:
+            _zf.writestr('[Content_Types].xml', '<?xml version="1.0"?><T/>')
+            _zf.writestr('xl/workbook.xml', '<?xml version="1.0"?><w/>')
+        resp = self.client.post(
+            url, {'file': SimpleUploadedFile('data.xlsx', _buf.getvalue())})
         self.assertEqual(resp.status_code, 200, resp.content)
 
     def test_download_rejects_traversal(self):
@@ -218,6 +233,7 @@ class AutoNamingTest(FilingServiceBase):
     """Ο Κανόνας Ονοματολογίας των ρυθμίσεων εφαρμόζεται στο upload."""
 
     def _upload(self, name='Τιμολόγιο (3).pdf', **kwargs):
+        kwargs.setdefault('user', self.doc_user)
         return filing.create_client_document(
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile(name, b'%PDF-1.4'),
@@ -267,7 +283,7 @@ class AutoNamingTest(FilingServiceBase):
             client=self.client_profile,
             uploaded_file=SimpleUploadedFile('νέο.pdf', b'%PDF-1.4'),
             category='vat', year=2026, month=6,
-            on_existing='replace',
+            on_existing='replace', user=self.doc_user,
         )
         self.assertEqual(doc2.version, 1)
         self.assertTrue(doc2.is_current)

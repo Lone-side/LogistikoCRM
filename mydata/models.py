@@ -1014,6 +1014,11 @@ class VATPeriodResult(models.Model):
         verbose_name_plural = 'Αποτελέσματα ΦΠΑ Περιόδων'
         ordering = ['-year', '-period']
         unique_together = [['client', 'period_type', 'year', 'period']]
+        permissions = [
+            # Εξωτερικό side effect (myDATA sync) — ξεχωριστό από το απλό
+            # change_vatperiodresult (τοπικός υπολογισμός)
+            ('sync_vatdata', 'Μπορεί να κάνει sync δεδομένων ΦΠΑ από myDATA'),
+        ]
         indexes = [
             models.Index(fields=['client', 'year', 'period']),
             models.Index(fields=['client', 'period_type', '-year', '-period']),

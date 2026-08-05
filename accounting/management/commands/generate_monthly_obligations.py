@@ -261,7 +261,7 @@ class Command(BaseCommand):
                     
             except Exception as e:
                 self.errors.append(f'{client.eponimia} - {obligation_type.name}: {str(e)}')
-                logger.error(f"Error processing {client.afm}: {str(e)}")
+                logger.error(f"Error processing client id={client.pk}: {str(e)}")
     
     def show_progress(self, current, total, message=''):
         """Show progress bar"""

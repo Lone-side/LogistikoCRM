@@ -14,6 +14,7 @@ from datetime import datetime
 from django.urls import reverse
 from django.utils.html import format_html, escape
 from django.contrib import admin
+from .scoping import ClientScopedAdminMixin
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.contrib.admin.utils import get_deleted_objects
@@ -30,7 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 @admin.register(VoIPCall)
-class VoIPCallAdmin(admin.ModelAdmin):
+class VoIPCallAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    allow_unassigned = True
     list_select_related = ('client',)
 
     """Complete VoIP Admin"""
@@ -206,6 +208,10 @@ class VoIPCallAdmin(admin.ModelAdmin):
         logger.info(f"{request.user} marked {updated} calls as pending")
     mark_as_pending.short_description = '⏳ Εκκρεμεί'
 
+    def has_export_permission(self, request):
+        # Τηλέφωνα + επωνυμίες πελατών — θέλει το ξεχωριστό export permission
+        return request.user.has_perm('accounting.export_clientprofile')
+
     def export_calls_csv(self, request, queryset):
         """Export to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
@@ -228,6 +234,7 @@ class VoIPCallAdmin(admin.ModelAdmin):
         logger.info(f"{request.user} exported {queryset.count()} calls to CSV")
         return response
     export_calls_csv.short_description = '📊 Export CSV'
+    export_calls_csv.allowed_permissions = ('export',)
 
     # Bulk delete actions
     def delete_with_tickets(self, request, queryset):
@@ -258,6 +265,17 @@ class VoIPCallAdmin(admin.ModelAdmin):
     delete_without_tickets.short_description = 'Διαγραφή χωρίς tickets'
 
     # Custom delete view
+    def save_model(self, request, obj, form, change):
+        from django.db import transaction
+        from accounting.services.call_assignment import change_call_client
+        with transaction.atomic():
+            super().save_model(request, obj, form, change)
+            if change and 'client' in getattr(form, 'changed_data', []):
+                # Κεντρικό service: atomic invariant κλήσης-ticket (bound
+                # mismatch/unassign το έχει ήδη απορρίψει το clean() στη
+                # φόρμα — εδώ γίνεται το claim του unassigned ticket)
+                change_call_client(obj, obj.client, user=request.user)
+
     def delete_view(self, request, object_id, extra_context=None):
         obj = self.get_object(request, object_id)
         extra_context = extra_context or {}
@@ -272,7 +290,9 @@ class VoIPCallAdmin(admin.ModelAdmin):
 
 
 @admin.register(VoIPCallLog)
-class VoIPCallLogAdmin(admin.ModelAdmin):
+class VoIPCallLogAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    client_scope_field = "call__client"
+    allow_unassigned = True
     """VoIP Call Logs - Audit Trail"""
 
     list_display = ['call_link', 'action_badge', 'description_short', 'created_at_formatted']
@@ -324,7 +344,8 @@ class VoIPCallLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(Ticket)
-class TicketAdmin(admin.ModelAdmin):
+class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
+    allow_unassigned = True
     list_select_related = ('client', 'call', 'assigned_to')
 
     """Professional Ticket Admin"""
@@ -522,6 +543,10 @@ class TicketAdmin(admin.ModelAdmin):
         self.message_user(request, f'🔒 {updated} tickets closed')
     mark_as_closed.short_description = '🔒 Closed'
 
+    def has_export_permission(self, request):
+        # Επωνυμίες πελατών στο CSV — θέλει το ξεχωριστό export permission
+        return request.user.has_perm('accounting.export_clientprofile')
+
     def export_tickets_csv(self, request, queryset):
         """Export to CSV"""
         response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
@@ -545,6 +570,21 @@ class TicketAdmin(admin.ModelAdmin):
         self.message_user(request, f'✅ Εξήχθησαν {queryset.count()} tickets')
         return response
     export_tickets_csv.short_description = '📊 Export CSV'
+    export_tickets_csv.allowed_permissions = ('export',)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Το call FK περιορίζεται σε κλήσεις προσβάσιμων πελατών ή
+        # unassigned — scoped χρήστης δεν βλέπει/επιλέγει ξένες κλήσεις
+        if db_field.name == 'call':
+            from django.db.models import Q
+            from accounting.mixins import user_sees_all_clients
+            from accounting.services.access import accessible_clients
+            if not user_sees_all_clients(request.user):
+                kwargs['queryset'] = VoIPCall.objects.filter(
+                    Q(client__isnull=True)
+                    | Q(client__in=accessible_clients(request.user))
+                )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
         if not change and not obj.assigned_to:

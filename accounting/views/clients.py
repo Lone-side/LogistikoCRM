@@ -20,6 +20,9 @@ from ..serializers import ClientDocumentSerializer
 from .helpers import _calculate_monthly_stats
 
 import logging
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +32,15 @@ def client_detail_view(request, client_id):
     """
     Comprehensive client view with all obligations and analytics
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_clientprofile'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα πρόσβασης.')
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
     now = timezone.now()
 
     # All obligations for this client
-    all_obligations = MonthlyObligation.objects.filter(
+    all_obligations = accessible_obligations(request.user).filter(
         client=client
     ).select_related('obligation_type').order_by('-deadline')
 
@@ -75,7 +82,7 @@ def client_detail_view(request, client_id):
     ).select_related('obligation_type')
 
     # Client documents
-    documents = ClientDocument.objects.filter(
+    documents = accessible_documents(request.user).filter(
         client=client
     ).order_by('-uploaded_at')
 
@@ -100,8 +107,8 @@ class ClientDocumentViewSet(viewsets.ModelViewSet):
     serializer_class = ClientDocumentSerializer
 
     def get_queryset(self):
-        # Ο serializer διαβάζει client/obligation/uploaded_by ανά έγγραφο
-        queryset = super().get_queryset().select_related(
+        # RBAC + ο serializer διαβάζει client/obligation/uploaded_by ανά έγγραφο
+        queryset = accessible_documents(self.request.user).select_related(
             'client', 'obligation', 'obligation__obligation_type', 'uploaded_by'
         )
         client_id = self.request.query_params.get('client')

@@ -48,7 +48,6 @@ from .voip import (
     voip_export_csv,
     # Class-based views
     VoIPCallViewSet,
-    VoIPCallsListView,
     VoIPCallLogViewSet,
 )
 
@@ -165,7 +164,6 @@ __all__ = [
     'voip_export_csv',
     # VoIP class-based views
     'VoIPCallViewSet',
-    'VoIPCallsListView',
     'VoIPCallLogViewSet',
     # Dashboard views
     'dashboard_view',

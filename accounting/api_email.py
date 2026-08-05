@@ -5,6 +5,8 @@ Author: Claude
 Description: REST API for email sending - templates, send, obligation notifications
 """
 
+import logging
+
 from rest_framework import status, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -16,6 +18,14 @@ from .models import (
     EmailSettings
 )
 from .services.email_service import EmailService
+from .services.access import (
+    accessible_clients, accessible_obligations, check_model_perms,
+    require_model_perms,
+)
+
+PERM_DENIED = {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================
@@ -96,12 +106,8 @@ class SendEmailSerializer(serializers.Serializer):
     )
 
     def validate_client_id(self, value):
-        try:
-            client = ClientProfile.objects.get(id=value)
-            if not client.email:
-                raise serializers.ValidationError('Ο πελάτης δεν έχει email.')
-        except ClientProfile.DoesNotExist:
-            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        # Χωρίς global lookup εδώ — θα αποκάλυπτε την ύπαρξη ξένου πελάτη.
+        # Το scoped fetch + έλεγχος email γίνεται στο view (404 αν εκτός ανάθεσης).
         return value
 
     def validate_template_id(self, value):
@@ -129,12 +135,7 @@ class SendObligationNoticeSerializer(serializers.Serializer):
     )
 
     def validate_obligation_id(self, value):
-        try:
-            obligation = MonthlyObligation.objects.get(id=value)
-            if not obligation.client.email:
-                raise serializers.ValidationError('Ο πελάτης δεν έχει email.')
-        except MonthlyObligation.DoesNotExist:
-            raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
+        # Χωρίς global lookup — scoped έλεγχος στο view (404 αν εκτός ανάθεσης)
         return value
 
 
@@ -176,11 +177,15 @@ def email_templates(request):
     Create a new email template
     """
     if request.method == 'GET':
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         templates = EmailTemplate.objects.filter(is_active=True).order_by('name')
         serializer = EmailTemplateSerializer(templates, many=True)
         return Response(serializer.data)
 
     elif request.method == 'POST':
+        if not check_model_perms(request, 'accounting.add_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailTemplateSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -202,7 +207,19 @@ def email_template_detail(request, template_id):
     Soft-delete an email template (set is_active=False)
     """
     try:
-        template = EmailTemplate.objects.get(id=template_id)
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα χρήσης προτύπων email.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True
+        ).first()
+        if template is None:
+            return Response(
+                {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
     except EmailTemplate.DoesNotExist:
         return Response(
             {'error': 'Το πρότυπο δεν βρέθηκε.'},
@@ -210,6 +227,8 @@ def email_template_detail(request, template_id):
         )
 
     if request.method == 'GET':
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         if not template.is_active:
             return Response(
                 {'error': 'Το πρότυπο δεν βρέθηκε.'},
@@ -222,6 +241,8 @@ def email_template_detail(request, template_id):
         })
 
     elif request.method == 'PUT':
+        if not check_model_perms(request, 'accounting.change_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailTemplateSerializer(template, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -229,6 +250,8 @@ def email_template_detail(request, template_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'DELETE':
+        if not check_model_perms(request, 'accounting.delete_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         # Soft delete - set is_active=False
         template.is_active = False
         template.save(update_fields=['is_active'])
@@ -237,6 +260,7 @@ def email_template_detail(request, template_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_emailtemplate', 'accounting.view_clientprofile')
 def preview_email(request):
     """
     POST /api/v1/email/preview/
@@ -270,8 +294,13 @@ def preview_email(request):
     client = None
 
     if obligation_id:
+        if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα προβολής υποχρεώσεων.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         try:
-            obligation = MonthlyObligation.objects.get(id=obligation_id)
+            obligation = accessible_obligations(request.user).get(id=obligation_id)
             client = obligation.client
         except MonthlyObligation.DoesNotExist:
             return Response(
@@ -280,7 +309,7 @@ def preview_email(request):
             )
     elif client_id:
         try:
-            client = ClientProfile.objects.get(id=client_id)
+            client = accessible_clients(request.user).get(id=client_id)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Ο πελάτης δεν βρέθηκε.'},
@@ -303,6 +332,8 @@ def preview_email(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.send_client_email',
+                     'accounting.view_clientprofile')
 def send_email(request):
     """
     POST /api/v1/email/send/
@@ -327,21 +358,40 @@ def send_email(request):
     template_id = serializer.validated_data.get('template_id')
     attachment_ids = serializer.validated_data.get('attachment_ids', [])
 
-    client = ClientProfile.objects.get(id=client_id)
+    client = accessible_clients(request.user).filter(id=client_id).first()
+    if client is None:
+        return Response({'error': 'Ο πελάτης δεν βρέθηκε.'}, status=status.HTTP_404_NOT_FOUND)
+    if not client.email:
+        return Response({'error': 'Ο πελάτης δεν έχει email.'}, status=status.HTTP_400_BAD_REQUEST)
     template = None
     if template_id:
-        template = EmailTemplate.objects.get(id=template_id)
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα χρήσης προτύπων email.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True
+        ).first()
+        if template is None:
+            return Response(
+                {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-    # Get attachments
+    # Get attachments — αυστηρός resolver (view_clientdocument, same client,
+    # is_current, exact-set· άκυρο/ξένο ID → απόρριψη ΟΛΟΥ του request)
+    from accounting.services.access import (
+        AttachmentResolutionError, resolve_email_attachment_documents,
+    )
     attachments = []
     if attachment_ids:
-        documents = ClientDocument.objects.filter(
-            id__in=attachment_ids,
-            client=client
-        )
-        for doc in documents:
-            if doc.file:
-                attachments.append(doc.file)
+        try:
+            documents = resolve_email_attachment_documents(
+                request, client, attachment_ids)
+        except AttachmentResolutionError as e:
+            return Response({'error': e.message}, status=e.status_code)
+        attachments = [doc.file for doc in documents if doc.file]
 
     # Send email
     success, result = EmailService.send_email(
@@ -364,12 +414,15 @@ def send_email(request):
         return Response({
             'success': False,
             'message': 'Αποτυχία αποστολής email.',
-            'error': str(result)
+            'error': 'Η αποστολή email απέτυχε.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.send_client_email',
+                     'accounting.view_monthlyobligation',
+                     'accounting.view_clientprofile')
 def send_obligation_notice(request):
     """
     POST /api/v1/email/send-obligation-notice/
@@ -394,12 +447,22 @@ def send_obligation_notice(request):
     include_attachment = serializer.validated_data['include_attachment']
     attachment_ids = serializer.validated_data.get('attachment_ids', [])
 
-    obligation = MonthlyObligation.objects.get(id=obligation_id)
+    obligation = accessible_obligations(request.user).filter(id=obligation_id).first()
+    if obligation is None:
+        return Response({'error': 'Η υποχρέωση δεν βρέθηκε.'}, status=status.HTTP_404_NOT_FOUND)
     client = obligation.client
+    if not client.email:
+        return Response({'error': 'Ο πελάτης δεν έχει email.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Get template
+    # Get template — permission + ασφαλές lookup (invalid/inactive → 404)
     if template_id:
-        template = EmailTemplate.objects.get(id=template_id, is_active=True)
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True).first()
+        if template is None:
+            return Response({'error': 'Το πρότυπο δεν βρέθηκε.'},
+                            status=status.HTTP_404_NOT_FOUND)
     else:
         # Find appropriate template based on type
         template = EmailTemplate.get_template_for_obligation(obligation)
@@ -416,20 +479,27 @@ def send_obligation_notice(request):
         user=request.user
     )
 
-    # Collect attachments - use new unified document system
+    # Collect attachments - use new unified document system.
+    # Απαιτείται view_clientdocument· τα attachment_ids πρέπει να είναι
+    # προσβάσιμα, current και ΤΟΥ ΙΔΙΟΥ πελάτη — αλλιώς όλο το request
+    # απορρίπτεται ΠΡΙΝ από αποστολή.
     attachments = []
+    if include_attachment or attachment_ids:
+        if not check_model_perms(request, 'accounting.view_clientdocument'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
     if include_attachment:
-        # Get attachments from obligation's documents
         email_attachments = obligation.get_email_attachments()
         attachments.extend(email_attachments)
 
-    # Also include any specifically selected documents
     if attachment_ids:
-        documents = ClientDocument.objects.filter(
-            id__in=attachment_ids,
-            client=client,
-            is_current=True
+        from accounting.services.access import (
+            AttachmentResolutionError, resolve_email_attachment_documents,
         )
+        try:
+            documents = resolve_email_attachment_documents(
+                request, client, attachment_ids)
+        except AttachmentResolutionError as e:
+            return Response({'error': e.message}, status=e.status_code)
         for doc in documents:
             if doc.file and doc.file.path not in attachments:
                 attachments.append(doc.file.path)
@@ -456,7 +526,7 @@ def send_obligation_notice(request):
         return Response({
             'success': False,
             'message': 'Αποτυχία αποστολής email.',
-            'error': str(result)
+            'error': 'Η αποστολή email απέτυχε.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -466,6 +536,7 @@ def send_obligation_notice(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_monthlyobligation')
 def complete_and_notify(request, obligation_id):
     """
     POST /api/v1/obligations/{id}/complete-and-notify/
@@ -485,7 +556,7 @@ def complete_and_notify(request, obligation_id):
     import os
 
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
+        obligation = accessible_obligations(request.user).get(id=obligation_id)
     except MonthlyObligation.DoesNotExist:
         return Response(
             {'error': 'Η υποχρέωση δεν βρέθηκε.'},
@@ -503,101 +574,141 @@ def complete_and_notify(request, obligation_id):
     email_sent = False
     email_error = None
 
-    # Parse boolean fields from form data
-    save_to_client_folder = request.data.get('save_to_client_folder', 'true')
-    if isinstance(save_to_client_folder, str):
-        save_to_client_folder = save_to_client_folder.lower() == 'true'
+    # Αυστηρό boolean parsing (όχι raw truthiness) — άκυρη τιμή → 400
+    from accounting.services.access import parse_strict_bool
+    save_to_client_folder = parse_strict_bool(
+        request.data.get('save_to_client_folder'), 'save_to_client_folder',
+        default=True)
+    send_email_flag = parse_strict_bool(
+        request.data.get('send_email'), 'send_email', default=False)
 
-    send_email_flag = request.data.get('send_email', 'false')
-    if isinstance(send_email_flag, str):
-        send_email_flag = send_email_flag.lower() == 'true'
+    if send_email_flag and not check_model_perms(request, 'accounting.send_client_email'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
-    attach_to_email = request.data.get('attach_to_email', 'false')
-    if isinstance(attach_to_email, str):
-        attach_to_email = attach_to_email.lower() == 'true'
+    attach_to_email = parse_strict_bool(
+        request.data.get('attach_to_email'), 'attach_to_email', default=False)
 
-    # Handle document attachment from existing document
+    # === ΟΛΟΙ οι permission/consistency έλεγχοι ΠΡΙΝ από κάθε μεταβολή ===
     document_id = request.data.get('document_id')
+    if document_id and not check_model_perms(request, 'accounting.change_clientdocument'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+    if 'file' in request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
+    # Existing document: scoped + current· ξένο/ανύπαρκτο → ίδιο ουδέτερο 404
+    existing_document = None
     if document_id:
-        try:
-            document = ClientDocument.objects.get(id=document_id, client=client)
-            document.obligation = obligation
-            document.save()
-        except ClientDocument.DoesNotExist:
+        existing_document = ClientDocument.objects.filter(
+            id=document_id, client=client, is_current=True).first()
+        if existing_document is None:
             return Response(
                 {'error': 'Το έγγραφο δεν βρέθηκε.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-    # Handle file upload
+    # File validation (χωρίς storage write ακόμη)
+    uploaded_file = None
     if 'file' in request.FILES and save_to_client_folder:
         uploaded_file = request.FILES['file']
-
-        # Validate file
         allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
         ext = os.path.splitext(uploaded_file.name)[1].lower()
-
         if ext not in allowed_extensions:
             return Response(
-                {'error': f'Μη επιτρεπτός τύπος αρχείου.'},
+                {'error': 'Μη επιτρεπτός τύπος αρχείου.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         if uploaded_file.size > 10 * 1024 * 1024:
             return Response(
                 {'error': 'Το αρχείο είναι μεγαλύτερο από 10MB.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Determine category
-        category = 'general'
-        if obligation.obligation_type:
-            type_code = obligation.obligation_type.code.upper()
-            if 'ΦΠΑ' in type_code:
-                category = 'vat'
-            elif 'ΜΥΦ' in type_code:
-                category = 'myf'
-            elif 'ΑΠΔ' in type_code:
-                category = 'payroll'
-            elif 'Ε1' in type_code or 'Ε3' in type_code:
-                category = 'tax'
-
-        document = ClientDocument.objects.create(
-            client=client,
-            obligation=obligation,
-            file=uploaded_file,
-            document_category=category,
-            description=f'Υποχρέωση {obligation.obligation_type.name} {obligation.month:02d}/{obligation.year}'
-        )
-
-    # Mark obligation as completed
-    obligation.status = 'completed'
-    obligation.completed_date = timezone.now().date()
-    obligation.completed_by = request.user
-
-    if request.data.get('notes'):
-        obligation.notes = request.data.get('notes')
-
-    if request.data.get('time_spent'):
-        try:
-            obligation.time_spent = float(request.data.get('time_spent'))
-        except (ValueError, TypeError):
-            pass
-
-    obligation.save()
-
-    # Send email notification if requested
+    # Template resolution ΠΡΙΝ την ολοκλήρωση: explicit invalid/inactive
+    # template_id → ουδέτερο 404, ΧΩΡΙΣ silent fallback
+    template = None
     if send_email_flag and client.email:
         template_id = request.data.get('email_template_id')
-
         if template_id:
-            try:
-                template = EmailTemplate.objects.get(id=template_id, is_active=True)
-            except EmailTemplate.DoesNotExist:
-                template = EmailTemplate.get_template_for_obligation(obligation)
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+            template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if template is None:
+                return Response(
+                    {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                    status=status.HTTP_404_NOT_FOUND)
         else:
             template = EmailTemplate.get_template_for_obligation(obligation)
 
+    # attach_to_email με υπάρχοντα documents → view_clientdocument
+    if send_email_flag and attach_to_email:
+        if not check_model_perms(request, 'accounting.view_clientdocument'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
+    # === Μεταβολές: document + completion ατομικά ===
+    from django.core.exceptions import ValidationError as _DjangoValidationError
+    from django.db import transaction
+    from .services import filing as _filing
+    with transaction.atomic():
+        if existing_document is not None:
+            # Structural attach ΜΟΝΟ μέσω του κοινού service (locks +
+            # exact target-key conflict + audit)
+            try:
+                existing_document = _filing.attach_document_service(
+                    request.user, existing_document, obligation)
+            except (_filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict, _filing.DocumentGone,
+                    _DjangoValidationError) as e:
+                message, code = _filing.document_error_status(e)
+                return Response({'error': message}, status=code)
+            document = existing_document
+
+        if uploaded_file is not None:
+            category = 'general'
+            if obligation.obligation_type:
+                type_code = obligation.obligation_type.code.upper()
+                if 'ΦΠΑ' in type_code:
+                    category = 'vat'
+                elif 'ΜΥΦ' in type_code:
+                    category = 'myf'
+                elif 'ΑΠΔ' in type_code:
+                    category = 'payroll'
+                elif 'Ε1' in type_code or 'Ε3' in type_code:
+                    category = 'tax'
+            try:
+                document = _filing.create_client_document(
+                    client=client,
+                    uploaded_file=uploaded_file,
+                    category=category,
+                    obligation=obligation,
+                    user=request.user,
+                    description=(
+                        f'Υποχρέωση {obligation.obligation_type.name} '
+                        f'{obligation.month:02d}/{obligation.year}'
+                    ),
+                )
+            except (_filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict, _filing.DocumentGone,
+                    _DjangoValidationError) as e:
+                # Κοινό contract — ποτέ 500, ποτέ ολοκλήρωση χωρίς αρχείο
+                message, code = _filing.document_error_status(e)
+                return Response({'error': message}, status=code)
+
+        # Mark obligation as completed
+        obligation.status = 'completed'
+        obligation.completed_date = timezone.now().date()
+        obligation.completed_by = request.user
+        if request.data.get('notes'):
+            obligation.notes = request.data.get('notes')
+        if request.data.get('time_spent'):
+            try:
+                obligation.time_spent = float(request.data.get('time_spent'))
+            except (ValueError, TypeError):
+                pass
+        obligation.save()
+
+    # Send email notification if requested (μετά το commit της ολοκλήρωσης)
+    if send_email_flag and client.email:
         if template:
             # Collect attachments only if attach_to_email is true
             attachments = []
@@ -629,7 +740,8 @@ def complete_and_notify(request, obligation_id):
 
             email_sent = success
             if not success:
-                email_error = str(result)
+                logger.error(f'Email send failed: {result}')
+                email_error = 'Η αποστολή email απέτυχε.'
 
     # Prepare response
     from .api_obligations import ObligationDetailSerializer
@@ -663,6 +775,7 @@ def complete_and_notify(request, obligation_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_monthlyobligation')
 def bulk_complete_with_notify(request):
     """
     POST /api/v1/obligations/bulk-complete-notify/
@@ -681,13 +794,21 @@ def bulk_complete_with_notify(request):
     obligation_ids = serializer.validated_data['obligation_ids']
     send_notifications = serializer.validated_data['send_notifications']
 
+    if send_notifications:
+        if not check_model_perms(request, 'accounting.send_client_email'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        # Τα notifications περιλαμβάνουν attachments (include_attachment=True)
+        if not check_model_perms(request, 'accounting.view_clientdocument'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
+    from django.db import transaction
     from django.utils import timezone
 
-    # Get obligations that can be completed
-    obligations = MonthlyObligation.objects.filter(
+    # Get obligations that can be completed (μόνο προσβάσιμες)
+    obligations = list(accessible_obligations(request.user).filter(
         id__in=obligation_ids,
         status__in=['pending', 'overdue']
-    ).select_related('client', 'obligation_type')
+    ).select_related('client', 'obligation_type'))
 
     completed_count = 0
     email_results = {
@@ -697,14 +818,17 @@ def bulk_complete_with_notify(request):
         'details': []
     }
 
-    for obligation in obligations:
-        # Mark as completed
-        obligation.status = 'completed'
-        obligation.completed_date = timezone.now().date()
-        obligation.completed_by = request.user
-        obligation.save()
-        completed_count += 1
+    # Ολόκληρη η ολοκλήρωση atomic — permission/validation failure δεν
+    # αφήνει μερικώς ολοκληρωμένες υποχρεώσεις
+    with transaction.atomic():
+        for obligation in obligations:
+            obligation.status = 'completed'
+            obligation.completed_date = timezone.now().date()
+            obligation.completed_by = request.user
+            obligation.save()
+            completed_count += 1
 
+    for obligation in obligations:
         # Send notification if requested
         if send_notifications:
             client = obligation.client
@@ -749,7 +873,7 @@ def bulk_complete_with_notify(request):
                     'obligation_id': obligation.id,
                     'client': client.eponimia,
                     'status': 'failed',
-                    'message': str(result)
+                    'message': 'Η αποστολή email απέτυχε.'
                 })
 
     response_data = {
@@ -770,6 +894,7 @@ def bulk_complete_with_notify(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_monthlyobligation')
 def bulk_complete_with_documents(request):
     """
     POST /api/v1/obligations/bulk-complete-with-documents/
@@ -806,46 +931,73 @@ def bulk_complete_with_documents(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Parse boolean options
-    save_to_folders = request.data.get('save_to_folders', 'true')
-    if isinstance(save_to_folders, str):
-        save_to_folders = save_to_folders.lower() == 'true'
+    # Αυστηρό boolean parsing (όχι raw truthiness) — άκυρη τιμή → 400
+    from accounting.services.access import parse_strict_bool
+    save_to_folders = parse_strict_bool(
+        request.data.get('save_to_folders'), 'save_to_folders', default=True)
+    send_emails = parse_strict_bool(
+        request.data.get('send_emails'), 'send_emails', default=False)
 
-    send_emails = request.data.get('send_emails', 'false')
-    if isinstance(send_emails, str):
-        send_emails = send_emails.lower() == 'true'
+    if send_emails and not check_model_perms(request, 'accounting.send_client_email'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
 
-    attach_to_emails = request.data.get('attach_to_emails', 'false')
-    if isinstance(attach_to_emails, str):
-        attach_to_emails = attach_to_emails.lower() == 'true'
+    attach_to_emails = parse_strict_bool(
+        request.data.get('attach_to_emails'), 'attach_to_emails', default=False)
 
-    # Parse optional template_id for email
+    # Uploads εγγράφων απαιτούν add_clientdocument — έλεγχος πριν από
+    # οποιαδήποτε μεταβολή
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+
+    # Parse optional template_id — explicit invalid/inactive → απόρριψη
+    # (ΟΧΙ silent fallback), με view_emailtemplate perm
     template_id = request.data.get('template_id')
     if isinstance(template_id, str) and template_id:
         try:
             template_id = int(template_id)
         except ValueError:
-            template_id = None
+            return Response(
+                {'error': 'Μη έγκυρο πρότυπο.'},
+                status=status.HTTP_400_BAD_REQUEST)
 
-    # Get override template if specified
     override_template = None
     if template_id:
-        try:
-            override_template = EmailTemplate.objects.get(id=template_id, is_active=True)
-        except EmailTemplate.DoesNotExist:
-            pass  # Will fallback to auto-select
+        if not check_model_perms(request, 'accounting.view_emailtemplate'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        override_template = EmailTemplate.objects.filter(
+            id=template_id, is_active=True).first()
+        if override_template is None:
+            return Response(
+                {'error': 'Το πρότυπο δεν βρέθηκε.'},
+                status=status.HTTP_404_NOT_FOUND)
 
-    # Get obligations
-    obligations = MonthlyObligation.objects.filter(
+    # Get obligations (μόνο προσβάσιμες)
+    obligations = list(accessible_obligations(request.user).filter(
         id__in=obligation_ids,
         status__in=['pending', 'overdue']
-    ).select_related('client', 'obligation_type')
+    ).select_related('client', 'obligation_type'))
 
-    if not obligations.exists():
+    if not obligations:
         return Response(
             {'error': 'Δεν βρέθηκαν υποχρεώσεις προς ολοκλήρωση.'},
             status=status.HTTP_404_NOT_FOUND
         )
+
+    allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
+
+    # === Whole-batch validation ΠΡΙΝ ολοκληρωθεί οποιαδήποτε υποχρέωση ===
+    for obligation in obligations:
+        uploaded_file = request.FILES.get(f'file_{obligation.id}')
+        if uploaded_file and save_to_folders:
+            ext = os.path.splitext(uploaded_file.name)[1].lower()
+            if ext not in allowed_extensions:
+                return Response(
+                    {'error': f'Μη επιτρεπτός τύπος αρχείου: {ext or "?"}.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            if uploaded_file.size > 10 * 1024 * 1024:
+                return Response(
+                    {'error': 'Αρχείο μεγαλύτερο από 10MB.'},
+                    status=status.HTTP_400_BAD_REQUEST)
 
     results = []
     completed_count = 0
@@ -856,48 +1008,62 @@ def bulk_complete_with_documents(request):
         'details': []
     }
 
-    allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
+    from django.db import transaction
+    from .services import filing as _filing
+
+    def _category_for(obligation):
+        category = 'general'
+        if obligation.obligation_type:
+            type_code = obligation.obligation_type.code.upper()
+            if 'ΦΠΑ' in type_code:
+                category = 'vat'
+            elif 'ΜΥΦ' in type_code:
+                category = 'myf'
+            elif 'ΑΠΔ' in type_code:
+                category = 'payroll'
+            elif 'Ε1' in type_code or 'Ε3' in type_code:
+                category = 'tax'
+        return category
+
+    # Ολοκλήρωση + document creation atomic (μέσω filing service).
+    # ΠΟΛΙΤΙΚΗ BULK: atomic rollback ολόκληρου του request — controlled
+    # document exception → κοινό status (409/404/400), ποτέ 500, και καμία
+    # υποχρέωση δεν μένει «ολοκληρωμένη» χωρίς το αρχείο της.
+    documents_by_ob = {}
+    try:
+        with transaction.atomic():
+            for obligation in obligations:
+                client = obligation.client
+                uploaded_file = request.FILES.get(f'file_{obligation.id}')
+                if uploaded_file and save_to_folders:
+                    documents_by_ob[obligation.id] = \
+                        _filing.create_client_document(
+                            client=client,
+                            uploaded_file=uploaded_file,
+                            category=_category_for(obligation),
+                            obligation=obligation,
+                            user=request.user,
+                            description=(
+                                f'Υποχρέωση {obligation.obligation_type.name} '
+                                f'{obligation.month:02d}/{obligation.year}'
+                            ),
+                        )
+                obligation.status = 'completed'
+                obligation.completed_date = timezone.now().date()
+                obligation.completed_by = request.user
+                obligation.save()
+                completed_count += 1
+    except Exception as exc:
+        mapped = _filing.document_error_status(exc)
+        if mapped is None:
+            raise
+        message, code = mapped
+        return Response({'error': message}, status=code)
 
     for obligation in obligations:
         client = obligation.client
-        document = None
+        document = documents_by_ob.get(obligation.id)
         email_sent = False
-
-        # Check for file specific to this obligation
-        file_key = f'file_{obligation.id}'
-        uploaded_file = request.FILES.get(file_key)
-
-        if uploaded_file and save_to_folders:
-            # Validate file
-            ext = os.path.splitext(uploaded_file.name)[1].lower()
-            if ext in allowed_extensions and uploaded_file.size <= 10 * 1024 * 1024:
-                # Determine category
-                category = 'general'
-                if obligation.obligation_type:
-                    type_code = obligation.obligation_type.code.upper()
-                    if 'ΦΠΑ' in type_code:
-                        category = 'vat'
-                    elif 'ΜΥΦ' in type_code:
-                        category = 'myf'
-                    elif 'ΑΠΔ' in type_code:
-                        category = 'payroll'
-                    elif 'Ε1' in type_code or 'Ε3' in type_code:
-                        category = 'tax'
-
-                document = ClientDocument.objects.create(
-                    client=client,
-                    obligation=obligation,
-                    file=uploaded_file,
-                    document_category=category,
-                    description=f'Υποχρέωση {obligation.obligation_type.name} {obligation.month:02d}/{obligation.year}'
-                )
-
-        # Mark obligation as completed
-        obligation.status = 'completed'
-        obligation.completed_date = timezone.now().date()
-        obligation.completed_by = request.user
-        obligation.save()
-        completed_count += 1
 
         # Send email if requested
         if send_emails:
@@ -951,7 +1117,7 @@ def bulk_complete_with_documents(request):
                             'obligation_id': obligation.id,
                             'client': client.eponimia,
                             'status': 'failed',
-                            'message': str(result)
+                            'message': 'Η αποστολή email απέτυχε.'
                         })
                 else:
                     email_results['failed'] += 1
@@ -988,6 +1154,7 @@ def bulk_complete_with_documents(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_emaillog')
 def email_history(request):
     """
     GET /api/v1/email/history/
@@ -1003,6 +1170,11 @@ def email_history(request):
     queryset = EmailLog.objects.all().select_related(
         'client', 'obligation', 'template_used', 'sent_by'
     ).order_by('-sent_at')
+
+    # RBAC: scoped χρήστες βλέπουν μόνο ιστορικό για προσβάσιμους πελάτες
+    from accounting.mixins import user_sees_all_clients
+    if not user_sees_all_clients(request.user):
+        queryset = queryset.filter(client__in=accessible_clients(request.user))
 
     # Apply filters
     client_id = request.query_params.get('client_id')
@@ -1096,10 +1268,14 @@ def email_settings(request):
     settings_obj = EmailSettings.get_settings()
 
     if request.method == 'GET':
+        if not check_model_perms(request, 'accounting.view_emailsettings'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailSettingsSerializer(settings_obj)
         return Response(serializer.data)
 
     elif request.method == 'PUT':
+        if not check_model_perms(request, 'accounting.change_emailsettings'):
+            return Response(PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         serializer = EmailSettingsSerializer(settings_obj, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -1109,6 +1285,7 @@ def email_settings(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_emailsettings')
 def email_settings_test(request):
     """
     POST /api/v1/email/settings/test/
@@ -1152,6 +1329,7 @@ def email_settings_test(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.change_emailsettings')
 def email_settings_send_test(request):
     """
     POST /api/v1/email/settings/send-test/
@@ -1218,11 +1396,11 @@ def email_settings_send_test(request):
         else:
             return Response({
                 'success': False,
-                'message': f'Αποτυχία αποστολής: {result}'
+                'message': 'Αποτυχία αποστολής δοκιμαστικού email'
             }, status=status.HTTP_400_BAD_REQUEST)
 
     except Exception as e:
         return Response({
             'success': False,
-            'message': f'Σφάλμα: {str(e)}'
+            'message': 'Σφάλμα κατά την αποστολή δοκιμαστικού email'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

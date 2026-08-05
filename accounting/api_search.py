@@ -13,6 +13,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import ClientProfile, MonthlyObligation, VoIPCall, Ticket
+from .mixins import user_sees_all_clients
+from .services.access import accessible_clients, accessible_obligations
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +50,27 @@ def global_search(request):
         })
 
     try:
+        # RBAC: κάθε κατηγορία απαιτεί το αντίστοιχο view_* permission —
+        # χρήστης χωρίς ρόλο (κανένα view perm) παίρνει κενά αποτελέσματα
+        # αντί να διαβάζει ΑΦΜ/emails/κλήσεις από εναλλακτική διαδρομή.
+        user = request.user
         results = {
-            'clients': search_clients(query),
-            'obligations': search_obligations(query),
-            'tickets': search_tickets(query),
-            'calls': search_calls(query)
+            'clients': (
+                search_clients(query, user=user)
+                if user.has_perm('accounting.view_clientprofile') else []
+            ),
+            'obligations': (
+                search_obligations(query, user=user)
+                if user.has_perm('accounting.view_monthlyobligation') else []
+            ),
+            'tickets': (
+                search_tickets(query, user=user)
+                if user.has_perm('accounting.view_ticket') else []
+            ),
+            'calls': (
+                search_calls(query, user=user)
+                if user.has_perm('accounting.view_voipcall') else []
+            ),
         }
 
         total = sum(len(v) for v in results.values())
@@ -78,7 +96,7 @@ def global_search(request):
         }, status=500)
 
 
-def search_clients(query: str, limit: int = 5) -> list:
+def search_clients(query: str, limit: int = 5, user=None) -> list:
     """
     Search clients by:
     - eponimia (company name)
@@ -87,7 +105,8 @@ def search_clients(query: str, limit: int = 5) -> list:
     - tilefono_epixeirisis_1 (business phone)
     - email
     """
-    clients = ClientProfile.objects.filter(
+    base = accessible_clients(user) if user is not None else ClientProfile.objects.all()
+    clients = base.filter(
         Q(eponimia__icontains=query) |
         Q(afm__icontains=query) |
         Q(kinito_tilefono__icontains=query) |
@@ -110,14 +129,15 @@ def search_clients(query: str, limit: int = 5) -> list:
     } for c in clients]
 
 
-def search_obligations(query: str, limit: int = 5) -> list:
+def search_obligations(query: str, limit: int = 5, user=None) -> list:
     """
     Search obligations by:
     - client.eponimia (client name)
     - obligation_type.name (type name)
     - notes
     """
-    obligations = MonthlyObligation.objects.filter(
+    base = accessible_obligations(user) if user is not None else MonthlyObligation.objects.all()
+    obligations = base.filter(
         Q(client__eponimia__icontains=query) |
         Q(obligation_type__name__icontains=query) |
         Q(notes__icontains=query) |
@@ -151,14 +171,20 @@ def search_obligations(query: str, limit: int = 5) -> list:
     } for o in obligations]
 
 
-def search_tickets(query: str, limit: int = 5) -> list:
+def search_tickets(query: str, limit: int = 5, user=None) -> list:
     """
     Search tickets by:
     - title
     - description
     - client.eponimia (client name)
     """
-    tickets = Ticket.objects.filter(
+    base = Ticket.objects.all()
+    if user is not None and not user_sees_all_clients(user):
+        # Tickets ξένων πελατών εκτός — χωρίς πελάτη (π.χ. αναπάντητες) ορατά
+        base = base.filter(
+            Q(client__isnull=True) | Q(client__assigned_users=user)
+        ).distinct()
+    tickets = base.filter(
         Q(title__icontains=query) |
         Q(description__icontains=query) |
         Q(client__eponimia__icontains=query) |
@@ -190,13 +216,18 @@ def search_tickets(query: str, limit: int = 5) -> list:
     } for t in tickets]
 
 
-def search_calls(query: str, limit: int = 5) -> list:
+def search_calls(query: str, limit: int = 5, user=None) -> list:
     """
     Search calls by:
     - phone_number
     - client.eponimia (client name)
     """
-    calls = VoIPCall.objects.filter(
+    base = VoIPCall.objects.all()
+    if user is not None and not user_sees_all_clients(user):
+        base = base.filter(
+            Q(client__isnull=True) | Q(client__assigned_users=user)
+        ).distinct()
+    calls = base.filter(
         Q(phone_number__icontains=query) |
         Q(client__eponimia__icontains=query) |
         Q(notes__icontains=query)

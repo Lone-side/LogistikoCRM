@@ -29,6 +29,19 @@ def notifications_list(request):
     - Due today
     - Upcoming (next 3 days)
     """
+    # RBAC: view perm + scoping — αλλιώς κάθε authenticated χρήστης έβλεπε
+    # επωνυμίες/IDs υποχρεώσεων και portal uploads ΟΛΩΝ των πελατών
+    from django.db.models import Q
+    from accounting.services.access import (
+        accessible_clients, accessible_obligations, check_model_perms,
+    )
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}, status=403,
+        )
+    accessible = accessible_clients(request.user)
+    scoped_obligations = accessible_obligations(request.user)
+
     now = timezone.now()
     notifications = []
 
@@ -40,6 +53,11 @@ def notifications_list(request):
             SharedLinkAccess.objects.filter(
                 action='upload',
                 accessed_at__gte=now - timedelta(hours=48),
+            )
+            .filter(
+                Q(shared_link__client__in=accessible)
+                | Q(shared_link__client__isnull=True,
+                    shared_link__document__client__in=accessible)
             )
             .select_related('shared_link__client', 'shared_link__document__client')
             .order_by('-accessed_at')[:10]
@@ -62,7 +80,7 @@ def notifications_list(request):
             })
 
         # Overdue obligations
-        overdue = MonthlyObligation.objects.filter(
+        overdue = scoped_obligations.filter(
             deadline__lt=now.date(),
             status__in=['pending', 'overdue']
         ).select_related('client', 'obligation_type').order_by('deadline')[:10]
@@ -81,7 +99,7 @@ def notifications_list(request):
             })
 
         # Due today
-        today_obligations = MonthlyObligation.objects.filter(
+        today_obligations = scoped_obligations.filter(
             deadline=now.date(),
             status='pending'
         ).select_related('client', 'obligation_type')
@@ -100,7 +118,7 @@ def notifications_list(request):
 
         # Upcoming (next 3 days)
         next_3_days = now.date() + timedelta(days=3)
-        upcoming = MonthlyObligation.objects.filter(
+        upcoming = scoped_obligations.filter(
             deadline__range=[now.date() + timedelta(days=1), next_3_days],
             status='pending'
         ).select_related('client', 'obligation_type').order_by('deadline')[:5]
@@ -118,15 +136,15 @@ def notifications_list(request):
                 'icon': 'calendar',
             })
 
-    except Exception as e:
-        logger.error(f"Error fetching notifications: {e}")
-        # Return empty list on error instead of failing
+    except Exception:
+        # Generic safe empty-state — ποτέ raw exception text στο response
+        logger.exception("Error fetching notifications")
         return Response({
             'notifications': [],
             'count': 0,
             'overdue_count': 0,
             'today_count': 0,
-            'error': str(e)
+            'error': 'Σφάλμα κατά την ανάκτηση ειδοποιήσεων.'
         })
 
     return Response({

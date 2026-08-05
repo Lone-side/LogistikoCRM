@@ -17,22 +17,44 @@ from django.utils import timezone
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.db import transaction
 
 import os
 import json
 import logging
 from datetime import datetime
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 
 from ..models import (
     MonthlyObligation, ClientProfile, ObligationType,
     EmailTemplate, EmailLog, ClientDocument, ArchiveConfiguration
 )
 from ..services import filing
+from ..services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+    check_model_perms,
+)
+
+PERM_DENIED_JSON = {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
 from ..services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
+
+GENERIC_SERVER_ERROR = 'Παρουσιάστηκε σφάλμα — δοκιμάστε ξανά.'
+
+
+def _safe_int(value, default=None, minimum=None, maximum=None):
+    """Ασφαλές parsing int από query params — άκυρη τιμή → default."""
+    try:
+        result = int(str(value))
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None:
+        result = max(minimum, result)
+    if maximum is not None:
+        result = min(maximum, result)
+    return result
 
 
 # =============================================================================
@@ -45,6 +67,10 @@ def obligation_list_view(request):
     """
     Κύρια οθόνη διαχείρισης υποχρεώσεων με φίλτρα και DataTables.
     """
+    from django.http import HttpResponseForbidden
+    # Το staff_member_required ΔΕΝ αρκεί — απαιτείται και model permission
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής υποχρεώσεων.')
     now = timezone.now()
     current_month = now.month
     current_year = now.year
@@ -60,21 +86,25 @@ def obligation_list_view(request):
     }
 
     # Δημιουργία queryset
-    queryset = MonthlyObligation.objects.select_related(
+    queryset = accessible_obligations(request.user).select_related(
         'client', 'obligation_type', 'completed_by'
     ).order_by('deadline', 'client__eponimia')
 
-    # Εφαρμογή φίλτρων
-    if filters['month']:
-        queryset = queryset.filter(month=int(filters['month']))
-    if filters['year']:
-        queryset = queryset.filter(year=int(filters['year']))
+    # Εφαρμογή φίλτρων (validated ints — άκυρη τιμή αγνοείται, όχι 500)
+    month = _safe_int(filters['month'])
+    if month:
+        queryset = queryset.filter(month=month)
+    year = _safe_int(filters['year'])
+    if year:
+        queryset = queryset.filter(year=year)
     if filters['status']:
         queryset = queryset.filter(status=filters['status'])
-    if filters['client_id']:
-        queryset = queryset.filter(client_id=int(filters['client_id']))
-    if filters['type_id']:
-        queryset = queryset.filter(obligation_type_id=int(filters['type_id']))
+    client_id = _safe_int(filters['client_id'])
+    if client_id:
+        queryset = queryset.filter(client_id=client_id)
+    type_id = _safe_int(filters['type_id'])
+    if type_id:
+        queryset = queryset.filter(obligation_type_id=type_id)
     if filters['search']:
         queryset = queryset.filter(
             Q(client__eponimia__icontains=filters['search']) |
@@ -91,7 +121,7 @@ def obligation_list_view(request):
     }
 
     # Data για dropdown φίλτρα
-    clients = ClientProfile.objects.filter(is_active=True).order_by('eponimia')
+    clients = accessible_clients(request.user).filter(is_active=True).order_by('eponimia')
     obligation_types = ObligationType.objects.filter(is_active=True).order_by('name')
 
     # Έτη διαθέσιμα
@@ -131,10 +161,12 @@ def obligation_list_api(request):
     API endpoint για DataTables server-side processing.
     Επιστρέφει JSON με υποχρεώσεις.
     """
-    # DataTables parameters
-    draw = int(request.GET.get('draw', 1))
-    start = int(request.GET.get('start', 0))
-    length = int(request.GET.get('length', 25))
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    # DataTables parameters (validated + bounded — όχι raw int())
+    draw = _safe_int(request.GET.get('draw'), default=1, minimum=1)
+    start = _safe_int(request.GET.get('start'), default=0, minimum=0)
+    length = _safe_int(request.GET.get('length'), default=25, minimum=1, maximum=200)
     search_value = request.GET.get('search[value]', '')
 
     # Φίλτρα
@@ -145,21 +177,25 @@ def obligation_list_api(request):
     type_id = request.GET.get('type', '')
 
     # Base queryset
-    queryset = MonthlyObligation.objects.select_related(
+    queryset = accessible_obligations(request.user).select_related(
         'client', 'obligation_type', 'completed_by'
     )
 
-    # Εφαρμογή φίλτρων
+    # Εφαρμογή φίλτρων (validated ints)
+    month = _safe_int(month)
     if month:
-        queryset = queryset.filter(month=int(month))
+        queryset = queryset.filter(month=month)
+    year = _safe_int(year)
     if year:
-        queryset = queryset.filter(year=int(year))
+        queryset = queryset.filter(year=year)
     if status:
         queryset = queryset.filter(status=status)
+    client_id = _safe_int(client_id)
     if client_id:
-        queryset = queryset.filter(client_id=int(client_id))
+        queryset = queryset.filter(client_id=client_id)
+    type_id = _safe_int(type_id)
     if type_id:
-        queryset = queryset.filter(obligation_type_id=int(type_id))
+        queryset = queryset.filter(obligation_type_id=type_id)
 
     # Search
     if search_value:
@@ -170,7 +206,7 @@ def obligation_list_api(request):
         )
 
     # Ordering
-    order_column = int(request.GET.get('order[0][column]', 0))
+    order_column = _safe_int(request.GET.get('order[0][column]'), default=0, minimum=0)
     order_dir = request.GET.get('order[0][dir]', 'asc')
 
     order_columns = ['id', 'client__eponimia', 'obligation_type__name', 'deadline', 'status']
@@ -181,7 +217,7 @@ def obligation_list_api(request):
         queryset = queryset.order_by(order_field)
 
     # Counts
-    total_count = MonthlyObligation.objects.count()
+    total_count = accessible_obligations(request.user).count()
     filtered_count = queryset.count()
 
     # Pagination
@@ -197,15 +233,17 @@ def obligation_list_api(request):
             'overdue': '<span class="badge badge-overdue">Καθυστερεί</span>',
         }
 
-        # Attachment info
+        # Attachment info — escaped: filename/url είναι user-controlled τιμές
         attachment_html = ''
         if ob.attachment:
+            from django.utils.html import format_html
             filename = os.path.basename(ob.attachment.name)
-            attachment_html = f'''
-                <a href="{ob.attachment.url}" target="_blank" class="attachment-preview">
-                    <i class="bi bi-file-pdf text-danger"></i> {filename[:20]}...
-                </a>
-            '''
+            attachment_html = format_html(
+                '<a href="{}" target="_blank" class="attachment-preview">'
+                '<i class="bi bi-file-pdf text-danger"></i> {}...</a>',
+                ob.attachment.url,
+                filename[:20],
+            )
 
         # Days until deadline
         days = ob.days_until_deadline
@@ -254,7 +292,14 @@ def obligation_complete_single(request, obligation_id):
     """
     Ολοκλήρωση μίας υποχρέωσης με προαιρετικό file upload.
     """
-    obligation = get_object_or_404(MonthlyObligation, id=obligation_id)
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+    obligation = get_object_or_404(accessible_obligations(request.user), id=obligation_id)
 
     try:
         # File upload
@@ -267,11 +312,11 @@ def obligation_complete_single(request, obligation_id):
                     user=request.user,
                 )
             except ValidationError as e:
-                return JsonResponse({
-                    'success': False,
-                    'error': '; '.join(e.messages)
-                }, status=400)
-            logger.info(f"Archived file for obligation {obligation_id}: {document.file.name}")
+                message, code = filing.document_error_status(e)
+                return JsonResponse({'success': False, 'error': message},
+                                    status=code)
+            logger.info('Αρχειοθετήθηκε document id=%s για obligation id=%s',
+                        document.pk, obligation_id)
 
         # Update obligation
         old_status = obligation.status
@@ -313,7 +358,7 @@ def obligation_complete_single(request, obligation_id):
         logger.error(f"Error completing obligation {obligation_id}: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -327,6 +372,13 @@ def obligation_complete_bulk(request):
     """
     Μαζική ολοκλήρωση υποχρεώσεων με per-obligation files.
     """
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
     try:
         # Parse obligation IDs
         obligation_ids = request.POST.getlist('obligation_ids[]')
@@ -347,9 +399,9 @@ def obligation_complete_bulk(request):
 
         for ob_id in obligation_ids:
             try:
-                obligation = MonthlyObligation.objects.select_related(
+                obligation = accessible_obligations(request.user).select_related(
                     'client', 'obligation_type'
-                ).get(id=int(ob_id))
+                ).get(id=_safe_int(ob_id, default=-1))
 
                 # Skip already completed
                 if obligation.status == 'completed':
@@ -359,26 +411,33 @@ def obligation_complete_bulk(request):
                     })
                     continue
 
-                # Check for file
+                # Check for file.
+                # ΠΟΛΙΤΙΚΗ BULK (Γύρος 21): αποτυχία αρχειοθέτησης ΔΕΝ
+                # καταπίνεται — η υποχρέωση δεν ολοκληρώνεται και το item
+                # αναφέρεται ρητά ως αποτυχία.
                 file_key = f'file_{ob_id}'
-                if file_key in request.FILES:
-                    try:
-                        filing.create_client_document(
-                            client=obligation.client,
-                            uploaded_file=request.FILES[file_key],
-                            obligation=obligation,
-                            user=request.user,
-                        )
-                    except ValidationError as e:
-                        logger.warning(
-                            f"Invalid file for obligation {ob_id}: {'; '.join(e.messages)}"
-                        )
+                with transaction.atomic():
+                    if file_key in request.FILES:
+                        try:
+                            filing.create_client_document(
+                                client=obligation.client,
+                                uploaded_file=request.FILES[file_key],
+                                obligation=obligation,
+                                user=request.user,
+                            )
+                        except ValidationError as e:
+                            message = filing.document_error_status(e)[0]
+                            failed.append({
+                                'id': ob_id,
+                                'error': f'Αποτυχία αρχειοθέτησης: {message}',
+                            })
+                            continue
 
-                # Complete
-                obligation.status = 'completed'
-                obligation.completed_date = timezone.now().date()
-                obligation.completed_by = request.user
-                obligation.save()
+                    # Complete
+                    obligation.status = 'completed'
+                    obligation.completed_date = timezone.now().date()
+                    obligation.completed_by = request.user
+                    obligation.save()
 
                 completed.append({
                     'id': ob_id,
@@ -389,10 +448,18 @@ def obligation_complete_bulk(request):
             except MonthlyObligation.DoesNotExist:
                 failed.append({'id': ob_id, 'error': 'Δεν βρέθηκε'})
             except Exception as e:
-                failed.append({'id': ob_id, 'error': str(e)})
+                mapped = filing.document_error_status(e)
+                failed.append({
+                    'id': ob_id,
+                    'error': mapped[0] if mapped else GENERIC_SERVER_ERROR,
+                })
+                if mapped is None:
+                    logger.exception(
+                        'Σφάλμα μαζικής ολοκλήρωσης υποχρέωσης id=%s', ob_id)
 
+        # Ποτέ ψευδής συνολική επιτυχία όταν δεν ολοκληρώθηκε καμία
         return JsonResponse({
-            'success': True,
+            'success': bool(completed),
             'completed': len(completed),
             'failed': len(failed),
             'skipped': len(skipped),
@@ -407,7 +474,7 @@ def obligation_complete_bulk(request):
         logger.error(f"Bulk complete error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -421,7 +488,9 @@ def obligation_upload_file(request, obligation_id):
     """
     Upload αρχείου σε υποχρέωση χωρίς να την ολοκληρώσει.
     """
-    obligation = get_object_or_404(MonthlyObligation, id=obligation_id)
+    if not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    obligation = get_object_or_404(accessible_obligations(request.user), id=obligation_id)
 
     if 'file' not in request.FILES:
         return JsonResponse({
@@ -447,16 +516,21 @@ def obligation_upload_file(request, obligation_id):
             'version': document.version,
         })
 
-    except ValidationError as e:
+    except (ValidationError, filing.DocumentKeyConflict,
+            filing.DocumentGone) as e:
+        # Κοινό contract (Γύρος 23): MultipleCurrentDocumentsError → 409,
+        # όχι γενικό 400 — ίδια σημασιολογία με τους υπόλοιπους document
+        # callers. Καμία ολοκλήρωση υποχρέωσης, κανένα partial write: το
+        # filing service κάνει rollback πριν φτάσει εδώ.
+        message, code = filing.document_error_status(e)
+        return JsonResponse({'success': False, 'error': message},
+                            status=code)
+    except Exception:
+        logger.exception(
+            'Αποτυχία μεταφόρτωσης για obligation id=%s', obligation_id)
         return JsonResponse({
             'success': False,
-            'error': '; '.join(e.messages)
-        }, status=400)
-    except Exception as e:
-        logger.error(f"File upload error for obligation {obligation_id}: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -469,14 +543,28 @@ def email_compose_view(request):
     """
     Οθόνη σύνταξης email με επιλογή υποχρεώσεων και attachments.
     """
+    from django.http import HttpResponseForbidden
+    # Ίδιο permission με την αποστολή — η οθόνη σύνταξης εκθέτει στοιχεία
+    # πελατών/υποχρεώσεων για τον σκοπό αυτόν
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα αποστολής email.')
+    # Child view permissions: υποχρεώσεις/attachments/templates εμφανίζονται
+    # μόνο με το αντίστοιχο view permission
+    can_view_obligations = check_model_perms(
+        request, 'accounting.view_monthlyobligation')
+    can_view_documents = check_model_perms(
+        request, 'accounting.view_clientdocument')
+    can_view_templates = check_model_perms(
+        request, 'accounting.view_emailtemplate')
+
     # Λήψη επιλεγμένων υποχρεώσεων
     obligation_ids = request.GET.getlist('ids')
     if not obligation_ids and request.method == 'POST':
         obligation_ids = request.POST.getlist('obligation_ids')
 
     obligations = []
-    if obligation_ids:
-        obligations = MonthlyObligation.objects.filter(
+    if obligation_ids and can_view_obligations:
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
 
@@ -491,7 +579,8 @@ def email_compose_view(request):
                 'attachments': [],
             }
         clients_obligations[client_id]['obligations'].append(ob)
-        if ob.attachment:
+        # Attachment names/URLs μόνο με view_clientdocument
+        if ob.attachment and can_view_documents:
             clients_obligations[client_id]['attachments'].append({
                 'obligation_id': ob.id,
                 'filename': os.path.basename(ob.attachment.name),
@@ -499,8 +588,11 @@ def email_compose_view(request):
                 'size': ob.attachment.size if hasattr(ob.attachment, 'size') else 0,
             })
 
-    # Email templates
-    templates = EmailTemplate.objects.filter(is_active=True).order_by('name')
+    # Email templates — μόνο με view_emailtemplate
+    templates = (
+        EmailTemplate.objects.filter(is_active=True).order_by('name')
+        if can_view_templates else EmailTemplate.objects.none()
+    )
 
     context = {
         'obligations': obligations,
@@ -522,6 +614,8 @@ def email_send_view(request):
     """
     Αποστολή email με attachments.
     """
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
     try:
         # Parse data
         if request.content_type == 'application/json':
@@ -546,7 +640,7 @@ def email_send_view(request):
                 'error': 'Δεν καθορίστηκε πελάτης'
             }, status=400)
 
-        client = get_object_or_404(ClientProfile, id=client_id)
+        client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
         if not client.email:
             return JsonResponse({
@@ -554,16 +648,38 @@ def email_send_view(request):
                 'error': f'Ο πελάτης {client.eponimia} δεν έχει email'
             }, status=400)
 
-        # Get template
+        # Get template — permission + ασφαλές lookup ΠΡΙΝ από οτιδήποτε
         template_id = data.get('template_id')
         template = None
         if template_id:
-            template = EmailTemplate.objects.filter(id=template_id).first()
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return JsonResponse(PERM_DENIED_JSON, status=403)
+            template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if template is None:
+                return JsonResponse(
+                    {'success': False, 'error': 'Το πρότυπο δεν βρέθηκε'},
+                    status=404)
 
-        # Get obligations
-        obligations = MonthlyObligation.objects.filter(
+        # Get obligations — SECURITY: κάθε ζητούμενη υποχρέωση πρέπει να
+        # ανήκει στον ΕΠΙΛΕΓΜΕΝΟ πελάτη (όχι απλώς προσβάσιμη), αλλιώς
+        # cross-client leak. Απόρριψη ΠΡΙΝ από κάθε αποστολή/attachment read.
+        if obligation_ids and not check_model_perms(
+            request, 'accounting.view_monthlyobligation'
+        ):
+            return JsonResponse(PERM_DENIED_JSON, status=403)
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
+        if len(obligations) != len(set(str(i) for i in obligation_ids)):
+            return JsonResponse(
+                {'success': False, 'error': 'Μη έγκυρη επιλογή υποχρεώσεων'},
+                status=404)
+        if any(ob.client_id != client.id for ob in obligations):
+            return JsonResponse(
+                {'success': False,
+                 'error': 'Οι υποχρεώσεις δεν αντιστοιχούν στον πελάτη'},
+                status=400)
 
         # Build subject and body
         subject = data.get('subject', '')
@@ -581,16 +697,20 @@ def email_send_view(request):
             if not body:
                 body = rendered_body
 
-        # Collect attachments
+        # Collect attachments — απαιτείται view_clientdocument
         attachments = []
         if data.get('include_attachments', True):
             attachment_ids = data.get('attachment_ids', [])
-            for ob in obligations:
-                if ob.attachment:
-                    # If specific attachments selected, check if this one is included
-                    if attachment_ids and str(ob.id) not in attachment_ids:
-                        continue
-                    attachments.append(ob.attachment.path)
+            candidate_atts = [ob for ob in obligations if ob.attachment]
+            if candidate_atts and not check_model_perms(
+                request, 'accounting.view_clientdocument'
+            ):
+                return JsonResponse(PERM_DENIED_JSON, status=403)
+            for ob in candidate_atts:
+                # If specific attachments selected, check if this one is included
+                if attachment_ids and str(ob.id) not in attachment_ids:
+                    continue
+                attachments.append(ob.attachment.path)
 
         # Send email
         success, result = EmailService.send_email(
@@ -612,16 +732,17 @@ def email_send_view(request):
                 'email_log_id': result.id if hasattr(result, 'id') else None,
             })
         else:
+            logger.error(f"Email send failed: {result}")
             return JsonResponse({
                 'success': False,
-                'error': str(result)
+                'error': 'Η αποστολή email απέτυχε.'
             }, status=500)
 
     except Exception as e:
         logger.error(f"Email send error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -635,6 +756,8 @@ def email_send_bulk_view(request):
     """
     Μαζική αποστολή email - 1 email ανά πελάτη με όλα τα attachments του.
     """
+    if not check_model_perms(request, 'accounting.send_client_email'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
     try:
         if request.content_type == 'application/json':
             data = json.loads(request.body)
@@ -649,15 +772,39 @@ def email_send_bulk_view(request):
         template_id = data.get('template_id')
         include_attachments = data.get('include_attachments', True)
 
-        # Get template
+        if obligation_ids and not check_model_perms(
+            request, 'accounting.view_monthlyobligation'
+        ):
+            return JsonResponse(PERM_DENIED_JSON, status=403)
+
+        # Get template — permission + ασφαλές lookup
         template = None
         if template_id:
-            template = EmailTemplate.objects.filter(id=template_id).first()
+            if not check_model_perms(request, 'accounting.view_emailtemplate'):
+                return JsonResponse(PERM_DENIED_JSON, status=403)
+            template = EmailTemplate.objects.filter(
+                id=template_id, is_active=True).first()
+            if template is None:
+                return JsonResponse(
+                    {'success': False, 'error': 'Το πρότυπο δεν βρέθηκε'},
+                    status=404)
 
-        # Get obligations and group by client
-        obligations = MonthlyObligation.objects.filter(
+        # Get obligations (κάθε email πάει στον πελάτη ΤΗΣ υποχρέωσης — 1
+        # email/πελάτη — οπότε δεν υπάρχει cross-client mismatch εδώ)
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids
         ).select_related('client', 'obligation_type')
+        if len(obligations) != len(set(str(i) for i in obligation_ids)):
+            return JsonResponse(
+                {'success': False, 'error': 'Μη έγκυρη επιλογή υποχρεώσεων'},
+                status=404)
+
+        needs_att_perm = include_attachments and any(
+            ob.attachment for ob in obligations)
+        if needs_att_perm and not check_model_perms(
+            request, 'accounting.view_clientdocument'
+        ):
+            return JsonResponse(PERM_DENIED_JSON, status=403)
 
         clients_data = {}
         for ob in obligations:
@@ -722,15 +869,16 @@ def email_send_bulk_view(request):
                         'attachments_count': len(client_data['attachments']),
                     })
                 else:
+                    logger.error(f"Bulk email failed for client {client.pk}: {result}")
                     results['failed'].append({
                         'client': client.eponimia,
-                        'error': str(result)
+                        'error': 'Η αποστολή email απέτυχε.'
                     })
 
             except Exception as e:
                 results['failed'].append({
                     'client': client.eponimia,
-                    'error': str(e)
+                    'error': GENERIC_SERVER_ERROR
                 })
 
         return JsonResponse({
@@ -745,7 +893,7 @@ def email_send_bulk_view(request):
         logger.error(f"Bulk email error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -758,7 +906,14 @@ def client_files_view(request, client_id):
     """
     Προβολή αρχείων πελάτη με δενδρική δομή.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    from django.http import HttpResponseForbidden
+    # Εμφανίζει έγγραφα + υποχρεώσεις — απαιτούνται τα αντίστοιχα view perms
+    if not check_model_perms(
+        request, 'accounting.view_clientdocument',
+        'accounting.view_monthlyobligation',
+    ):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής αρχείων.')
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     # Βάση αρχειοθέτησης (από FilingSystemSettings)
     archive_root = filing.get_archive_root()
@@ -833,7 +988,9 @@ def file_download(request, client_id, file_path):
     """
     Download αρχείου πελάτη.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return HttpResponse('Δεν έχετε δικαίωμα λήψης αρχείων.', status=403)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     archive_root = filing.get_archive_root()
     full_path = os.path.realpath(os.path.join(archive_root, file_path))
@@ -853,13 +1010,60 @@ def file_download(request, client_id, file_path):
     )
 
 
+def _find_managed_document(client, full_path):
+    """
+    Βρίσκει το ClientDocument του πελάτη που αντιστοιχεί στο συγκεκριμένο
+    ΑΠΟΛΥΤΟ path (canonicalized), ή None αν το αρχείο δεν είναι managed.
+
+    Η αντιστοίχιση γίνεται με σύγκριση realpath και όχι με string
+    manipulation, ώστε symlinks/`..`/διαφορετικά storage roots να μην
+    μπορούν να «κρύψουν» ένα managed document. Ο υποψήφιος πληθυσμός
+    περιορίζεται στα έγγραφα του πελάτη με το ίδιο basename.
+
+    ΠΡΟΣΟΧΗ: το φιλτράρισμα γίνεται στο `file` (πραγματική διαδρομή
+    storage) και ΟΧΙ στο `filename`. Όταν το storage αποφύγει σύγκρουση
+    ονόματος προσθέτοντας suffix (π.χ. `x_a1b2c3.pdf`), το `filename`
+    κρατά το ΑΙΤΟΥΜΕΝΟ όνομα ενώ το αρχείο στον δίσκο έχει το νέο — ένα
+    match στο `filename` θα έχανε το document και θα επέτρεπε
+    filesystem-only διαγραφή.
+    """
+    target = os.path.realpath(full_path)
+    basename = os.path.basename(target)
+    candidates = ClientDocument.objects.filter(
+        client=client, file__endswith=basename)
+    for doc in candidates:
+        if not doc.file:
+            continue
+        try:
+            doc_path = os.path.realpath(doc.file.path)
+        except (NotImplementedError, ValueError, AttributeError):
+            # Non-local storage: δεν υπάρχει filesystem path να συγκριθεί
+            continue
+        if doc_path == target:
+            return doc
+    return None
+
+
 @staff_member_required
 @require_POST
-def file_delete(request, client_id, file_path):
+def file_delete(request, client_id, file_path=None):
     """
-    Διαγραφή αρχείου πελάτη.
+    Διαγραφή αρχείου πελάτη. Το file_path έρχεται από το JSON body
+    (το URL δεν το περιλαμβάνει — πριν, το view σήκωνε TypeError/500).
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    if not check_model_perms(request, 'accounting.delete_clientdocument'):
+        return JsonResponse(PERM_DENIED_JSON, status=403)
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
+
+    if file_path is None:
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            body = {}
+        file_path = body.get('file_path') or request.POST.get('file_path', '')
+    if not file_path or not isinstance(file_path, str):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν καθορίστηκε αρχείο'}, status=400)
 
     archive_root = filing.get_archive_root()
     full_path = os.path.realpath(os.path.join(archive_root, file_path))
@@ -872,20 +1076,55 @@ def file_delete(request, client_id, file_path):
     if not os.path.exists(full_path):
         return JsonResponse({'success': False, 'error': 'File not found'}, status=404)
 
+    # Γύρος 21 — P2: managed ClientDocument ΔΕΝ διαγράφεται ποτέ
+    # filesystem-only. Θα έμενε committed row χωρίς φυσικό αρχείο
+    # (invisible corruption: τα email attachments/downloads σπάνε και το
+    # audit δεν το έβλεπε). Δρομολόγηση στο canonical service, που
+    # επιβάλλει την πολιτική versioned deletion και διαγράφει το αρχείο
+    # μόνο μετά το commit.
+    managed = _find_managed_document(client, full_path)
+    if managed is not None:
+        try:
+            filing.delete_document_service(request.user, managed)
+        except PermissionDenied:
+            return JsonResponse(PERM_DENIED_JSON, status=403)
+        except Exception as exc:
+            mapped = filing.document_error_status(exc)
+            if mapped is None:
+                logger.exception('Αποτυχία διαγραφής εγγράφου id=%s',
+                                 managed.pk)
+                return JsonResponse(
+                    {'success': False, 'error': GENERIC_SERVER_ERROR},
+                    status=500)
+            message, code = mapped
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
+        logger.info('Managed document deleted: document id=%s client id=%s '
+                    'by user id=%s', managed.pk, client.pk, request.user.pk)
+        return JsonResponse({
+            'success': True,
+            'message': 'Το έγγραφο διαγράφηκε επιτυχώς'
+        })
+
+    # Unmanaged αρχείο (δεν αντιστοιχεί σε ClientDocument row) — ασφαλής
+    # φυσική διαγραφή μέσα στον ήδη επικυρωμένο φάκελο του πελάτη
     try:
         os.remove(full_path)
-        logger.info(f"File deleted: {full_path} by {request.user.username}")
+        # Χωρίς path/filename/ΑΦΜ/επωνυμία στα logs — μόνο internal IDs
+        logger.info('File deleted for client id=%s by user id=%s',
+                    client.pk, request.user.pk)
 
         return JsonResponse({
             'success': True,
             'message': 'Το αρχείο διαγράφηκε επιτυχώς'
         })
 
-    except Exception as e:
-        logger.error(f"File delete error: {e}", exc_info=True)
+    except Exception:
+        logger.exception('Αποτυχία διαγραφής αρχείου για client id=%s',
+                         client.pk)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': GENERIC_SERVER_ERROR
         }, status=500)
 
 
@@ -903,7 +1142,10 @@ def open_document_folder(request, document_id):
     χρησιμοποιηθεί JavaScript με file:// protocol (με περιορισμούς
     ασφαλείας του browser).
     """
-    document = get_object_or_404(ClientDocument, id=document_id)
+    from django.http import HttpResponseForbidden
+    if not check_model_perms(request, 'accounting.view_clientdocument'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής εγγράφων.')
+    document = get_object_or_404(accessible_documents(request.user), id=document_id)
 
     folder_path = document.folder_path
     full_file_path = document.full_path
@@ -938,7 +1180,10 @@ def open_client_folder(request, client_id):
     """
     Άνοιγμα φακέλου πελάτη.
     """
-    client = get_object_or_404(ClientProfile, id=client_id)
+    from django.http import HttpResponseForbidden
+    if not check_model_perms(request, 'accounting.view_clientprofile'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα προβολής πελατών.')
+    client = get_object_or_404(accessible_clients(request.user), id=client_id)
 
     folder_path = filing.get_client_folder_path(client)
 
@@ -969,7 +1214,16 @@ def open_client_folder(request, client_id):
 def archive_settings_view(request):
     """
     Προβολή και επεξεργασία ρυθμίσεων αρχειοθέτησης.
+    Global ρυθμίσεις όλου του γραφείου — model permissions πέρα από staff.
     """
+    from django.http import HttpResponseForbidden
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_archiveconfiguration'):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα για αυτή την ενέργεια.')
+    if request.method == 'POST' and not check_model_perms(
+        request, 'accounting.change_archiveconfiguration'
+    ):
+        return HttpResponseForbidden('Δεν έχετε δικαίωμα για αυτή την ενέργεια.')
     # Current settings
     archive_root = getattr(settings, 'ARCHIVE_ROOT', settings.MEDIA_ROOT)
     media_root = settings.MEDIA_ROOT
@@ -1031,6 +1285,12 @@ def archive_config_create(request):
     """
     Δημιουργία νέας ρύθμισης αρχειοθέτησης.
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.add_archiveconfiguration'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
     obligation_type_id = request.POST.get('obligation_type_id')
     if not obligation_type_id:
         return JsonResponse({'success': False, 'error': 'Δεν επιλέχθηκε τύπος'}, status=400)

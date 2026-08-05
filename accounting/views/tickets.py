@@ -21,8 +21,16 @@ logger = logging.getLogger(__name__)
 @require_POST
 def assign_ticket(request, ticket_id):
     """Assign ticket to current user"""
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_ticket'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
-        ticket = Ticket.objects.get(id=ticket_id)
+        from accounting.api_voip import _scope_by_client
+        ticket = _scope_by_client(Ticket.objects.all(), request.user).get(id=ticket_id)
 
         # Mark as assigned
         ticket.mark_as_assigned(request.user)
@@ -58,8 +66,16 @@ def assign_ticket(request, ticket_id):
 @require_POST
 def update_ticket_status(request, ticket_id):
     """Update ticket status and notes"""
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_ticket'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+
     try:
-        ticket = Ticket.objects.get(id=ticket_id)
+        from accounting.api_voip import _scope_by_client
+        ticket = _scope_by_client(Ticket.objects.all(), request.user).get(id=ticket_id)
 
         try:
             data = json.loads(request.body)

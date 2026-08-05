@@ -33,6 +33,11 @@ class Command(BaseCommand):
             '--dry-run', action='store_true',
             help='Δείχνει πόσες εγγραφές θα επανακρυπτογραφηθούν χωρίς αλλαγές',
         )
+        parser.add_argument(
+            '--skip-invalid', action='store_true',
+            help='Παράλειψη εγγραφών που δεν αποκρυπτογραφούνται (default: '
+                 'αποτυχία + rollback ολόκληρου του rotation)',
+        )
 
     def handle(self, *args, **options):
         if options['generate']:
@@ -50,6 +55,8 @@ class Command(BaseCommand):
             )
 
         dry_run = options['dry_run']
+        self.skip_invalid = options['skip_invalid']
+        self.skipped = []
         total = 0
 
         with transaction.atomic():
@@ -61,9 +68,18 @@ class Command(BaseCommand):
 
         verb = "θα επανακρυπτογραφούνταν" if dry_run else "επανακρυπτογραφήθηκαν"
         self.stdout.write(self.style.SUCCESS(f"Σύνολο: {total} πεδία {verb}."))
+        if self.skipped:
+            self.stderr.write(self.style.WARNING(
+                f"ΠΡΟΣΟΧΗ: παραλείφθηκαν {len(self.skipped)} πεδία "
+                f"(--skip-invalid): {', '.join(self.skipped)}"
+            ))
 
     def _reencrypt(self, obj, field_names, dry_run):
-        """Επανακρυπτογραφεί τα δοσμένα πεδία ενός object. Επιστρέφει πλήθος."""
+        """Επανακρυπτογραφεί τα δοσμένα πεδία ενός object. Επιστρέφει πλήθος.
+
+        Fail-closed: αδυναμία αποκρυπτογράφησης → CommandError (rollback του
+        transaction, exit code != 0), εκτός αν δόθηκε --skip-invalid.
+        """
         changed = []
         for field in field_names:
             encrypted = getattr(obj, field, '')
@@ -71,9 +87,17 @@ class Command(BaseCommand):
                 continue
             plain = safe_decrypt(encrypted)
             if plain is None:
+                label = f"{obj.__class__.__name__}#{obj.pk}.{field}"
+                if not self.skip_invalid:
+                    raise CommandError(
+                        f"ΑΔΥΝΑΤΗ αποκρυπτογράφηση: {label}. Το rotation "
+                        f"ακυρώθηκε (rollback) — κανένα κλειδί δεν πρέπει να "
+                        f"αφαιρεθεί. Έλεγξε τα DATA_ENCRYPTION_KEY_* ή τρέξε "
+                        f"με --skip-invalid για ρητή παράλειψη."
+                    )
+                self.skipped.append(label)
                 self.stderr.write(self.style.WARNING(
-                    f"  ΑΔΥΝΑΤΗ αποκρυπτογράφηση: {obj.__class__.__name__}"
-                    f"#{obj.pk}.{field} — παραλείπεται."
+                    f"  ΑΔΥΝΑΤΗ αποκρυπτογράφηση: {label} — παραλείπεται."
                 ))
                 continue
             setattr(obj, field, encrypt_value(plain))

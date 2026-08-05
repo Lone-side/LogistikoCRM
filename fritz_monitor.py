@@ -66,12 +66,11 @@ class Config:
             logger.warning("⚠️  SECURITY: Using DEFAULT API token! Set FRITZ_API_TOKEN in .env file")
             logger.warning("⚠️  Create .env file with: FRITZ_API_TOKEN=your-secure-random-token")
         else:
-            # Show only first 4 chars for security
-            masked = cls.FRITZ_API_TOKEN[:4] + '...' + cls.FRITZ_API_TOKEN[-4:] if len(cls.FRITZ_API_TOKEN) > 8 else '****'
+            # Κανένα τμήμα του token στα logs
             if _dotenv_loaded:
-                logger.info(f"✅ API token loaded from .env file: {masked}")
+                logger.info("✅ API token loaded from .env file")
             else:
-                logger.info(f"✅ API token loaded from environment: {masked}")
+                logger.info("✅ API token loaded from environment")
 
     # Timeouts & Retries
     API_TIMEOUT = 30

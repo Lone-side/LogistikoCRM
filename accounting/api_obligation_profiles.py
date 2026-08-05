@@ -71,6 +71,14 @@ class ClientObligationProfileSerializer(serializers.Serializer):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def clients_obligation_status(request):
+    from accounting.services.access import accessible_clients, check_model_perms
+    if not check_model_perms(
+        request, 'accounting.view_clientprofile', 'accounting.view_clientobligation'
+    ):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     GET /api/v1/clients/obligation-status/
     Returns all clients with their obligation profile status
@@ -95,7 +103,7 @@ def clients_obligation_status(request):
     active_only = request.query_params.get('active_only', 'true').lower() == 'true'
 
     # Get clients
-    clients_qs = ClientProfile.objects.all()
+    clients_qs = accessible_clients(request.user)
     if active_only:
         clients_qs = clients_qs.filter(is_active=True)
 
@@ -177,15 +185,25 @@ def client_obligation_profile(request, client_id):
     Updates the client's obligation profile
     Body: { obligation_type_ids: [1,2,3], obligation_profile_ids: [1] }
     """
-    client = get_object_or_404(ClientProfile, pk=client_id)
-
-    # Get or create the ClientObligation record
-    client_obligation, created = ClientObligation.objects.get_or_create(
-        client=client,
-        defaults={'is_active': True}
-    )
+    from accounting.services.access import check_model_perms, get_accessible_client_or_404
+    if not check_model_perms(request, 'accounting.view_clientobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    client = get_accessible_client_or_404(request.user, client_id, request=request)
 
     if request.method == 'GET':
+        # Το GET δεν γράφει στη βάση — αν δεν υπάρχει εγγραφή, κενές λίστες
+        client_obligation = ClientObligation.objects.filter(client=client).first()
+        if client_obligation is None:
+            return Response({
+                'client_id': client_id,
+                'obligation_type_ids': [],
+                'obligation_types': [],
+                'obligation_profile_ids': [],
+                'obligation_profiles': [],
+            })
         # Get individual obligation types
         obligation_types = list(client_obligation.obligation_types.filter(is_active=True))
         obligation_type_ids = [ot.id for ot in obligation_types]
@@ -207,8 +225,20 @@ def client_obligation_profile(request, client_id):
         })
 
     elif request.method == 'PUT':
+        from accounting.services.access import check_model_perms
+        if not check_model_perms(request, 'accounting.change_clientobligation'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         obligation_type_ids = request.data.get('obligation_type_ids', [])
         obligation_profile_ids = request.data.get('obligation_profile_ids', [])
+
+        # Το get_or_create μόνο στο PUT, αφού πέρασε το permission check
+        client_obligation, _created = ClientObligation.objects.get_or_create(
+            client=client,
+            defaults={'is_active': True}
+        )
 
         # Update obligation types
         if obligation_type_ids is not None:
@@ -239,6 +269,12 @@ def client_obligation_profile(request, client_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def obligation_types_grouped(request):
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_obligationtype'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     GET /api/v1/obligation-types/grouped/
     Returns obligation types grouped by their exclusion_group (category)
@@ -301,6 +337,12 @@ def obligation_profiles_list(request):
     GET /api/v1/obligation-profiles/
     Returns all reusable obligation profiles
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_obligationprofile'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     profiles = ObligationProfile.objects.all().prefetch_related('obligation_types')
     serializer = ObligationProfileSerializer(profiles, many=True)
     return Response(serializer.data)
@@ -313,6 +355,13 @@ def obligation_profiles_list(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_month_obligations(request):
+    from accounting.services.access import accessible_clients, require_model_perms  # noqa: F401
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.add_monthlyobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     POST /api/v1/obligations/generate-month/
     Generate monthly obligations for clients based on their obligation profiles
@@ -366,9 +415,9 @@ def generate_month_obligations(request):
 
     # Get clients
     if client_ids:
-        clients = ClientProfile.objects.filter(id__in=client_ids, is_active=True)
+        clients = accessible_clients(request.user).filter(id__in=client_ids, is_active=True)
     else:
-        clients = ClientProfile.objects.filter(is_active=True)
+        clients = accessible_clients(request.user).filter(is_active=True)
 
     if not clients.exists():
         return Response(
@@ -465,6 +514,12 @@ def generate_month_obligations(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def bulk_assign_obligations(request):
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_clientobligation'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     """
     POST /api/v1/obligations/bulk-assign/
     Bulk assign obligation types and profiles to multiple clients
@@ -502,7 +557,8 @@ def bulk_assign_obligations(request):
         )
 
     # Get clients
-    clients = ClientProfile.objects.filter(id__in=client_ids)
+    from accounting.services.access import accessible_clients
+    clients = accessible_clients(request.user).filter(id__in=client_ids)
     if not clients.exists():
         return Response(
             {'error': 'Δεν βρέθηκαν οι επιλεγμένοι πελάτες.'},

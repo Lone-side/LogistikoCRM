@@ -9,6 +9,7 @@ Tests για το security hardening των κωδικών πελατών:
 from django.contrib.auth.models import Permission, User
 from django.test import override_settings
 from rest_framework.test import APIClient, APITestCase
+from tests.utils.helpers import grant_accounting_model_perms
 
 from accounting.models import ClientCredential, ClientProfile
 from common.models import AuditLog
@@ -59,6 +60,7 @@ class ClientApiNoCredentialExposureTest(APITestCase):
 
     def setUp(self):
         self.user = User.objects.create_user('employee', password='x')
+        self.user = grant_accounting_model_perms(self.user)
         self.api = APIClient()
         self.api.force_authenticate(user=self.user)
         self.client_profile = ClientProfile.objects.create(
@@ -87,6 +89,7 @@ class ClientApiNoCredentialExposureTest(APITestCase):
 class CredentialApiTest(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user('accountant', password='x')
+        self.user = grant_accounting_model_perms(self.user)
         self.user.user_permissions.add(
             perm('view_clientcredential'), perm('add_clientcredential'),
             perm('change_clientcredential'), perm('delete_clientcredential'),
@@ -146,9 +149,9 @@ class CredentialApiTest(APITestCase):
 @override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
 class RbacScopingTest(APITestCase):
     def setUp(self):
-        self.assigned = User.objects.create_user('assigned', password='x')
-        self.stranger = User.objects.create_user('stranger', password='x')
-        self.supervisor = User.objects.create_user('supervisor', password='x')
+        self.assigned = grant_accounting_model_perms(User.objects.create_user('assigned', password='x'))
+        self.stranger = grant_accounting_model_perms(User.objects.create_user('stranger', password='x'))
+        self.supervisor = grant_accounting_model_perms(User.objects.create_user('supervisor', password='x'))
         self.supervisor.user_permissions.add(perm('view_all_clients'))
 
         self.client_profile = ClientProfile.objects.create(

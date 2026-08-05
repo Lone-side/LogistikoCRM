@@ -18,6 +18,12 @@ from accounting.views.helpers import _calculate_monthly_stats
 class DashboardStatsAPITest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('boss', 'b@test.com', 'pass12345', is_staff=True)
+        # Τα dashboard endpoints απαιτούν πλέον view_* model permissions
+        from django.contrib.auth.models import Permission
+        self.user.user_permissions.add(
+            Permission.objects.get(codename='view_clientprofile'),
+            Permission.objects.get(codename='view_monthlyobligation'),
+        )
         self.employee = User.objects.create_user(
             'maria', 'm@test.com', 'pass12345', first_name='Μαρία', last_name='Π.'
         )

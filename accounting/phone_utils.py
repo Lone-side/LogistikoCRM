@@ -8,6 +8,7 @@ Description: Phone number normalization and client matching utilities
 import re
 import logging
 from django.db.models import Q
+from accounting.services.access import mask_pii_value
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def phone_matches(phone1, phone2):
     return norm1 == norm2
 
 
-def find_client_by_phone(phone_number):
+def find_client_by_phone(phone_number, clients_qs=None):
     """
     Find a ClientProfile by phone number.
 
@@ -90,6 +91,8 @@ def find_client_by_phone(phone_number):
 
     Args:
         phone_number: Phone number to search for
+        clients_qs: Optional queryset περιορισμού (π.χ. accessible_clients(user))
+            — αν δεν δοθεί, ψάχνει σε όλους τους ενεργούς πελάτες
 
     Returns:
         ClientProfile instance if found, None otherwise
@@ -102,10 +105,10 @@ def find_client_by_phone(phone_number):
         # Too short to be a valid phone number
         return None
 
-    logger.debug(f"Searching for client with normalized phone: {normalized}")
+    logger.debug(f"Searching for client with normalized phone: {mask_pii_value(normalized)}")
 
-    # Get all active clients
-    clients = ClientProfile.objects.filter(is_active=True)
+    base_qs = clients_qs if clients_qs is not None else ClientProfile.objects.all()
+    clients = base_qs.filter(is_active=True)
 
     # Check each client's phone numbers
     for client in clients:
@@ -119,10 +122,10 @@ def find_client_by_phone(phone_number):
 
         for field_value in phone_fields:
             if field_value and phone_matches(field_value, phone_number):
-                logger.info(f"Found client {client.id} ({client.eponimia}) for phone {phone_number}")
+                logger.info(f"Found client {client.id} for phone {mask_pii_value(phone_number)}")
                 return client
 
-    logger.debug(f"No client found for phone: {phone_number}")
+    logger.debug(f"No client found for phone: {mask_pii_value(phone_number)}")
     return None
 
 
@@ -160,40 +163,48 @@ def find_clients_by_phone_query(phone_number):
     )
 
 
-def auto_match_call(call, save=True):
+def auto_match_call(call, save=True, clients_qs=None):
     """
     Attempt to auto-match a VoIP call to a client by phone number.
 
     Args:
         call: VoIPCall instance
         save: If True, save the call after matching
+        clients_qs: Optional queryset περιορισμού της αναζήτησης
+            (π.χ. accessible_clients(user) για scoped χρήστες)
 
     Returns:
         ClientProfile if matched, None otherwise
     """
-    from .models import VoIPCallLog
-
     if call.client is not None:
         # Already matched
         return call.client
 
-    client = find_client_by_phone(call.phone_number)
+    client = find_client_by_phone(call.phone_number, clients_qs=clients_qs)
 
     if client:
-        call.client = client
-        call.client_email = client.email or ''
-
-        if save:
-            call.save(update_fields=['client', 'client_email'])
-
-            # Log the auto-match action
-            VoIPCallLog.objects.create(
-                call=call,
-                action='client_matched',
-                description=f'Auto-matched to client: {client.eponimia}'
+        # Κλήση με ticket ήδη αντιστοιχισμένο σε ΑΛΛΟΝ πελάτη: το
+        # auto-match δεν την αγγίζει — μένει για χειροκίνητο triage
+        from .models import Ticket
+        linked_client_id = Ticket.objects.filter(call=call).values_list(
+            'client_id', flat=True
+        ).first()
+        if linked_client_id and linked_client_id != client.pk:
+            logger.warning(
+                f"Auto-match skipped for call {call.id}: linked ticket "
+                f"bound to different client"
             )
+            return None
+        if save:
+            # Κεντρικό service: atomic + invariant κλήσης-ticket (το
+            # auto-match ενημερώνει και τυχόν unassigned linked ticket)
+            from accounting.services.call_assignment import change_call_client
+            change_call_client(call, client, log_action='client_matched')
+        else:
+            call.client = client
+            call.client_email = client.email or ''
 
-        logger.info(f"Auto-matched call {call.id} to client {client.id} ({client.eponimia})")
+        logger.info(f"Auto-matched call {call.id} to client {client.id}")
         return client
 
     return None

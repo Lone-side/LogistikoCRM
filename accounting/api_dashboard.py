@@ -15,11 +15,16 @@ from calendar import monthrange
 from collections import defaultdict
 
 from .models import ClientProfile, MonthlyObligation
+from .services.access import require_model_perms
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_stats(request):
+    from accounting.services.access import accessible_clients, accessible_obligations
+    ClientQS = accessible_clients(request.user)
+    ObligationQS = accessible_obligations(request.user)
     """
     GET /api/dashboard/stats/
 
@@ -36,33 +41,31 @@ def dashboard_stats(request):
     next_week = today + timedelta(days=7)
 
     # Active clients count
-    total_clients = ClientProfile.objects.filter(is_active=True).count()
+    total_clients = ClientQS.filter(is_active=True).count()
 
     # Pending obligations
-    total_obligations_pending = MonthlyObligation.objects.filter(
+    total_obligations_pending = ObligationQS.filter(
         status='pending'
     ).count()
 
     # Completed this month
-    total_obligations_completed_this_month = MonthlyObligation.objects.filter(
+    total_obligations_completed_this_month = ObligationQS.filter(
         status='completed',
         completed_date__year=current_year,
         completed_date__month=current_month
     ).count()
 
     # Overdue count
-    overdue_count = MonthlyObligation.objects.filter(
+    overdue_count = ObligationQS.filter(
         Q(status='overdue') | Q(status='pending', deadline__lt=today)
     ).count()
 
-    # Update overdue status for those that are pending but past deadline
-    MonthlyObligation.objects.filter(
-        status='pending',
-        deadline__lt=today
-    ).update(status='overdue')
+    # Το GET δεν γράφει στη βάση: το overdue_count πιο πάνω υπολογίζεται
+    # δυναμικά (pending + deadline < σήμερα)· η μόνιμη μετάβαση σε
+    # 'overdue' γίνεται από το Celery task update_overdue_obligations.
 
     # Upcoming deadlines (next 7 days)
-    upcoming_obligations = MonthlyObligation.objects.filter(
+    upcoming_obligations = ObligationQS.filter(
         status='pending',
         deadline__gte=today,
         deadline__lte=next_week
@@ -82,13 +85,13 @@ def dashboard_stats(request):
     ]
 
     # Additional stats
-    stats_by_status = MonthlyObligation.objects.values('status').annotate(
+    stats_by_status = ObligationQS.values('status').annotate(
         count=Count('id')
     )
     status_breakdown = {item['status']: item['count'] for item in stats_by_status}
 
     # Top obligation types this month
-    top_types = MonthlyObligation.objects.filter(
+    top_types = ObligationQS.filter(
         year=current_year,
         month=current_month
     ).values('obligation_type__name').annotate(
@@ -97,7 +100,7 @@ def dashboard_stats(request):
 
     # === Κατανομή μήνα ανά τύπο υποχρέωσης, με ανάλυση κατάστασης ===
     type_breakdown = list(
-        MonthlyObligation.objects.filter(year=current_year, month=current_month)
+        ObligationQS.filter(year=current_year, month=current_month)
         .values('obligation_type__name', 'obligation_type__code')
         .annotate(
             total=Count('id'),
@@ -111,7 +114,7 @@ def dashboard_stats(request):
     # === Φόρτος εργασίας ανά υπάλληλο ===
     # Ανοιχτές (pending/overdue) ανά assigned_to + ολοκληρωμένες μήνα ανά completed_by
     open_by_user = (
-        MonthlyObligation.objects.filter(status__in=['pending', 'in_progress', 'overdue'])
+        ObligationQS.filter(status__in=['pending', 'in_progress', 'overdue'])
         .values('assigned_to__id', 'assigned_to__username',
                 'assigned_to__first_name', 'assigned_to__last_name')
         .annotate(
@@ -121,7 +124,7 @@ def dashboard_stats(request):
     )
     completed_by_user = {
         row['completed_by__id']: row['done']
-        for row in MonthlyObligation.objects.filter(
+        for row in ObligationQS.filter(
             status='completed',
             completed_date__year=current_year,
             completed_date__month=current_month,
@@ -153,7 +156,7 @@ def dashboard_stats(request):
     monthly_trend = []
     year, month = current_year, current_month
     for _ in range(6):
-        counts = MonthlyObligation.objects.filter(year=year, month=month).aggregate(
+        counts = ObligationQS.filter(year=year, month=month).aggregate(
             total=Count('id'),
             completed=Count('id', filter=Q(status='completed')),
         )
@@ -190,7 +193,10 @@ def dashboard_stats(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_calendar(request):
+    from accounting.services.access import accessible_obligations
+    ObligationQS = accessible_obligations(request.user)
     """
     GET /api/dashboard/calendar/
 
@@ -225,7 +231,7 @@ def dashboard_calendar(request):
     last_day = datetime(year, month, last_day_num).date()
 
     # Get all obligations for this month range
-    obligations = MonthlyObligation.objects.filter(
+    obligations = ObligationQS.filter(
         deadline__gte=first_day,
         deadline__lte=last_day
     ).select_related('client', 'obligation_type').order_by('deadline')
@@ -278,7 +284,11 @@ def dashboard_calendar(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_recent_activity(request):
+    from accounting.services.access import accessible_clients, accessible_obligations
+    ClientQS = accessible_clients(request.user)
+    ObligationQS = accessible_obligations(request.user)
     """
     GET /api/dashboard/recent-activity/
 
@@ -292,7 +302,7 @@ def dashboard_recent_activity(request):
         limit = 10
 
     # Recent completed obligations
-    recent_completed = MonthlyObligation.objects.filter(
+    recent_completed = ObligationQS.filter(
         status='completed'
     ).select_related(
         'client', 'obligation_type', 'completed_by'
@@ -312,7 +322,7 @@ def dashboard_recent_activity(request):
     ]
 
     # Recently created clients
-    recent_clients = ClientProfile.objects.order_by('-created_at')[:5]
+    recent_clients = ClientQS.order_by('-created_at')[:5]
     new_clients = [
         {
             'id': client.id,
@@ -332,19 +342,22 @@ def dashboard_recent_activity(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@require_model_perms('accounting.view_clientprofile', 'accounting.view_monthlyobligation')
 def dashboard_client_stats(request):
+    from accounting.services.access import accessible_clients
+    ClientQS = accessible_clients(request.user)
     """
     GET /api/dashboard/client-stats/
 
     Returns client-related statistics
     """
     # Client counts by type
-    client_by_type = ClientProfile.objects.values('eidos_ipoxreou').annotate(
+    client_by_type = ClientQS.values('eidos_ipoxreou').annotate(
         count=Count('id')
     )
 
     # Clients with most pending obligations
-    clients_with_pending = ClientProfile.objects.filter(
+    clients_with_pending = ClientQS.filter(
         is_active=True,
         monthly_obligations__status='pending'
     ).annotate(
@@ -363,7 +376,7 @@ def dashboard_client_stats(request):
 
     # Client creation trend (last 6 months)
     from django.db.models.functions import TruncMonth
-    creation_trend = ClientProfile.objects.filter(
+    creation_trend = ClientQS.filter(
         created_at__gte=timezone.now() - timedelta(days=180)
     ).annotate(
         month=TruncMonth('created_at')

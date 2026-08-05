@@ -35,7 +35,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'default-key-for-development')
 
 # Ανεξάρτητο κλειδί κρυπτογράφησης δεδομένων (Fernet) — δείτε mydata/encryption.py.
-# Δημιουργία: python manage.py rotate_encryption_key --generate
+# Δημιουργία (standalone, χωρίς Django settings): python scripts/generate_fernet_key.py
+# (ή manage.py rotate_encryption_key --generate σε ήδη λειτουργική εγκατάσταση)
 DATA_ENCRYPTION_KEY_CURRENT = os.getenv('DATA_ENCRYPTION_KEY_CURRENT', '')
 DATA_ENCRYPTION_KEY_PREVIOUS = os.getenv('DATA_ENCRYPTION_KEY_PREVIOUS', '')
 DATA_ENCRYPTION_KEY_ID = os.getenv('DATA_ENCRYPTION_KEY_ID', '')
@@ -472,6 +473,10 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
+    # Τα export endpoints διαβάζουν μόνα τους το ?format= (xlsx/pdf/json).
+    # Χωρίς αυτό το DRF ερμήνευε το ?format=xlsx ως renderer negotiation
+    # και γύριζε 404 πριν καν τρέξει το view (σπασμένα Excel downloads).
+    'URL_FORMAT_OVERRIDE': None,
     # OpenAPI/Swagger schema generation
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # Rate limiting - protects against abuse/DDoS
@@ -484,6 +489,8 @@ REST_FRAMEWORK = {
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
         'shared_link_auth': '10/hour',    # Δοκιμές κωδικού σε προστατευμένα links (ανά IP)
+        'credential_reveal': '10/hour',   # Αποκαλύψεις κωδικών πελατών (ανά χρήστη)
+        'afm_lookup': '60/hour',          # GSIS ΑΦΜ lookups (ανά χρήστη)
     },
     # Exception handling
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
@@ -678,6 +685,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'accounting.tasks.cleanup_stale_sync_logs',
         'schedule': crontab(minute='*/30'),  # Κολλημένα PENDING sync logs
     },
+    'update-overdue-obligations': {
+        'task': 'accounting.tasks.update_overdue_obligations',
+        'schedule': crontab(hour=0, minute=15),  # Καθημερινά 00:15
+    },
     'send-document-request-reminders': {
         'task': 'accounting.tasks.send_document_request_reminders',
         'schedule': crontab(hour=10, minute=0, day_of_week='1-5'),  # 10:00 Δευ-Παρ
@@ -700,6 +711,12 @@ TASMOTA_DOOR_PULSE_DURATION = float(os.environ.get('TASMOTA_DOOR_PULSE_DURATION'
 # ==================== Fritz!Box VoIP Monitor Authentication ====================
 # SECURITY: Token for Fritz!Box monitor webhook authentication
 FRITZ_API_TOKEN = os.environ.get('FRITZ_API_TOKEN', 'change-this-token-in-production')
+# Localhost fallback για το VoIP service API (χωρίς X-API-Key). Πίσω από
+# reverse proxy το REMOTE_ADDR μπορεί να φαίνεται loopback για εξωτερικά
+# requests, οπότε σε production μένει κλειστό (default: DEBUG).
+VOIP_ALLOW_LOCALHOST = os.environ.get(
+    'VOIP_ALLOW_LOCALHOST', 'true' if DEBUG else 'false'
+).lower() in ('true', '1', 'yes')
 
 # ==============================================================================
 # 📦 CACHING CONFIGURATION
@@ -764,14 +781,37 @@ if not DEBUG:
                 'Set the FRITZ_API_TOKEN environment variable to a long random value '
                 '(e.g. `openssl rand -hex 32`), even if the Fritz monitor is unused.'
             )
+        if not DATA_ENCRYPTION_KEY_CURRENT:
+            raise ImproperlyConfigured(
+                'DATA_ENCRYPTION_KEY_CURRENT is required in production — '
+                'χωρίς αυτό τα credentials κρυπτογραφούνται με το legacy '
+                'κλειδί από το SECRET_KEY. Δημιουργία (χωρίς να χρειάζεται '
+                'να εκκινεί το Django): `python scripts/generate_fernet_key.py`.'
+            )
+        if not ENFORCE_CLIENT_ASSIGNMENT and os.getenv(
+            'ALLOW_UNSCOPED_CLIENT_ACCESS', 'False'
+        ).lower() not in ('true', '1', 'yes'):
+            raise ImproperlyConfigured(
+                'ENFORCE_CLIENT_ASSIGNMENT must be enabled in production. '
+                'Αν το CRM χρησιμοποιείται μόνο από superuser και θέλετε '
+                'συνειδητά RBAC off, ορίστε ALLOW_UNSCOPED_CLIENT_ACCESS=True.'
+            )
 
     # HSTS (HTTP Strict Transport Security)
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-    # HTTPS redirect
-    SECURE_SSL_REDIRECT = True
+    # HTTPS redirect — πάντα ενεργό σε production. Στο CI security-smoke
+    # (DJANGO_ENV=production) μένει ενεργό ΚΑΙ στο test runner: τα RBAC smoke
+    # tests στέλνουν secure=True requests ώστε να ελέγχουν τα πραγματικά
+    # status codes χωρίς να απενεργοποιείται το redirect. Στο απλό CI test
+    # job (DEBUG=False χωρίς DJANGO_ENV=production) η υπόλοιπη σουίτα μιλάει
+    # http, οπότε εκεί μόνο ισχύει η εξαίρεση του TESTING.
+    if os.getenv('DJANGO_ENV', '').lower() == 'production':
+        SECURE_SSL_REDIRECT = True
+    else:
+        SECURE_SSL_REDIRECT = not TESTING
 
     # Secure cookies
     SESSION_COOKIE_SECURE = True

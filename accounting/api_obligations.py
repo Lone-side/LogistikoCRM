@@ -8,7 +8,7 @@ Description: REST API ViewSet for MonthlyObligation management
 from rest_framework import viewsets, status, filters, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import (
     DjangoFilterBackend, FilterSet, CharFilter,
@@ -187,6 +187,15 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
             'assigned_to'
         ]
 
+    def validate_client(self, client):
+        """RBAC: ο χρήστης πρέπει να έχει πρόσβαση στον πελάτη της υποχρέωσης"""
+        request = self.context.get('request')
+        if client and request is not None:
+            from accounting.services.access import user_can_access_client
+            if not user_can_access_client(request.user, client):
+                raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
     def validate(self, data):
         """Validate unique together constraint"""
         client = data.get('client')
@@ -224,7 +233,7 @@ class ObligationCreateUpdateSerializer(serializers.ModelSerializer):
 # ============================================
 
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient
+from .permissions import CanAccessClient, ClientModelPermissions, IsSeeAllAdmin
 
 
 class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
@@ -240,15 +249,25 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     - DELETE /api/obligations/{id}/ - Delete
     """
     queryset = MonthlyObligation.objects.all()
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    # Bulk actions: map POST στο σωστό model permission ανά ενέργεια
+    action_perms = {
+        'bulk_complete': ['accounting.change_monthlyobligation'],
+        'bulk_update': ['accounting.change_monthlyobligation'],
+        'bulk_delete': ['accounting.delete_monthlyobligation'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = ObligationPagination
 
     def get_permissions(self):
-        # Διαγραφή υποχρέωσης μόνο από admins — οι υπόλοιποι τη σημειώνουν
-        # ως «Ακυρώθηκε» αντί να σβήνουν ιστορικό
+        # Διαγραφή υποχρέωσης μόνο από Διαχειριστή (όχι σκέτο is_staff) και
+        # με delete_monthlyobligation — οι υπόλοιποι τη σημειώνουν ως
+        # «Ακυρώθηκε» αντί να σβήνουν ιστορικό
         if self.action == 'destroy':
-            return [IsAuthenticated(), IsAdminUser()]
+            return [
+                IsAuthenticated(), ClientModelPermissions(),
+                CanAccessClient(), IsSeeAllAdmin(),
+            ]
         return super().get_permissions()
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = ObligationFilter
@@ -336,8 +355,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
             deadline__lt=today
         ).order_by('deadline')
 
-        # Update status to overdue if needed
-        overdue.update(status='overdue')
+        # Το GET δεν γράφει στη βάση — η μόνιμη μετάβαση γίνεται από το
+        # Celery task update_overdue_obligations.
 
         page = self.paginate_queryset(overdue)
         if page is not None:
@@ -387,7 +406,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        obligations = MonthlyObligation.objects.filter(
+        # RBAC: μόνο προσβάσιμες υποχρεώσεις — ξένα IDs αγνοούνται
+        obligations = self.get_queryset().filter(
             id__in=obligation_ids,
             status__in=['pending', 'overdue']
         )
@@ -469,8 +489,9 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get clients
-        clients = ClientProfile.objects.filter(id__in=client_ids, is_active=True)
+        # Get clients (RBAC: μόνο προσβάσιμοι)
+        from accounting.services.access import accessible_clients
+        clients = accessible_clients(request.user).filter(id__in=client_ids, is_active=True)
         if not clients.exists():
             return Response(
                 {'error': 'Δεν βρέθηκαν ενεργοί πελάτες.'},
@@ -546,7 +567,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        obligations = MonthlyObligation.objects.filter(id__in=obligation_ids)
+        # RBAC: μόνο προσβάσιμες υποχρεώσεις
+        obligations = self.get_queryset().filter(id__in=obligation_ids)
 
         update_data = {'status': new_status}
         if new_status == 'completed':
@@ -576,7 +598,8 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        deleted_count, _ = MonthlyObligation.objects.filter(
+        # RBAC: μόνο προσβάσιμες υποχρεώσεις
+        deleted_count, _ = self.get_queryset().filter(
             id__in=obligation_ids
         ).delete()
 
@@ -777,13 +800,7 @@ class ObligationViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         if filter_status:
             queryset = queryset.filter(status=filter_status)
 
-        # Update overdue status for pending obligations past deadline
-        queryset.filter(
-            status='pending',
-            deadline__lt=today
-        ).update(status='overdue')
-
-        # Refresh queryset after update with select_related to avoid N+1 queries
+        # Το GET δεν γράφει στη βάση (βλ. update_overdue_obligations task)
         queryset = queryset.select_related(
             'client', 'obligation_type'
         ).order_by('deadline')
@@ -858,5 +875,5 @@ class ObligationTypeViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = ObligationType.objects.filter(is_active=True).order_by('priority', 'name')
     serializer_class = ObligationTypeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     pagination_class = None  # Return all types without pagination

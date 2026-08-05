@@ -9,6 +9,7 @@ PostgreSQL στο CI (SearchVector branch) — ίδια tests, δύο υλοπο
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from tests.utils.helpers import grant_accounting_model_perms
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
@@ -18,6 +19,8 @@ from accounting.services.search import apply_document_search
 
 
 def make_document(client, filename, extracted_text='', description=''):
+    # Γύρος 19: μοναδικό slot ανά fixture — δύο ανεξάρτητα current έγγραφα
+    # στο ίδιο key απαγορεύονται πλέον από το DB constraint
     return ClientDocument.objects.create(
         client=client,
         file=SimpleUploadedFile(filename, b'%PDF-1.4 test'),
@@ -28,6 +31,7 @@ def make_document(client, filename, extracted_text='', description=''):
         document_category='general',
         year=2026,
         month=7,
+        slot=f'test-{filename}'[:64],
     )
 
 
@@ -73,7 +77,7 @@ class DocumentSearchTest(TestCase):
         )
 
     def test_file_manager_endpoint_search(self):
-        user = User.objects.create_user('staff1', 's@test.com', 'pass12345')
+        user = grant_accounting_model_perms(User.objects.create_user('staff1', 's@test.com', 'pass12345'))
         self.client.force_login(user)
         resp = self.client.get(
             '/accounting/api/v1/file-manager/documents/', {'search': 'μισθοδοσίας'}

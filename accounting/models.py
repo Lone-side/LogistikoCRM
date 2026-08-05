@@ -105,6 +105,8 @@ class ClientProfile(models.Model):
         ]
         permissions = [
             ('view_all_clients', 'Πρόσβαση σε όλους τους πελάτες ανεξαρτήτως ανάθεσης'),
+            ('send_client_email', 'Αποστολή email σε πελάτες'),
+            ('export_clientprofile', 'Μαζική εξαγωγή στοιχείων πελατών (Excel/CSV)'),
         ]
 
     def __str__(self):
@@ -1449,6 +1451,34 @@ class VoIPCall(models.Model):
     def is_missed(self):
         return self.status == 'missed'
     
+    def clean(self):
+        """
+        Invariant κλήσης-ticket (κεντρικό σημείο για admin/forms):
+        όταν το συνδεδεμένο ticket είναι αντιστοιχισμένο σε πελάτη, η κλήση
+        δεν μπορεί ούτε να μείνει χωρίς πελάτη ούτε να δείχνει άλλον πελάτη.
+        Η ταυτόχρονη αλλαγή και των δύο γίνεται μόνο μέσω της atomic
+        διαδρομής του API (VoIPCallViewSet.perform_update).
+        """
+        super().clean()
+        if not self.pk:
+            return
+        linked = Ticket.objects.filter(call_id=self.pk).values_list(
+            'client_id', flat=True
+        ).first()
+        if linked is None:
+            return
+        from django.core.exceptions import ValidationError
+        if self.client_id is None:
+            raise ValidationError({
+                'client': 'Η κλήση έχει ticket αντιστοιχισμένο σε πελάτη — '
+                          'η αφαίρεση πελάτη πρέπει να γίνει και στα δύο μαζί.'
+            })
+        if self.client_id != linked:
+            raise ValidationError({
+                'client': 'Το συνδεδεμένο ticket ανήκει σε διαφορετικό πελάτη — '
+                          'η αλλαγή πρέπει να ενημερώσει και τα δύο μαζί.'
+            })
+
     def save(self, *args, **kwargs):
         if self.ended_at and self.started_at:
             delta = self.ended_at - self.started_at
@@ -1585,7 +1615,33 @@ class Ticket(models.Model):
     
     def __str__(self):
         return f"#{self.id} - {self.title}"
-    
+
+    def clean(self):
+        """
+        Invariant ticket-κλήσης (κεντρικό σημείο για admin/forms):
+        όταν η συνδεδεμένη κλήση είναι αντιστοιχισμένη σε πελάτη, το ticket
+        πρέπει να δείχνει στον ΙΔΙΟ πελάτη — ούτε άλλον, ούτε κανέναν.
+        Unassigned κλήση (triage) δεν περιορίζει το ticket.
+        """
+        super().clean()
+        if not self.call_id:
+            return
+        call_client_id = VoIPCall.objects.filter(pk=self.call_id).values_list(
+            'client_id', flat=True
+        ).first()
+        if not call_client_id:
+            return
+        from django.core.exceptions import ValidationError
+        if self.client_id is None:
+            raise ValidationError({
+                'client': 'Η συνδεδεμένη κλήση είναι αντιστοιχισμένη σε πελάτη — '
+                          'το ticket δεν μπορεί να μείνει χωρίς πελάτη.'
+            })
+        if self.client_id != call_client_id:
+            raise ValidationError({
+                'call': 'Η κλήση ανήκει σε διαφορετικό πελάτη από το ticket.'
+            })
+
     def mark_as_assigned(self, user):
         """Mark ticket as assigned"""
         self.status = 'assigned'
@@ -1808,6 +1864,21 @@ class ClientDocument(models.Model):
         help_text='Μήνας αναφοράς (από υποχρέωση ή upload)'
     )
 
+    # === Logical slot (μέρος του exact conflict key) ===
+    # Το γραφείο δουλεύει με ένα «κύριο» slot ('') ανά (client, category,
+    # year, month, obligation) — δεύτερο upload στο ίδιο key γίνεται version.
+    # Τα portal uploads (on_existing='keep') παίρνουν μοναδικό slot ώστε
+    # πολλά ανεξάρτητα έγγραφα πελάτη στην ίδια κατηγορία/περίοδο να ΜΗΝ
+    # παραβιάζουν το invariant «ένα current ανά exact key» και να μην
+    # εκτοπίζουν ποτέ τα έγγραφα του γραφείου.
+    slot = models.CharField(
+        max_length=64,
+        default='',
+        blank=True,
+        verbose_name='Slot',
+        help_text='Λογική θέση εγγράφου — μέρος του exact conflict key',
+    )
+
     # === Versioning ===
     version = models.PositiveIntegerField(
         default=1,
@@ -1886,12 +1957,66 @@ class ClientDocument(models.Model):
             models.Index(fields=['client', 'document_category']),
             models.Index(fields=['obligation', 'is_current']),
         ]
+        # DB-level enforcement του «ένα current ανά exact logical key».
+        # Δύο partial constraints επειδή το obligation είναι nullable και
+        # στην PostgreSQL NULL != NULL (τα partial unique indexes
+        # υποστηρίζονται και σε PostgreSQL και σε SQLite):
+        constraints = [
+            models.UniqueConstraint(
+                fields=['client', 'document_category', 'year', 'month',
+                        'slot'],
+                condition=models.Q(is_current=True, obligation__isnull=True),
+                name='uniq_current_doc_no_obligation',
+            ),
+            models.UniqueConstraint(
+                fields=['client', 'document_category', 'year', 'month',
+                        'obligation', 'slot'],
+                condition=models.Q(is_current=True, obligation__isnull=False),
+                name='uniq_current_doc_with_obligation',
+            ),
+        ]
 
     def __str__(self):
         version_str = f" (v{self.version})" if self.version > 1 else ""
         return f"{self.filename}{version_str} - {self.client.eponimia}"
 
+    def clean(self):
+        """
+        Κεντρικό data-integrity invariant (ισχύει σε API, Admin, tasks,
+        direct service calls — όποιος καλεί full_clean):
+        - όταν υπάρχει obligation: client_id == obligation.client_id
+        - όταν υπάρχει previous_version: client_id == previous_version.client_id
+        Παραβίαση → ValidationError ΠΡΙΝ γραφτεί row/αρχείο.
+        """
+        super().clean()
+        from django.core.exceptions import ValidationError
+        if self.obligation_id and self.client_id \
+                and self.obligation.client_id != self.client_id:
+            raise ValidationError({
+                'obligation': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από '
+                              'το έγγραφο.'
+            })
+        if self.previous_version_id and self.client_id \
+                and self.previous_version.client_id != self.client_id:
+            raise ValidationError({
+                'previous_version': 'Η προηγούμενη έκδοση ανήκει σε '
+                                    'διαφορετικό πελάτη.'
+            })
+
     def save(self, *args, **kwargs):
+        # Data-integrity invariant: πάντα, ακόμη κι όταν ο caller δεν
+        # κάλεσε ρητά full_clean (π.χ. bulk .create()). Δεν αντικαθιστά τα
+        # model-permission/scoping ελέγχους — είναι μόνο consistency guard.
+        if self.obligation_id and self.client_id \
+                and self.obligation.client_id != self.client_id:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από το έγγραφο.')
+        if self.previous_version_id and self.client_id \
+                and self.previous_version.client_id != self.client_id:
+            from django.core.exceptions import ValidationError
+            raise ValidationError(
+                'Η προηγούμενη έκδοση ανήκει σε διαφορετικό πελάτη.')
         # Auto-extract file info
         if self.file:
             # Κρατάμε το αρχικό όνομα
@@ -1954,52 +2079,90 @@ class ClientDocument(models.Model):
         filing.ensure_folders(self.client, year=self.year)
 
     @classmethod
-    def check_existing(cls, client, obligation=None, category=None):
+    def check_existing(cls, client, obligation=None, category='general',
+                       year=None, month=None, slot=''):
         """
-        Έλεγχος αν υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό.
-        Επιστρέφει το υπάρχον αρχείο ή None.
+        Έλεγχος αν υπάρχει ήδη τρέχον αρχείο για το ΑΚΡΙΒΕΣ logical key —
+        deleg­άρει στον ΚΟΙΝΟ helper (accounting.services.filing.
+        find_current_for_key). Ρίχνει MultipleCurrentDocumentsError σε
+        corrupted πολλαπλά current rows (fail closed, ΟΧΙ αυθαίρετο first).
+        Όταν year/month δεν δόθηκαν, παίρνονται από την υποχρέωση ή το
+        τρέχον έτος/μήνα (ίδια σημασιολογία με το filing service).
         """
-        qs = cls.objects.filter(client=client, is_current=True)
+        from accounting.services import filing
+        if obligation is not None:
+            year = year or obligation.year
+            month = month or obligation.month
+        else:
+            now = datetime.now()
+            year = year or now.year
+            month = month or now.month
+        return filing.find_current_for_key(
+            client=client, category=category, year=year, month=month,
+            obligation=obligation, slot=slot)
 
-        if obligation:
-            qs = qs.filter(obligation=obligation)
-        if category:
-            qs = qs.filter(document_category=category)
-
-        return qs.first()
-
-    def create_new_version(self, new_file, user=None, original_filename=None):
+    def create_new_version(self, new_file, user=None, original_filename=None,
+                           description=None):
         """
-        Δημιουργεί νέα έκδοση του εγγράφου.
-        Το παλιό γίνεται is_current=False.
+        Δημιουργεί νέα έκδοση του εγγράφου. Το παλιό γίνεται is_current=False.
+
+        Race-safe: το «κατέβασμα» του παλιού γίνεται με conditional UPDATE
+        (test-and-set στο is_current) μέσα σε transaction — δύο ταυτόχρονα
+        version attempts δεν αφήνουν ποτέ δύο current εκδόσεις. Σε αποτυχία
+        του DB save το νέο φυσικό αρχείο καθαρίζεται (όχι orphan) και το
+        rollback επαναφέρει το παλιό ως current.
 
         Returns: new ClientDocument instance
+        Raises: ValidationError αν το έγγραφο δεν είναι πλέον η τρέχουσα έκδοση
         """
-        # Mark this as not current
-        self.is_current = False
-        self.save(update_fields=['is_current'])
+        from django.core.exceptions import ValidationError
+        from django.db import transaction
 
-        # Ρητό _v{n} στο όνομα ώστε οι εκδόσεις να ξεχωρίζουν στον φάκελο
-        # (αντί για τα τυχαία suffixes του Django storage)
-        base, ext = os.path.splitext(os.path.basename(new_file.name))
-        new_file.name = f"{base}_v{self.version + 1}{ext}"
+        with transaction.atomic():
+            demoted = ClientDocument.objects.filter(
+                pk=self.pk, is_current=True
+            ).update(is_current=False)
+            if not demoted:
+                # Κάποιος άλλος πρόλαβε να δημιουργήσει νέα έκδοση
+                raise ValidationError(
+                    'Το έγγραφο έχει ήδη νεότερη έκδοση — ανανεώστε και '
+                    'δοκιμάστε ξανά.')
+            self.is_current = False
 
-        # Create new version
-        new_doc = ClientDocument(
-            client=self.client,
-            obligation=self.obligation,
-            file=new_file,
-            original_filename=original_filename or os.path.basename(new_file.name),
-            document_category=self.document_category,
-            year=self.year,
-            month=self.month,
-            version=self.version + 1,
-            is_current=True,
-            previous_version=self,
-            description=self.description,
-            uploaded_by=user,
-        )
-        new_doc.save()
+            # Ρητό _v{n} στο όνομα ώστε οι εκδόσεις να ξεχωρίζουν στον φάκελο
+            # (αντί για τα τυχαία suffixes του Django storage)
+            base, ext = os.path.splitext(os.path.basename(new_file.name))
+            new_file.name = f"{base}_v{self.version + 1}{ext}"
+
+            new_doc = ClientDocument(
+                client=self.client,
+                obligation=self.obligation,
+                file=new_file,
+                original_filename=original_filename or os.path.basename(new_file.name),
+                document_category=self.document_category,
+                year=self.year,
+                month=self.month,
+                slot=self.slot,
+                version=self.version + 1,
+                is_current=True,
+                previous_version=self,
+                # description στο ΠΡΩΤΟ save — όχι δεύτερο save μετά
+                # (θα άνοιγε παράθυρο για orphan σε ενδιάμεση αποτυχία)
+                description=description if description is not None
+                else self.description,
+                uploaded_by=user,
+            )
+            try:
+                new_doc.save()
+            except Exception:
+                # Το save() γράφει πρώτα το αρχείο· καθάρισε το orphan —
+                # το rollback του transaction επαναφέρει το is_current
+                try:
+                    if new_doc.file and new_doc.file.name:
+                        new_doc.file.storage.delete(new_doc.file.name)
+                except Exception:
+                    pass
+                raise
         return new_doc
 
     def get_all_versions(self):
@@ -2303,16 +2466,70 @@ class SharedLink(models.Model):
             models.Index(fields=['token']),
             models.Index(fields=['is_active', 'expires_at']),
         ]
+        # Κεντρικό invariant στόχου (Γύρος 22): ένα ΕΝΕΡΓΟ link έχει
+        # ΑΚΡΙΒΩΣ έναν στόχο — document XOR client. Διαφορετικά το public
+        # περιεχόμενο (document) και ο προορισμός των uploads
+        # (upload_target_client, που προτιμά το client) μπορούν να
+        # δείχνουν σε ΔΙΑΦΟΡΕΤΙΚΟΥΣ πελάτες.
+        # Τα ΑΝΕΝΕΡΓΑ links εξαιρούνται ώστε legacy orphan rows να
+        # διατηρούνται (απενεργοποιημένα) αντί να διαγράφονται.
+        constraints = [
+            models.CheckConstraint(
+                name='sharedlink_active_exactly_one_target',
+                check=(
+                    models.Q(is_active=False)
+                    | models.Q(document__isnull=False, client__isnull=True)
+                    | models.Q(document__isnull=True, client__isnull=False)
+                ),
+            ),
+        ]
 
     def __str__(self):
-        target = self.document.filename if self.document else f"Φάκελος: {self.client.eponimia}"
-        return f"{self.name or target} ({self.token[:8]}...)"
+        # Ασφαλές ακόμη και για legacy orphan rows (χωρίς κανέναν στόχο)
+        # ή για row με σβησμένο target — ποτέ AttributeError.
+        if self.document_id and self.document:
+            target = self.document.filename
+        elif self.client_id and self.client:
+            target = f"Φάκελος: {self.client.eponimia}"
+        else:
+            target = f"(χωρίς στόχο #{self.pk})"
+        token_part = (self.token or '')[:8]
+        return f"{self.name or target} ({token_part}...)"
+
+    def clean(self):
+        """
+        Invariant στόχου — ισχύει σε admin/forms/serializers/services που
+        καλούν full_clean.
+        """
+        super().clean()
+        from django.core.exceptions import ValidationError
+        if not self.is_active:
+            return
+        if self.document_id and self.client_id:
+            raise ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει ΕΝΑΝ στόχο: είτε έγγραφο είτε '
+                'πελάτη — όχι και τα δύο.')
+        if not self.document_id and not self.client_id:
+            raise ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει έναν στόχο (έγγραφο ή πελάτη).')
 
     def save(self, *args, **kwargs):
+        # Consistency guard ΚΑΙ όταν ο caller δεν κάλεσε full_clean
+        # (π.χ. objects.create, admin action, management command)
+        if self.is_active:
+            from django.core.exceptions import ValidationError
+            if self.document_id and self.client_id:
+                raise ValidationError(
+                    'Ο σύνδεσμος πρέπει να έχει ΕΝΑΝ στόχο: είτε έγγραφο '
+                    'είτε πελάτη — όχι και τα δύο.')
+            if not self.document_id and not self.client_id:
+                raise ValidationError(
+                    'Ο σύνδεσμος πρέπει να έχει έναν στόχο (έγγραφο ή '
+                    'πελάτη).')
         if not self.name:
-            if self.document:
+            if self.document_id and self.document:
                 self.name = self.document.filename
-            elif self.client:
+            elif self.client_id and self.client:
                 self.name = f"Φάκελος: {self.client.eponimia}"
         super().save(*args, **kwargs)
 
@@ -2381,21 +2598,146 @@ class SharedLink(models.Model):
         return check_password(password, self.password_hash)
 
     def record_access(self, is_download=False):
-        """Καταγραφή πρόσβασης"""
-        self.last_accessed_at = timezone.now()
-        self.view_count += 1
-        if is_download:
-            self.download_count += 1
-        self.save(update_fields=['last_accessed_at', 'view_count', 'download_count'])
-
-    def record_upload(self, count=1):
-        """Καταγραφή upload(s) από τον πελάτη — ατομική αύξηση (F expression)"""
+        """Καταγραφή προβολής — ατομική αύξηση (F expression)"""
         from django.db.models import F
-        SharedLink.objects.filter(pk=self.pk).update(
+        fields = {'last_accessed_at': timezone.now(), 'view_count': F('view_count') + 1}
+        if is_download:
+            fields['download_count'] = F('download_count') + 1
+        SharedLink.objects.filter(pk=self.pk).update(**fields)
+        self.refresh_from_db(fields=['last_accessed_at', 'view_count', 'download_count'])
+
+    def _revocation_guard_q(self):
+        """
+        Γύρος 22 — atomic revocation guard.
+
+        Κλείνει το TOCTOU παράθυρο ανάμεσα στον αρχικό έλεγχο του link
+        (auth/validity) και στην πραγματική μεταβολή (quota reservation):
+        ΚΑΘΕ ιδιότητα ασφαλείας ξαναελέγχεται μέσα στο ΙΔΙΟ conditional
+        UPDATE, πάνω στις τιμές που είδε ο caller. Αν κάποια άλλαξε
+        ταυτόχρονα (revoke, expire, αλλαγή κωδικού/requires_email,
+        regenerate token, αλλαγή στόχου, αλλαγή access_level), το UPDATE
+        επιστρέφει 0 rows και η ενέργεια απορρίπτεται — χωρίς download,
+        upload, quota mutation ή success access log.
+        """
+        from django.db.models import Q
+        guard = Q(
+            pk=self.pk,
+            is_active=True,
+            # ίδιο token (δεν έγινε regenerate ενδιάμεσα)
+            token=self.token,
+            # αμετάβλητο password/requires_email fingerprint
+            password_hash=self.password_hash,
+            requires_email=self.requires_email,
+            # αμετάβλητος στόχος
+            document_id=self.document_id,
+            client_id=self.client_id,
+            access_level=self.access_level,
+        )
+        # Μη ληγμένο (το NULL σημαίνει «δεν λήγει»)
+        guard &= (Q(expires_at__isnull=True)
+                  | Q(expires_at__gt=timezone.now()))
+        return guard
+
+    def try_record_access(self, is_download=False):
+        """
+        Γύρος 23 — ΑΤΟΜΙΚΗ καταγραφή πρόσβασης για ΚΑΘΕ link, με ή χωρίς
+        `max_downloads`.
+
+        Το `record_access()` είναι μη-atomic: ανάμεσα στο αρχικό
+        validation και σε αυτό, το link μπορεί να ανακληθεί, να λήξει ή
+        να αλλάξουν token/password/target/access_level — και το αρχείο ή
+        το access token θα επιστρεφόταν ούτως ή άλλως (TOCTOU). Εδώ ο
+        ίδιος `_revocation_guard_q()` μπαίνει στο conditional UPDATE:
+        αν επηρεαστούν 0 rows, ο caller ΔΕΝ επιστρέφει περιεχόμενο/token
+        και δεν γράφει success access log.
+
+        Για links ΜΕ όριο λήψεων και `is_download=True` χρησιμοποίησε το
+        `try_record_download()` (ελέγχει και το quota).
+        Επιστρέφει True αν η πρόσβαση καταγράφηκε.
+        """
+        from django.db.models import F
+        fields = {
+            'last_accessed_at': timezone.now(),
+            'view_count': F('view_count') + 1,
+        }
+        if is_download:
+            fields['download_count'] = F('download_count') + 1
+        updated = SharedLink.objects.filter(
+            self._revocation_guard_q()
+        ).update(**fields)
+        if updated:
+            self.refresh_from_db(
+                fields=['last_accessed_at', 'view_count', 'download_count'])
+        return bool(updated)
+
+    def try_record_download(self):
+        """
+        Ατομική δέσμευση ενός download slot: conditional UPDATE στη βάση —
+        δύο ταυτόχρονα requests δεν μπορούν να ξεπεράσουν το max_downloads
+        (το δεύτερο γυρίζει 0 rows). Επιστρέφει True αν δεσμεύτηκε slot.
+
+        Περιλαμβάνει τον revocation guard: ταυτόχρονη ανάκληση/λήξη/
+        αλλαγή ρυθμίσεων ακυρώνει τη δέσμευση (Γύρος 22).
+        """
+        from django.db.models import F, Q
+        updated = SharedLink.objects.filter(
+            Q(max_downloads__isnull=True) | Q(download_count__lt=F('max_downloads')),
+            # Το download απαιτεί ρητά access_level='download'
+            self._revocation_guard_q() & Q(access_level='download'),
+        ).update(
+            last_accessed_at=timezone.now(),
+            view_count=F('view_count') + 1,
+            download_count=F('download_count') + 1,
+        )
+        if updated:
+            self.refresh_from_db(
+                fields=['last_accessed_at', 'view_count', 'download_count'])
+        return bool(updated)
+
+    def release_download(self):
+        """
+        Compensation για download slot που δεσμεύτηκε αλλά η μετάδοση
+        απέτυχε (π.χ. storage.open()). Το conditional
+        `download_count__gte=1` αποκλείει underflow.
+        """
+        from django.db.models import F
+        SharedLink.objects.filter(pk=self.pk, download_count__gte=1).update(
+            download_count=F('download_count') - 1,
+        )
+        self.refresh_from_db(fields=['download_count'])
+
+    def try_reserve_uploads(self, count):
+        """
+        Ατομική δέσμευση `count` upload slots πριν την επεξεργασία αρχείων —
+        conditional UPDATE ώστε concurrent requests να μην υπερβούν το όριο.
+        Επιστρέφει True αν δεσμεύτηκαν όλα τα slots.
+
+        Περιλαμβάνει τον revocation guard + ρητό allow_upload=True
+        (Γύρος 22): ταυτόχρονη ανάκληση ή απενεργοποίηση των uploads
+        ακυρώνει τη δέσμευση πριν γραφτεί οποιοδήποτε αρχείο.
+        """
+        from django.db.models import F, Q
+        updated = SharedLink.objects.filter(
+            Q(max_uploads__isnull=True)
+            | Q(upload_count__lte=F('max_uploads') - count),
+            self._revocation_guard_q() & Q(allow_upload=True),
+        ).update(
             last_accessed_at=timezone.now(),
             upload_count=F('upload_count') + count,
         )
-        self.refresh_from_db(fields=['last_accessed_at', 'upload_count'])
+        if updated:
+            self.refresh_from_db(fields=['last_accessed_at', 'upload_count'])
+        return bool(updated)
+
+    def release_uploads(self, count):
+        """Αποδέσμευση slots για αρχεία που τελικά απέτυχαν (validation)."""
+        from django.db.models import F
+        if count <= 0:
+            return
+        SharedLink.objects.filter(pk=self.pk, upload_count__gte=count).update(
+            upload_count=F('upload_count') - count,
+        )
+        self.refresh_from_db(fields=['upload_count'])
 
     def get_public_url(self):
         """Δημιουργία public URL"""

@@ -10,11 +10,13 @@ Contains:
 import io
 import os
 import csv
+import logging
 import tempfile
 from datetime import datetime
 
 from django.urls import reverse, path
 from django.utils.html import format_html
+from django import forms
 from django.contrib import admin
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -64,6 +66,9 @@ from ..export_import import export_clients_to_excel, export_clients_summary_to_e
 from .mixins import VoIPCallInline, TicketInline, ClientProfileDocumentInline
 
 
+logger = logging.getLogger(__name__)
+
+
 @admin.register(ClientProfile)
 class ClientProfileAdmin(admin.ModelAdmin):
     filter_horizontal = ('assigned_users',)
@@ -87,12 +92,47 @@ class ClientProfileAdmin(admin.ModelAdmin):
         # Χωρίς αυτά το changelist κάνει 4-6 queries ανά πελάτη
         # (obligation_settings, τύποι ανά profile, documents count)
         from django.db.models import Count
-        return super().get_queryset(request).select_related(
+        from accounting.mixins import user_sees_all_clients
+        qs = super().get_queryset(request)
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(assigned_users=request.user).distinct()
+        return qs.select_related(
             'obligation_settings'
         ).prefetch_related(
             'obligation_settings__obligation_types',
             'obligation_settings__obligation_profiles__obligation_types',
         ).annotate(_documents_count=Count('documents', distinct=True))
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        # Την ανάθεση πελατών την αλλάζουν μόνο διαχειριστές (see-all χρήστες)
+        from accounting.mixins import user_sees_all_clients
+        readonly = list(super().get_readonly_fields(request, obj))
+        if not user_sees_all_clients(request.user) and 'assigned_users' not in readonly:
+            readonly.append('assigned_users')
+        return readonly
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # Όπως στο API: scoped χρήστης που δημιουργεί πελάτη τον παίρνει
+        # αυτόματα ως ανάθεση, αλλιώς δεν θα τον έβλεπε καν μετά το save.
+        # (Το assigned_users είναι readonly για scoped χρήστες, οπότε δεν
+        # μπορεί να οριστεί αυθαίρετα από τη φόρμα.)
+        from accounting.mixins import user_sees_all_clients
+        if not change and not user_sees_all_clients(request.user):
+            obj.assigned_users.add(request.user)
 
     @admin.display(description='Υποχρεώσεις')
     def obligations_status(self, obj):
@@ -246,8 +286,13 @@ class ClientProfileAdmin(admin.ModelAdmin):
 
         search_term_clean = search_term.strip()
 
+        # Όλα τα search branches ξεκινούν από το scoped queryset — ποτέ από
+        # self.model.objects, αλλιώς scoped χρήστης ξαναφέρνει ξένους πελάτες
+        # με αναζήτηση ΑΦΜ/τηλεφώνου/email (και μέσω autocomplete).
+        base_qs = self.get_queryset(request)
+
         if search_term_clean.isdigit():
-            phone_search = self.model.objects.filter(
+            phone_search = base_qs.filter(
                 Q(afm__icontains=search_term_clean) |
                 Q(kinito_tilefono__icontains=search_term_clean) |
                 Q(tilefono_oikias_1__icontains=search_term_clean) |
@@ -259,14 +304,14 @@ class ClientProfileAdmin(admin.ModelAdmin):
             use_distinct = True
 
         elif '@' in search_term_clean:
-            email_search = self.model.objects.filter(
+            email_search = base_qs.filter(
                 Q(email__icontains=search_term_clean)
             )
             queryset |= email_search
             use_distinct = True
 
         else:
-            text_search = self.model.objects.filter(
+            text_search = base_qs.filter(
                 Q(eponimia__icontains=search_term_clean) |
                 Q(onoma__icontains=search_term_clean) |
                 Q(onoma_patros__icontains=search_term_clean) |
@@ -282,21 +327,30 @@ class ClientProfileAdmin(admin.ModelAdmin):
     # ============================================
     # EXPORT ACTIONS
     # ============================================
+    # Όλα τα exports απαιτούν το accounting.export_clientprofile — το σκέτο
+    # view_clientprofile δεν επιτρέπει μαζική εξαγωγή ΑΦΜ/ΑΜΚΑ/IBAN κλπ.
+
+    def has_export_permission(self, request):
+        return request.user.has_perm('accounting.export_clientprofile')
 
     def export_selected(self, request, queryset):
         """Export επιλεγμένων πελατών με ΟΛΑ τα πεδία (52 fields)"""
         return export_clients_to_excel(queryset)
     export_selected.short_description = '📥 Export Επιλεγμένων (Πλήρες - 52 πεδία)'
+    export_selected.allowed_permissions = ('export',)
 
     def export_all(self, request, queryset):
-        """Export όλων των πελατών με ΟΛΑ τα πεδία (52 fields)"""
-        return export_clients_to_excel()  # No queryset = όλοι
+        """Export όλων των προσβάσιμων πελατών με ΟΛΑ τα πεδία (52 fields)"""
+        # Scoped queryset: όχι όλο το πελατολόγιο για scoped χρήστες
+        return export_clients_to_excel(self.get_queryset(request))
     export_all.short_description = '📥 Export ΟΛΩΝ (Πλήρες - 52 πεδία)'
+    export_all.allowed_permissions = ('export',)
 
     def export_summary(self, request, queryset):
         """Export συνοπτικής λίστας (11 basic fields)"""
         return export_clients_summary_to_excel(queryset)
     export_summary.short_description = '📄 Export Επιλεγμένων (Σύνοψη - 11 πεδία)'
+    export_summary.allowed_permissions = ('export',)
 
     def export_to_csv(self, request, queryset):
         """Export to CSV - Enhanced με περισσότερα πεδία"""
@@ -366,6 +420,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
         self.message_user(request, f'✅ Εξήχθησαν {queryset.count()} πελάτες σε CSV (25 πεδία)', messages.SUCCESS)
         return response
     export_to_csv.short_description = '📊 Export σε CSV'
+    export_to_csv.allowed_permissions = ('export',)
 
 
     def mark_active(self, request, queryset):
@@ -397,9 +452,36 @@ class ClientProfileAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def import_view(self, request):
-        """Import view για Excel"""
+        """Import view για Excel — μόνο για χρήστες που βλέπουν όλους τους πελάτες
+        (το import δημιουργεί/ενημερώνει πελάτες μαζικά, εκτός scoping)."""
+        from django.core.exceptions import PermissionDenied
+        from accounting.mixins import user_sees_all_clients
+        # Το view_all_clients από μόνο του ΔΕΝ είναι write permission —
+        # το import δημιουργεί/ενημερώνει πελάτες μαζικά
+        if not user_sees_all_clients(request.user):
+            raise PermissionDenied
+        if not (
+            request.user.has_perm('accounting.add_clientprofile')
+            and request.user.has_perm('accounting.change_clientprofile')
+        ):
+            raise PermissionDenied
         if request.method == 'POST' and 'excel_file' in request.FILES:
             excel_file = request.FILES['excel_file']
+            if not excel_file.name.lower().endswith(('.xlsx', '.xls')):
+                messages.error(request, '❌ Μόνο αρχεία Excel (.xlsx, .xls)')
+                return redirect('..')
+            # Η εισαγωγή credentials από το αρχείο απαιτεί τα αντίστοιχα
+            # credential permissions (το command γράφει ClientCredential)
+            if not (
+                request.user.has_perm('accounting.add_clientcredential')
+                and request.user.has_perm('accounting.change_clientcredential')
+            ):
+                messages.error(
+                    request,
+                    '❌ Η εισαγωγή από Excel μπορεί να περιλαμβάνει κωδικούς '
+                    'πελατών — απαιτούνται δικαιώματα credentials.',
+                )
+                return redirect('..')
 
             with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
                 for chunk in excel_file.chunks():
@@ -417,8 +499,9 @@ class ClientProfileAdmin(admin.ModelAdmin):
                 else:
                     messages.warning(request, output)
 
-            except Exception as e:
-                messages.error(request, f'❌ Σφάλμα: {str(e)}')
+            except Exception:
+                logger.exception('Σφάλμα εισαγωγής πελατών από admin')
+                messages.error(request, '❌ Σφάλμα κατά την εισαγωγή του αρχείου')
             finally:
                 os.unlink(tmp_path)
 
@@ -448,17 +531,21 @@ class ClientProfileAdmin(admin.ModelAdmin):
             os.unlink(tmp_path)
             return response
 
-        except Exception as e:
-            messages.error(request, f'❌ Σφάλμα: {str(e)}')
+        except Exception:
+            logger.exception('Σφάλμα εισαγωγής πελατών από admin')
+            messages.error(request, '❌ Σφάλμα κατά την εισαγωγή του αρχείου')
             return redirect('..')
 
     def mass_update_view(self, request):
-        """Μαζική ενημέρωση πελατών"""
+        """Μαζική ενημέρωση πελατών (μόνο στους προσβάσιμους)"""
+        from django.core.exceptions import PermissionDenied
+        if not self.has_change_permission(request):
+            raise PermissionDenied
         if request.method == 'POST':
             action = request.POST.get('action')
             client_ids = request.POST.getlist('client_ids')
 
-            clients = ClientProfile.objects.filter(id__in=client_ids)
+            clients = self.get_queryset(request).filter(id__in=client_ids)
 
             if action == 'activate':
                 clients.update(is_active=True)
@@ -479,7 +566,7 @@ class ClientProfileAdmin(admin.ModelAdmin):
 
         context = {
             'title': 'Μαζική Ενημέρωση Πελατών',
-            'clients': ClientProfile.objects.all(),
+            'clients': self.get_queryset(request),
             'has_permission': True,
         }
         return render(request, 'admin/accounting/mass_update.html', context)
@@ -493,11 +580,36 @@ class ClientProfileAdmin(admin.ModelAdmin):
         return super().changelist_view(request, extra_context)
 
 
+class ClientDocumentAdminForm(forms.ModelForm):
+    """Server-side validation του client/obligation/previous_version
+    invariant — τα raw_id dropdowns από μόνα τους δεν αρκούν (crafted
+    POST μπορεί να στείλει ID άλλου πελάτη)."""
+    class Meta:
+        model = ClientDocument
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        client = cleaned.get('client')
+        obligation = cleaned.get('obligation')
+        previous = cleaned.get('previous_version')
+        if client is not None and obligation is not None \
+                and obligation.client_id != client.id:
+            raise forms.ValidationError(
+                'Η υποχρέωση ανήκει σε διαφορετικό πελάτη από το έγγραφο.')
+        if client is not None and previous is not None \
+                and previous.client_id != client.id:
+            raise forms.ValidationError(
+                'Η προηγούμενη έκδοση ανήκει σε διαφορετικό πελάτη.')
+        return cleaned
+
+
 @admin.register(ClientDocument)
 class ClientDocumentAdmin(admin.ModelAdmin):
     """
     Admin για έγγραφα πελατών με υποστήριξη versioning.
     """
+    form = ClientDocumentAdminForm
     list_display = [
         'filename',
         'client_link',
@@ -644,21 +756,27 @@ class ClientDocumentAdmin(admin.ModelAdmin):
     @admin.action(description='✓ Ορισμός ως τρέχουσα έκδοση')
     def mark_as_current(self, request, queryset):
         """Ορίζει τα επιλεγμένα ως τρέχουσες εκδόσεις"""
+        # ΜΟΝΟ μέσω του canonical service: permission → locks → demote
+        # ΜΟΝΟ του ίδιου exact key (incl. slot) → promote → audit.
+        # (Το παλιό inline update ήταν slot-blind και μη-transactional.)
+        from accounting.services import filing as _filing
+        from django.core.exceptions import PermissionDenied as _PD
+        done, skipped = 0, 0
         for doc in queryset:
-            # Βρες όλες τις εκδόσεις του ίδιου αρχείου
-            ClientDocument.objects.filter(
-                client=doc.client,
-                obligation=doc.obligation,
-                document_category=doc.document_category,
-                year=doc.year,
-                month=doc.month,
-            ).update(is_current=False)
-
-            # Όρισε αυτό ως τρέχον
-            doc.is_current = True
-            doc.save(update_fields=['is_current'])
-
-        messages.success(request, f'✅ Ορίστηκαν {queryset.count()} ως τρέχουσες εκδόσεις')
+            try:
+                _filing.promote_to_current_service(request.user, doc)
+                done += 1
+            except (_PD, _filing.DocumentGone,
+                    _filing.MultipleCurrentDocumentsError,
+                    _filing.DocumentKeyConflict):
+                skipped += 1
+        if done:
+            messages.success(
+                request, f'✅ Ορίστηκαν {done} ως τρέχουσες εκδόσεις')
+        if skipped:
+            messages.warning(
+                request, f'⚠️ Παραλείφθηκαν {skipped} έγγραφα '
+                         f'(δικαίωμα ή ασυνέπεια δεδομένων)')
 
     # === Override save_model for versioning ===
 
@@ -670,12 +788,20 @@ class ClientDocumentAdmin(admin.ModelAdmin):
         if not change:
             obj.uploaded_by = request.user
 
-            # Έλεγχος αν υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό
-            existing = ClientDocument.check_existing(
-                client=obj.client,
-                obligation=obj.obligation,
-                category=obj.document_category if obj.document_category != 'general' else None
-            )
+            # Έλεγχος αν υπάρχει ήδη αρχείο (ΚΟΙΝΟΣ exact-conflict helper)
+            from accounting.services import filing as _filing
+            try:
+                existing = ClientDocument.check_existing(
+                    client=obj.client,
+                    obligation=obj.obligation,
+                    category=obj.document_category,
+                    year=obj.year, month=obj.month,
+                )
+            except _filing.MultipleCurrentDocumentsError:
+                from django.core.exceptions import ValidationError as _VErr
+                raise _VErr(
+                    'Υπάρχουν πολλαπλά τρέχοντα έγγραφα για αυτόν τον '
+                    'συνδυασμό — απαιτείται χειροκίνητη διόρθωση.')
 
             if existing and 'confirm_replace' not in request.POST:
                 # Θα χειριστεί στο response_add
@@ -683,13 +809,54 @@ class ClientDocumentAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
 
+    def get_readonly_fields(self, request, obj=None):
+        """Structural πεδία (μέρη του exact logical key) ΔΕΝ αλλάζουν από
+        το admin σε υπάρχον έγγραφο — attach/detach μόνο μέσω των
+        transactional services (αλλιώς θα παρακάμπτονταν locks/conflict
+        checks). Το DB constraint είναι το τελικό δίχτυ."""
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None:
+            readonly += ['client', 'obligation', 'document_category',
+                         'year', 'month', 'slot', 'previous_version']
+        return readonly
+
     def get_queryset(self, request):
-        """Default: εμφάνιση μόνο τρεχουσών εκδόσεων εκτός αν φιλτράρει"""
+        """Default: μόνο τρέχουσες εκδόσεις + RBAC scoping ανά πελάτη"""
+        from accounting.mixins import user_sees_all_clients
         qs = super().get_queryset(request)
         # Αν δεν υπάρχει φίλτρο is_current, δείξε μόνο τις τρέχουσες
         if 'is_current__exact' not in request.GET:
             qs = qs.filter(is_current=True)
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(client__assigned_users=request.user).distinct()
         return qs.select_related('client', 'obligation', 'uploaded_by')
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj.client)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Περιορισμός FK επιλογών σε προσβάσιμους πελάτες/αντικείμενα —
+        # ισχύει και για validation των raw_id τιμών στο POST.
+        from accounting.services.access import (
+            accessible_clients, accessible_documents, accessible_obligations,
+        )
+        if db_field.name == 'client':
+            kwargs['queryset'] = accessible_clients(request.user)
+        elif db_field.name == 'obligation':
+            kwargs['queryset'] = accessible_obligations(request.user)
+        elif db_field.name == 'previous_version':
+            kwargs['queryset'] = accessible_documents(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(ArchiveConfiguration)
@@ -705,15 +872,73 @@ class ArchiveConfigurationAdmin(admin.ModelAdmin):
 from accounting.models import DocumentRequest, DocumentRequestItem  # noqa: E402
 
 
+class DocumentRequestItemInlineFormSet(forms.BaseInlineFormSet):
+    """Server-side έλεγχος: το received_document πρέπει να ανήκει στον
+    πελάτη του DocumentRequest — και σε crafted POST, όχι μόνο στο dropdown."""
+
+    def clean(self):
+        super().clean()
+        parent = self.instance
+        parent_client_id = getattr(parent, 'client_id', None)
+        for form in self.forms:
+            if not getattr(form, 'cleaned_data', None) or form.cleaned_data.get('DELETE'):
+                continue
+            doc = form.cleaned_data.get('received_document')
+            if doc is not None and parent_client_id and doc.client_id != parent_client_id:
+                form.add_error(
+                    'received_document',
+                    'Το έγγραφο δεν ανήκει στον πελάτη του αιτήματος.',
+                )
+
+
 class DocumentRequestItemInline(admin.TabularInline):
     model = DocumentRequestItem
     extra = 1
     fields = ['label', 'category', 'is_received', 'received_document', 'received_at']
     readonly_fields = ['received_at']
+    formset = DocumentRequestItemInlineFormSet
+
+    def get_formset(self, request, obj=None, **kwargs):
+        # ΟΧΙ instance state στο shared inline admin (cross-request leakage
+        # σε ταυτόχρονα requests) — το queryset μπαίνει στο formset class που
+        # δημιουργείται εδώ ανά request.
+        formset = super().get_formset(request, obj, **kwargs)
+        from accounting.services.access import accessible_documents
+        qs = accessible_documents(request.user).select_related('client')
+        if obj is not None:
+            qs = qs.filter(client=obj.client)
+        formset.form.base_fields['received_document'].queryset = qs
+        return formset
+
+
+class DocumentRequestAdminForm(forms.ModelForm):
+    """Server-side cross-client έλεγχος: το shared_link πρέπει να αφορά τον
+    ίδιο πελάτη με το αίτημα (και μέσω document link) — ισχύει και σε
+    crafted POST, όχι μόνο στο dropdown filtering."""
+
+    class Meta:
+        model = DocumentRequest
+        fields = '__all__'
+
+    def clean(self):
+        cleaned = super().clean()
+        link = cleaned.get('shared_link')
+        client = cleaned.get('client')
+        if link is not None and client is not None:
+            link_client_id = link.client_id or (
+                link.document.client_id if link.document_id else None
+            )
+            if link_client_id is not None and link_client_id != client.pk:
+                self.add_error(
+                    'shared_link',
+                    'Το shared link δεν αντιστοιχεί στον πελάτη του αιτήματος.',
+                )
+        return cleaned
 
 
 @admin.register(DocumentRequest)
 class DocumentRequestAdmin(admin.ModelAdmin):
+    form = DocumentRequestAdminForm
     list_display = ['title', 'client', 'status', 'due_date',
                     'reminder_count', 'created_by', 'created_at']
     list_filter = ['status', 'created_at']
@@ -721,6 +946,44 @@ class DocumentRequestAdmin(admin.ModelAdmin):
     inlines = [DocumentRequestItemInline]
     readonly_fields = ['last_reminder_sent_at', 'reminder_count',
                        'completed_at', 'created_at']
+
+    def get_queryset(self, request):
+        from accounting.mixins import user_sees_all_clients
+        qs = super().get_queryset(request).select_related('client', 'created_by')
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(client__assigned_users=request.user).distinct()
+        return qs
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj.client)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        from accounting.services.access import accessible_clients
+        if db_field.name == 'client':
+            kwargs['queryset'] = accessible_clients(request.user)
+        elif db_field.name == 'shared_link':
+            # Μόνο links προσβάσιμων πελατών (και μέσω document) — αλλιώς
+            # scoped staff θα έδενε αίτημα πελάτη Α με link πελάτη Β
+            from django.db.models import Q
+            from accounting.models import SharedLink
+            accessible = accessible_clients(request.user)
+            kwargs['queryset'] = SharedLink.objects.select_related(
+                'client', 'document__client'
+            ).filter(
+                Q(client__in=accessible)
+                | Q(client__isnull=True, document__client__in=accessible)
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # ============================================
@@ -740,6 +1003,33 @@ class ClientCredentialAdmin(admin.ModelAdmin):
     autocomplete_fields = ['client']
     exclude = ['_secret_encrypted']
     readonly_fields = ['created_at', 'updated_at', 'updated_by']
+
+    def get_queryset(self, request):
+        from accounting.mixins import user_sees_all_clients
+        qs = super().get_queryset(request)
+        if not user_sees_all_clients(request.user):
+            qs = qs.filter(client__assigned_users=request.user).distinct()
+        return qs
+
+    def _user_can_touch(self, request, obj):
+        from accounting.services.access import user_can_access_client
+        return obj is None or user_can_access_client(request.user, obj.client)
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and self._user_can_touch(request, obj)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        # Στο add form ο scoped χρήστης επιλέγει μόνο ανατεθειμένους πελάτες
+        from accounting.services.access import accessible_clients
+        if db_field.name == 'client':
+            kwargs['queryset'] = accessible_clients(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description='Έχει κωδικό', boolean=True)
     def has_secret_display(self, obj):

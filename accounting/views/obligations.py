@@ -19,6 +19,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_GET
 from django.core.files.base import ContentFile
+from django.db import transaction
 
 from ..models import (
     ClientProfile, MonthlyObligation, ObligationType,
@@ -31,6 +32,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 import logging
 import json
+from accounting.services.access import (
+    accessible_clients, accessible_documents, accessible_obligations,
+    mask_pii_value,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +50,20 @@ def quick_complete_obligation(request, obligation_id):
     """
     Quick complete single obligation with optional file attachment
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
+        obligation = accessible_obligations(request.user).get(id=obligation_id)
 
         # Handle both FormData and JSON requests
         if 'multipart/form-data' in request.META.get('CONTENT_TYPE', ''):
@@ -92,11 +109,14 @@ def quick_complete_obligation(request, obligation_id):
                     user=request.user,
                 )
             except DjangoValidationError as e:
+                # Κοινό contract: MultipleCurrentDocumentsError → 409
+                message, code = filing.document_error_status(e)
                 return JsonResponse({
-                    'success': False,
-                    'message': f'Μη έγκυρο αρχείο: {"; ".join(e.messages)}'
-                }, status=400)
-            logger.info(f'Αρχειοθετήθηκε: {document.file.name}')
+                    'success': False, 'message': message
+                }, status=code)
+            # Χωρίς filename/path στα logs — μόνο internal IDs
+            logger.info('Αρχειοθετήθηκε document id=%s για obligation id=%s',
+                        document.pk, obligation.pk)
         obligation.save()
 
         # Success response
@@ -121,10 +141,10 @@ def quick_complete_obligation(request, obligation_id):
             {'success': False, 'message': 'Μη έγκυρα δεδομένα JSON'},
             status=400
         )
-    except Exception as e:
-        logger.error(f"Error in quick_complete: {str(e)}", exc_info=True)
+    except Exception:
+        logger.exception("Error in quick_complete")
         return JsonResponse(
-            {'success': False, 'message': f'Sfalma: {str(e)}'},
+            {'success': False, 'message': 'Παρουσιάστηκε σφάλμα'},
             status=500
         )
 
@@ -139,6 +159,18 @@ def bulk_complete_view(request):
     """
     Simple bulk complete - all obligations get same treatment
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+
     try:
         try:
             obligation_ids = json.loads(request.POST.get('obligation_ids', '[]'))
@@ -175,37 +207,41 @@ def bulk_complete_view(request):
                 'message': 'Den epilexthikan ypoxreoseis'
             })
 
-        obligations = MonthlyObligation.objects.filter(id__in=obligation_ids)
+        obligations = accessible_obligations(request.user).filter(id__in=obligation_ids)
         completed_count = 0
 
-        for idx, obl in enumerate(obligations):
-            obl.status = 'completed'
-            obl.completed_date = timezone.now().date()
-            obl.completed_by = request.user
+        # ΠΟΛΙΤΙΚΗ BULK (Γύρος 21): atomic rollback ολόκληρου του request.
+        # Αποτυχία μεταφόρτωσης εγγράφου ΔΕΝ αφήνει ποτέ υποχρεώσεις
+        # «ολοκληρωμένες» χωρίς το αρχείο τους.
+        with transaction.atomic():
+            for idx, obl in enumerate(obligations):
+                obl.status = 'completed'
+                obl.completed_date = timezone.now().date()
+                obl.completed_by = request.user
 
-            if time_spent:
-                obl.time_spent = float(time_spent)
+                if time_spent:
+                    obl.time_spent = float(time_spent)
 
-            if notes:
-                timestamp = timezone.now().strftime('%d/%m/%Y %H:%M')
-                new_note = f"[{timestamp}] [BULK] {notes}"
-                if obl.notes:
-                    obl.notes += f"\n{new_note}"
-                else:
-                    obl.notes = new_note
+                if notes:
+                    timestamp = timezone.now().strftime('%d/%m/%Y %H:%M')
+                    new_note = f"[{timestamp}] [BULK] {notes}"
+                    if obl.notes:
+                        obl.notes += f"\n{new_note}"
+                    else:
+                        obl.notes = new_note
 
-            obl.save()
+                obl.save()
 
-            # Attach file if available (already validated above)
-            if idx < len(attachments):
-                filing.create_client_document(
-                    client=obl.client,
-                    uploaded_file=attachments[idx],
-                    obligation=obl,
-                    user=request.user,
-                )
+                # Attach file if available (already validated above)
+                if idx < len(attachments):
+                    filing.create_client_document(
+                        client=obl.client,
+                        uploaded_file=attachments[idx],
+                        obligation=obl,
+                        user=request.user,
+                    )
 
-            completed_count += 1
+                completed_count += 1
 
         return JsonResponse({
             'success': True,
@@ -214,10 +250,17 @@ def bulk_complete_view(request):
         })
 
     except Exception as e:
-        logger.error(f"Error in bulk_complete: {str(e)}", exc_info=True)
+        # Controlled document exceptions → κοινό status (409/404/400),
+        # ποτέ 500· η υποχρέωση έχει ήδη κάνει rollback
+        mapped = filing.document_error_status(e)
+        if mapped is not None:
+            message, code = mapped
+            return JsonResponse({'success': False, 'message': message},
+                                status=code)
+        logger.exception("Error in bulk_complete")
         return JsonResponse({
             'success': False,
-            'message': f'Sfalma: {str(e)}'
+            'message': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -229,17 +272,26 @@ def bulk_complete_view(request):
 @staff_member_required
 def advanced_bulk_complete(request):
     """Advanced bulk complete with full debugging"""
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+
 
     logger.info("="*50)
     logger.info("ADVANCED BULK COMPLETE - START")
     logger.info(f"Method: {request.method}")
-    logger.info(f"POST data keys: {request.POST.keys()}")
-    logger.info(f"FILES keys: {request.FILES.keys()}")
-
     try:
         # Get completion data
         completion_data_raw = request.POST.get('completion_data', '[]')
-        logger.info(f"Raw completion_data: {completion_data_raw[:200]}...")  # First 200 chars
+        logger.info(f"completion_data length: {len(completion_data_raw)} chars")
 
         completion_data = json.loads(completion_data_raw)
         notes = request.POST.get('notes', '')
@@ -266,89 +318,90 @@ def advanced_bulk_complete(request):
             group_num = group_data.get('group', '0')
             obligation_ids = group_data.get('obligations', [])
 
-            logger.info(f"AFM: {client_afm}, Group: {group_num}, Obligations: {obligation_ids}")
+            logger.info(f"AFM: {mask_pii_value(client_afm)}, Group: {group_num}, Obligations: {obligation_ids}")
 
             # Get files for this group
             files_key = f"file_{client_afm}_{group_num}"
             files = request.FILES.getlist(files_key)
 
-            logger.info(f"Looking for files with key: {files_key}")
-            logger.info(f"Found {len(files)} files")
-
-            if files:
-                for f in files:
-                    logger.info(f"  - File: {f.name} ({f.size} bytes)")
+            logger.info("Ομάδα %s: %s αρχεία", group_num, len(files))
 
             # Process obligations
             for j, obl_id in enumerate(obligation_ids):
                 try:
-                    logger.info(f"  Processing obligation {obl_id}...")
+                    obligation = accessible_obligations(request.user).get(id=obl_id)
 
-                    obligation = MonthlyObligation.objects.get(id=obl_id)
+                    # ΠΟΛΙΤΙΚΗ BULK (Γύρος 21): per-item atomic. Αν
+                    # αποτύχει η αρχειοθέτηση, ΔΕΝ μένει η υποχρέωση
+                    # «ολοκληρωμένη» — γίνεται rollback και η αποτυχία
+                    # αναφέρεται ρητά ανά item.
+                    with transaction.atomic():
+                        # Update status
+                        obligation.status = 'completed'
+                        obligation.completed_date = timezone.now().date()
+                        obligation.completed_by = request.user
 
-                    # Update status
-                    obligation.status = 'completed'
-                    obligation.completed_date = timezone.now().date()
-                    obligation.completed_by = request.user
+                        # Add notes
+                        if notes:
+                            timestamp = timezone.now().strftime('%d/%m/%Y %H:%M')
+                            new_note = f"[{timestamp}] {notes}"
+                            if obligation.notes:
+                                obligation.notes += f"\n{new_note}"
+                            else:
+                                obligation.notes = new_note
 
-                    # Add notes
-                    if notes:
-                        timestamp = timezone.now().strftime('%d/%m/%Y %H:%M')
-                        new_note = f"[{timestamp}] {notes}"
-                        if obligation.notes:
-                            obligation.notes += f"\n{new_note}"
-                        else:
-                            obligation.notes = new_note
+                        # Handle file
+                        obligation.save()
+                        if group_num == '0':  # Individual files
+                            if j < len(files):
+                                document = filing.create_client_document(
+                                    client=obligation.client,
+                                    uploaded_file=files[j],
+                                    obligation=obligation,
+                                    user=request.user,
+                                )
+                                processed_details.append(
+                                    f"{obligation.obligation_type.name}: "
+                                    f"document id={document.pk}")
+                            else:
+                                processed_details.append(f"{obligation.obligation_type.name} (xoris arxeio)")
+                        else:  # Group file
+                            if files:
+                                file_to_use = files[0]
 
-                    # Handle file
-                    obligation.save()
-                    if group_num == '0':  # Individual files
-                        if j < len(files):
-                            logger.info(f"    Archiving individual file {j}: {files[j].name}")
-                            document = filing.create_client_document(
-                                client=obligation.client,
-                                uploaded_file=files[j],
-                                obligation=obligation,
-                                user=request.user,
-                            )
-                            processed_details.append(f"{obligation.obligation_type.name}: {document.file.name}")
-                            logger.info(f"    Archived to: {document.file.name}")
-                        else:
-                            processed_details.append(f"{obligation.obligation_type.name} (xoris arxeio)")
-                            logger.info(f"    No file for this obligation")
-                    else:  # Group file
-                        if files:
-                            file_to_use = files[0]
-                            logger.info(f"    Using group file: {file_to_use.name}")
+                                # Create copy for each obligation
+                                file_content = file_to_use.read()
+                                file_copy = ContentFile(file_content)
+                                file_copy.name = file_to_use.name
+                                file_to_use.seek(0)  # Reset for next use
 
-                            # Create copy for each obligation
-                            file_content = file_to_use.read()
-                            file_copy = ContentFile(file_content)
-                            file_copy.name = file_to_use.name
-                            file_to_use.seek(0)  # Reset for next use
-
-                            document = filing.create_client_document(
-                                client=obligation.client,
-                                uploaded_file=file_copy,
-                                obligation=obligation,
-                                user=request.user,
-                            )
-                            processed_details.append(f"{obligation.obligation_type.name} (Group {group_num})")
-                            logger.info(f"    Archived to: {document.file.name}")
-                        else:
-                            processed_details.append(f"{obligation.obligation_type.name} (no file)")
+                                filing.create_client_document(
+                                    client=obligation.client,
+                                    uploaded_file=file_copy,
+                                    obligation=obligation,
+                                    user=request.user,
+                                )
+                                processed_details.append(f"{obligation.obligation_type.name} (Group {group_num})")
+                            else:
+                                processed_details.append(f"{obligation.obligation_type.name} (no file)")
 
                     completed_count += 1
-                    logger.info(f"    Completed successfully")
 
                 except MonthlyObligation.DoesNotExist:
                     error_msg = f"Obligation {obl_id} not found"
-                    logger.error(f"    {error_msg}")
+                    logger.error("Υποχρέωση id=%s δεν βρέθηκε", obl_id)
                     errors.append(error_msg)
-                except Exception as e:
-                    error_msg = f"Error with {obl_id}: {str(e)}"
-                    logger.error(f"    {error_msg}", exc_info=True)
-                    errors.append(error_msg)
+                except Exception as item_error:
+                    # Controlled document exceptions → σαφές per-item
+                    # μήνυμα (409/404/400 semantics), όχι σιωπηλή επιτυχία
+                    mapped = filing.document_error_status(item_error)
+                    if mapped is not None:
+                        errors.append(
+                            f"Υποχρέωση {obl_id}: {mapped[0]}")
+                    else:
+                        logger.exception(
+                            "Σφάλμα ολοκλήρωσης υποχρέωσης id=%s", obl_id)
+                        errors.append(f"Σφάλμα στην υποχρέωση {obl_id}")
 
         # Final summary
         logger.info(f"\n=== SUMMARY ===")
@@ -372,27 +425,26 @@ def advanced_bulk_complete(request):
             'details': processed_details[:10]
         }
 
-        logger.info(f"Response: {response_data}")
-        logger.info("="*50)
+        logger.info(f"Bulk complete: {completed_count} completed, "
+                    f"{len(errors)} errors")
 
         return JsonResponse(response_data)
 
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON Decode Error: {e}")
-        logger.error(f"Raw data was: {request.POST.get('completion_data', '')[:500]}")
+    except json.JSONDecodeError:
+        logger.exception("advanced_bulk_complete: invalid JSON payload")
         return JsonResponse({
             'success': False,
-            'message': f'JSON Error: {str(e)}',
+            'message': 'Μη έγκυρα δεδομένα',
             'completed_count': 0
-        })
+        }, status=400)
 
-    except Exception as e:
-        logger.error(f"Critical error: {e}", exc_info=True)
+    except Exception:
+        logger.exception("advanced_bulk_complete: critical error")
         return JsonResponse({
             'success': False,
-            'message': f'Krisimo sfalma: {str(e)}',
+            'message': 'Παρουσιάστηκε σφάλμα',
             'completed_count': 0
-        })
+        }, status=500)
 
 
 # ============================================
@@ -405,6 +457,11 @@ def check_obligation_duplicate(request):
     """
     AJAX endpoint for checking duplicate obligations
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.view_monthlyobligation'):
+        return JsonResponse(
+            {'exists': False, 'error': 'Δεν έχετε δικαίωμα.'}, status=403)
+
     client_id = request.GET.get('client')
     type_id = request.GET.get('type')
     year = request.GET.get('year')
@@ -424,7 +481,7 @@ def check_obligation_duplicate(request):
             'error': 'Μη έγκυρες παράμετροι'
         }, status=400)
 
-    exists = MonthlyObligation.objects.filter(
+    exists = accessible_obligations(request.user).filter(
         client_id=client_id,
         obligation_type_id=type_id,
         year=year,
@@ -445,8 +502,20 @@ def complete_with_file(request, obligation_id):
     Complete obligation WITH file upload
     Handles multipart/form-data for file upload + completion
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
+        obligation = accessible_obligations(request.user).get(id=obligation_id)
 
         # Validate file
         if 'file' not in request.FILES:
@@ -466,10 +535,9 @@ def complete_with_file(request, obligation_id):
                 description=request.POST.get('description', ''),
             )
         except DjangoValidationError as e:
-            return JsonResponse({
-                'success': False,
-                'error': f'Μη έγκυρο αρχείο: {"; ".join(e.messages)}'
-            }, status=400)
+            message, code = filing.document_error_status(e)
+            return JsonResponse({'success': False, 'error': message},
+                                status=code)
 
         # Update obligation
         old_status = obligation.status
@@ -528,11 +596,11 @@ def complete_with_file(request, obligation_id):
             'success': False,
             'error': 'I ypoxreosi den vrethike'
         }, status=404)
-    except Exception as e:
-        logger.error(f'Error completing obligation {obligation_id} with file: {e}')
+    except Exception:
+        logger.exception(f'Error completing obligation {obligation_id} with file')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -547,6 +615,18 @@ def bulk_complete_obligations(request):
     Bulk complete multiple obligations with optional file upload
     Handles mass completion with optional file
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+
     try:
         # Get obligation IDs
         obligation_ids_str = request.POST.get('obligation_ids')
@@ -557,6 +637,12 @@ def bulk_complete_obligations(request):
             }, status=400)
 
         obligation_ids = json.loads(obligation_ids_str)
+        # Άκυρη μορφή (π.χ. σκέτος αριθμός/string) → 400, ποτέ 500
+        if not isinstance(obligation_ids, (list, tuple)):
+            return JsonResponse({
+                'success': False,
+                'error': 'Μη έγκυρη μορφή obligation_ids'
+            }, status=400)
 
         if not obligation_ids:
             return JsonResponse({
@@ -565,7 +651,7 @@ def bulk_complete_obligations(request):
             }, status=400)
 
         # Get obligations
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=obligation_ids,
             status__in=['pending', 'overdue']
         )
@@ -600,25 +686,31 @@ def bulk_complete_obligations(request):
         for obligation in obligations:
             try:
                 old_status = obligation.status
-                obligation.status = 'completed'
-                obligation.completed_date = timezone.now().date()
-                obligation.completed_by = request.user
+                # ΠΟΛΙΤΙΚΗ BULK (Γύρος 21): per-item atomic — αποτυχία
+                # αρχειοθέτησης κάνει rollback και την ολοκλήρωση, ώστε να
+                # μην υπάρχει «ολοκληρωμένη» υποχρέωση χωρίς το αρχείο της.
+                # Το audit/email μένουν ΕΞΩ (δεν πρέπει να σταλεί email για
+                # μεταβολή που έκανε rollback).
+                with transaction.atomic():
+                    obligation.status = 'completed'
+                    obligation.completed_date = timezone.now().date()
+                    obligation.completed_by = request.user
 
-                obligation.save()
+                    obligation.save()
 
-                # Attach file if provided — αντίγραφο ανά υποχρέωση
-                if uploaded_file:
-                    uploaded_file.seek(0)
-                    file_copy = ContentFile(uploaded_file.read())
-                    file_copy.name = uploaded_file.name
-                    filing.create_client_document(
-                        client=obligation.client,
-                        uploaded_file=file_copy,
-                        category=category,
-                        obligation=obligation,
-                        user=request.user,
-                        description=description or f'Μαζική ολοκλήρωση - {timezone.now().date()}',
-                    )
+                    # Attach file if provided — αντίγραφο ανά υποχρέωση
+                    if uploaded_file:
+                        uploaded_file.seek(0)
+                        file_copy = ContentFile(uploaded_file.read())
+                        file_copy.name = uploaded_file.name
+                        filing.create_client_document(
+                            client=obligation.client,
+                            uploaded_file=file_copy,
+                            category=category,
+                            obligation=obligation,
+                            user=request.user,
+                            description=description or f'Μαζική ολοκλήρωση - {timezone.now().date()}',
+                        )
 
                 # Audit log
                 try:
@@ -648,34 +740,42 @@ def bulk_complete_obligations(request):
 
                 completed_count += 1
 
-            except Exception as e:
+            except Exception as item_error:
                 failed_count += 1
-                errors.append(f'{obligation.client.eponimia} - {obligation.obligation_type.name}: {str(e)}')
-                logger.error(f'Error bulk completing obligation {obligation.id}: {e}')
+                mapped = filing.document_error_status(item_error)
+                if mapped is not None:
+                    errors.append(
+                        f'Υποχρέωση id={obligation.id}: {mapped[0]}')
+                else:
+                    errors.append(f'Υποχρέωση id={obligation.id}: σφάλμα')
+                    logger.exception(
+                        'Σφάλμα μαζικής ολοκλήρωσης υποχρέωσης id=%s',
+                        obligation.id)
 
         # Build response message
         message = f'Oloklirothikan {completed_count} ypoxreoseis epityxos'
         if failed_count > 0:
             message += f' ({failed_count} apetyxan)'
 
+        # Ποτέ ψευδής συνολική επιτυχία όταν δεν ολοκληρώθηκε καμία
         return JsonResponse({
-            'success': True,
+            'success': completed_count > 0,
             'message': message,
             'completed_count': completed_count,
             'failed_count': failed_count,
             'errors': errors if errors else None
-        })
+        }, status=200 if completed_count > 0 else 400)
 
     except json.JSONDecodeError:
         return JsonResponse({
             'success': False,
             'error': 'Mh egkyra dedomena ypoxreoseon'
         }, status=400)
-    except Exception as e:
-        logger.error(f'Error in bulk completion: {e}')
+    except Exception:
+        logger.exception('Error in bulk completion')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -690,19 +790,24 @@ def obligation_detail_view(request, obligation_id):
     Allows viewing and editing all fields + document upload
     """
     try:
-        obligation = MonthlyObligation.objects.select_related(
+        obligation = accessible_obligations(request.user).select_related(
             'client', 'obligation_type', 'completed_by'
         ).prefetch_related(
             'client__documents'
         ).get(id=obligation_id)
 
         # Get all documents for this obligation
-        documents = ClientDocument.objects.filter(
+        documents = accessible_documents(request.user).filter(
             Q(obligation=obligation) | Q(client=obligation.client)
         ).order_by('-uploaded_at')
 
         # Handle POST (edit obligation)
         if request.method == 'POST':
+            from accounting.services.access import check_model_perms
+            if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+                messages.error(request, 'Δεν έχετε δικαίωμα επεξεργασίας υποχρεώσεων.')
+                return redirect('accounting:obligation_detail', obligation_id=obligation.id)
+
             # Update obligation fields
             obligation.notes = request.POST.get('notes', '')
 
@@ -773,7 +878,7 @@ def api_obligations_wizard(request):
             }, status=400)
 
         # Get obligations with related data
-        obligations = MonthlyObligation.objects.filter(
+        obligations = accessible_obligations(request.user).filter(
             id__in=ids
         ).select_related(
             'client', 'obligation_type'
@@ -788,7 +893,7 @@ def api_obligations_wizard(request):
 
         # Ένα batch query για τα έγγραφα όλων των υποχρεώσεων (όχι 1/υποχρέωση)
         docs_by_obligation = {}
-        for doc in ClientDocument.objects.filter(
+        for doc in accessible_documents(request.user).filter(
             obligation_id__in=[ob.id for ob in obligations]
         ).values('id', 'filename', 'uploaded_at', 'obligation_id'):
             docs_by_obligation.setdefault(doc.pop('obligation_id'), []).append(doc)
@@ -822,11 +927,11 @@ def api_obligations_wizard(request):
             'obligations': obligations_data
         })
 
-    except Exception as e:
-        logger.error(f"Error in api_obligations_wizard: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Error in api_obligations_wizard")
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)
 
 
@@ -841,6 +946,18 @@ def wizard_bulk_process(request):
     Process wizard submission for bulk obligation completion.
     Each obligation can have its own file.
     """
+    from accounting.services.access import check_model_perms
+    if not check_model_perms(request, 'accounting.change_monthlyobligation'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=403,
+        )
+    if request.FILES and not check_model_perms(request, 'accounting.add_clientdocument'):
+        return JsonResponse(
+            {'success': False, 'error': 'Δεν έχετε δικαίωμα δημιουργίας εγγράφων.'},
+            status=403,
+        )
+
     try:
         # Parse results JSON
         results_str = request.POST.get('results', '{}')
@@ -881,7 +998,7 @@ def wizard_bulk_process(request):
                     skipped_count += 1
                     continue
 
-                obligation = MonthlyObligation.objects.select_related(
+                obligation = accessible_obligations(request.user).select_related(
                     'client', 'obligation_type'
                 ).get(id=ob_id)
 
@@ -921,25 +1038,37 @@ def wizard_bulk_process(request):
                     else:
                         obligation.notes = new_note
 
-                # Handle file upload for this specific obligation
+                # Handle file upload for this specific obligation.
+                # ΠΟΛΙΤΙΚΗ (Γύρος 21): αποτυχία αρχειοθέτησης ΔΕΝ
+                # καταπίνεται σιωπηλά — η υποχρέωση ΔΕΝ ολοκληρώνεται και
+                # το item αναφέρεται ως αποτυχία με σαφές μήνυμα.
                 file_key = f'file_{ob_id}'
-                if file_key in request.FILES:
-                    try:
-                        document = filing.create_client_document(
-                            client=obligation.client,
-                            uploaded_file=request.FILES[file_key],
-                            obligation=obligation,
-                            category=ob_data.get('category', 'general'),
-                            user=request.user,
-                            description=f"Wizard upload - {timezone.now().strftime('%d/%m/%Y')}",
-                        )
-                        logger.info(f"Wizard: Archived file for obligation {ob_id}: {document.file.name}")
-                    except DjangoValidationError as file_error:
-                        logger.warning(
-                            f"Invalid file for {ob_id}: {'; '.join(file_error.messages)}"
-                        )
+                with transaction.atomic():
+                    if file_key in request.FILES:
+                        try:
+                            document = filing.create_client_document(
+                                client=obligation.client,
+                                uploaded_file=request.FILES[file_key],
+                                obligation=obligation,
+                                category=ob_data.get('category', 'general'),
+                                user=request.user,
+                                description=f"Wizard upload - {timezone.now().strftime('%d/%m/%Y')}",
+                            )
+                            logger.info(
+                                'Wizard: αρχειοθετήθηκε document id=%s για '
+                                'obligation id=%s', document.pk, ob_id)
+                        except DjangoValidationError as file_error:
+                            message = filing.document_error_status(
+                                file_error)[0]
+                            failed_count += 1
+                            processed_details.append({
+                                'id': ob_id,
+                                'status': 'failed',
+                                'message': f'Αποτυχία αρχειοθέτησης: {message}',
+                            })
+                            continue
 
-                obligation.save()
+                    obligation.save()
 
                 # Audit log
                 try:
@@ -974,13 +1103,13 @@ def wizard_bulk_process(request):
                         )
                         if success:
                             email_sent = True
-                            logger.info(f"Email sent for obligation {ob_id} to {obligation.client.email}")
+                            logger.info(f"Email sent for obligation {ob_id} to client id={obligation.client_id}")
                         else:
-                            email_error_msg = str(result)
+                            email_error_msg = 'αποτυχία'
                             logger.warning(f"Could not send email for {ob_id}: {result}")
-                    except Exception as email_error:
-                        email_error_msg = str(email_error)
-                        logger.warning(f"Could not send email for {ob_id}: {email_error}")
+                    except Exception:
+                        email_error_msg = 'αποτυχία'
+                        logger.exception(f"Could not send email for {ob_id}")
 
                 completed_count += 1
                 message_parts = [f'{obligation.client.eponimia} - {obligation.obligation_type.name}: Oloklirothike']
@@ -999,10 +1128,15 @@ def wizard_bulk_process(request):
             except MonthlyObligation.DoesNotExist:
                 failed_count += 1
                 errors.append(f'Ypoxreosi {ob_id_str} den vrethike')
-            except Exception as e:
+            except Exception as item_error:
                 failed_count += 1
-                errors.append(f'Sfalma me ypoxreosi {ob_id_str}: {str(e)}')
-                logger.error(f"Error processing obligation {ob_id_str} in wizard: {e}", exc_info=True)
+                mapped = filing.document_error_status(item_error)
+                if mapped is not None:
+                    errors.append(f'Υποχρέωση {ob_id_str}: {mapped[0]}')
+                else:
+                    errors.append(f'Σφάλμα στην υποχρέωση {ob_id_str}')
+                    logger.exception(
+                        'Σφάλμα wizard για υποχρέωση id=%s', ob_id_str)
 
         # Build response message
         if completed_count > 0:
@@ -1033,9 +1167,9 @@ def wizard_bulk_process(request):
             'details': processed_details[:20] if processed_details else []
         })
 
-    except Exception as e:
-        logger.error(f"Critical error in wizard_bulk_process: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Critical error in wizard_bulk_process")
         return JsonResponse({
             'success': False,
-            'error': f'Krisimo sfalma: {str(e)}'
+            'error': 'Παρουσιάστηκε σφάλμα'
         }, status=500)

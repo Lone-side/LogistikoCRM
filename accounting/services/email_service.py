@@ -21,6 +21,7 @@ from django.utils.html import strip_tags
 import logging
 import time
 
+from accounting.services.access import mask_pii_value
 from .email_utils import (
     retry_with_backoff,
     get_rate_limiter,
@@ -377,7 +378,7 @@ class EmailService:
                 send_email_async.delay(email_log.id)
                 email_log.status = 'queued'
                 email_log.save()
-                logger.info(f"📧 Email queued for async send: {recipient_email}")
+                logger.info(f"📧 Email queued for async send: {mask_pii_value(recipient_email)}")
                 return True, email_log
             except Exception as e:
                 logger.warning(f"Could not queue email, sending synchronously: {e}")
@@ -437,7 +438,7 @@ class EmailService:
             email_log.retry_count = 0  # Success on first try or after retries
             email_log.save()
 
-            logger.info(f"✅ Email sent to {recipient_email}: {subject}")
+            logger.info(f"✅ Email sent to {mask_pii_value(recipient_email)}: {subject}")
             return True, email_log
 
         except EmailPermanentError as e:
@@ -445,7 +446,7 @@ class EmailService:
             email_log.status = 'failed'
             email_log.error_message = f"Permanent error: {str(e)}"
             email_log.save()
-            logger.error(f"❌ Permanent email failure to {recipient_email}: {e}")
+            logger.error(f"❌ Permanent email failure to {mask_pii_value(recipient_email)}: {e}")
             return False, str(e)
 
         except EmailConnectionError as e:
@@ -454,7 +455,7 @@ class EmailService:
             email_log.error_message = f"Connection error after retries: {str(e)}"
             email_log.retry_count = getattr(e, 'attempt', 0)
             email_log.save()
-            logger.error(f"❌ Email failed after retries to {recipient_email}: {e}")
+            logger.error(f"❌ Email failed after retries to {mask_pii_value(recipient_email)}: {e}")
             return False, str(e)
 
         except Exception as e:
@@ -463,7 +464,7 @@ class EmailService:
             email_log.error_message = str(e)
             email_log.save()
 
-            logger.error(f"❌ Failed to send email to {recipient_email}: {e}")
+            logger.error(f"❌ Failed to send email to {mask_pii_value(recipient_email)}: {e}")
             return False, str(e)
 
     @staticmethod
@@ -885,7 +886,7 @@ def send_scheduled_email(email_id):
         EmailService._send_with_retry(email, use_rate_limit=True)
         scheduled_email.mark_as_sent()
 
-        logger.info(f"✅ Scheduled email sent to {scheduled_email.recipient_email}")
+        logger.info(f"✅ Scheduled email sent to {mask_pii_value(scheduled_email.recipient_email)}")
         return True
 
     except Exception as e:

@@ -40,15 +40,21 @@ class DocumentFilter(FilterSet):
         fields = ['client_id', 'obligation_id', 'category']
 
     def filter_year(self, queryset, name, value):
-        """Filter στο πεδίο year (έτος αναφοράς — συμφωνεί με τη δομή φακέλων)"""
+        """Filter στο πεδίο year — άκυρη τιμή → 400 (όχι 500)."""
         if value:
-            return queryset.filter(year=int(value))
+            try:
+                return queryset.filter(year=int(value))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({'year': 'Μη έγκυρο έτος.'})
         return queryset
 
     def filter_month(self, queryset, name, value):
-        """Filter στο πεδίο month (μήνας αναφοράς — συμφωνεί με τη δομή φακέλων)"""
+        """Filter στο πεδίο month — άκυρη τιμή → 400 (όχι 500)."""
         if value:
-            return queryset.filter(month=int(value))
+            try:
+                return queryset.filter(month=int(value))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({'month': 'Μη έγκυρος μήνας.'})
         return queryset
 
     def filter_search(self, queryset, name, value):
@@ -91,7 +97,14 @@ class DocumentSerializer(serializers.ModelSerializer):
             'document_category', 'category_display', 'description',
             'uploaded_at'
         ]
-        read_only_fields = ['filename', 'file_type', 'uploaded_at']
+        # file: κάθε πραγματικό upload περνά ΜΟΝΟ από το filing service.
+        # client/obligation/document_category: καθορίζουν ownership και
+        # storage path — αλλαγή τους ΧΩΡΙΣ μετακίνηση αρχείου θα άφηνε
+        # row/path mismatch. Attach/detach obligation ΜΟΝΟ μέσω των
+        # dedicated actions (με τα δικά τους permissions/consistency checks).
+        read_only_fields = ['file', 'client', 'obligation',
+                            'document_category', 'filename', 'file_type',
+                            'uploaded_at']
 
     def get_file_url(self, obj):
         if obj.file:
@@ -116,6 +129,47 @@ class DocumentSerializer(serializers.ModelSerializer):
             return f"{obj.obligation.month:02d}/{obj.obligation.year}"
         return None
 
+
+    def validate_client(self, client):
+        """RBAC: το client FK δεν μπορεί να δείξει σε πελάτη εκτός ανάθεσης."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and client is not None and \
+                not user_can_access_client(request.user, client):
+            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
+    def validate_obligation(self, obligation):
+        """RBAC: το obligation FK μόνο σε προσβάσιμη υποχρέωση."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and obligation is not None and \
+                not user_can_access_client(request.user, obligation.client):
+            raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
+        return obligation
+
+    def validate(self, attrs):
+        """
+        Cross-model invariant στο generic create/update: το client δεν
+        μπορεί να ζευγαρώσει με obligation/previous_version άλλου πελάτη.
+        Merge με το instance για partial updates.
+        """
+        instance = getattr(self, 'instance', None)
+        client = attrs.get('client', getattr(instance, 'client', None))
+        obligation = attrs.get(
+            'obligation', getattr(instance, 'obligation', None))
+        previous = attrs.get(
+            'previous_version', getattr(instance, 'previous_version', None))
+        if client is not None and obligation is not None \
+                and obligation.client_id != client.id:
+            raise serializers.ValidationError(
+                {'obligation': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη.'})
+        if client is not None and previous is not None \
+                and previous.client_id != client.id:
+            raise serializers.ValidationError(
+                {'previous_version': 'Η προηγούμενη έκδοση ανήκει σε '
+                                     'διαφορετικό πελάτη.'})
+        return attrs
 
 class DocumentUploadSerializer(serializers.Serializer):
     """Serializer for document upload"""
@@ -152,22 +206,9 @@ class DocumentUploadSerializer(serializers.Serializer):
 
         return value
 
-    def validate_client_id(self, value):
-        """Validate client exists"""
-        try:
-            ClientProfile.objects.get(id=value)
-        except ClientProfile.DoesNotExist:
-            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
-        return value
-
-    def validate_obligation_id(self, value):
-        """Validate obligation exists if provided"""
-        if value:
-            try:
-                MonthlyObligation.objects.get(id=value)
-            except MonthlyObligation.DoesNotExist:
-                raise serializers.ValidationError('Η υποχρέωση δεν βρέθηκε.')
-        return value
+    # ΟΧΙ global existence checks εδώ — η ύπαρξη+πρόσβαση κρίνονται scoped
+    # στο view (get_accessible_client_or_404 / get_accessible_obligation_or_404)
+    # ώστε ξένο και ανύπαρκτο ID να μη διακρίνονται (neutral 404).
 
 
 # ============================================
@@ -175,7 +216,7 @@ class DocumentUploadSerializer(serializers.Serializer):
 # ============================================
 
 from .mixins import ClientScopedQuerysetMixin
-from .permissions import CanAccessClient
+from .permissions import CanAccessClient, ClientModelPermissions
 
 
 class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
@@ -190,7 +231,12 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     queryset = ClientDocument.objects.all()
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated, CanAccessClient]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    action_perms = {
+        'attach_to_obligation': ['accounting.change_clientdocument',
+                                 'accounting.view_monthlyobligation'],
+        'detach_from_obligation': ['accounting.change_clientdocument'],
+    }
     client_field = 'client__assigned_users'
     pagination_class = DocumentPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -204,6 +250,33 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         return super().get_queryset().select_related(
             'client', 'obligation', 'obligation__obligation_type'
         )
+
+    def create(self, request, *args, **kwargs):
+        """Generic POST απενεργοποιημένο: uploads ΜΟΝΟ μέσω /upload/ (filing)."""
+        return Response(
+            {'error': 'Χρησιμοποιήστε το /api/v1/documents/upload/ για '
+                      'μεταφόρτωση εγγράφων.'},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    # Πεδία που καθορίζουν ownership/storage path — ΔΕΝ αλλάζουν από
+    # generic PUT/PATCH (μόνο descriptive metadata, π.χ. description)
+    IMMUTABLE_UPDATE_FIELDS = ('file', 'client', 'obligation',
+                               'document_category', 'previous_version',
+                               'is_current', 'version', 'year', 'month')
+
+    def update(self, request, *args, **kwargs):
+        """Descriptive-metadata-only updates: file/ownership/path πεδία → 400."""
+        blocked = [f for f in self.IMMUTABLE_UPDATE_FIELDS
+                   if f in request.data]
+        if blocked:
+            return Response(
+                {'error': 'Τα πεδία αρχείου/ιδιοκτησίας δεν αλλάζουν από '
+                          'αυτό το endpoint — χρησιμοποιήστε τα dedicated '
+                          'actions (upload-with-version, attach/detach).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
 
     @action(detail=False, methods=['post'], url_path='upload')
     def upload(self, request):
@@ -223,13 +296,18 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         category = serializer.validated_data.get('document_category', 'general')
         description = serializer.validated_data.get('description', '')
 
-        # Get client
-        client = ClientProfile.objects.get(id=client_id)
+        # Get client — μόνο ανατεθειμένος στον χρήστη (RBAC)
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_obligation_or_404,
+        )
+        client = get_accessible_client_or_404(request.user, client_id, request=request)
 
         # Get obligation if provided
         obligation = None
         if obligation_id:
-            obligation = MonthlyObligation.objects.get(id=obligation_id)
+            obligation = get_accessible_obligation_or_404(
+                request.user, obligation_id, request=request
+            )
             if obligation.client_id != client.id:
                 return Response(
                     {'error': 'Η υποχρέωση ανήκει σε διαφορετικό πελάτη.'},
@@ -261,7 +339,8 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 description=description,
             )
         except ValidationError as e:
-            return Response({'error': '; '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         result_serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -277,6 +356,8 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
 
         Body: { "obligation_id": 123 }
         """
+        from django.http import Http404
+        from accounting.services.access import get_accessible_obligation_or_404
         document = self.get_object()
         obligation_id = request.data.get('obligation_id')
 
@@ -286,23 +367,29 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        try:
-            obligation = MonthlyObligation.objects.get(id=obligation_id)
-        except MonthlyObligation.DoesNotExist:
-            return Response(
-                {'error': 'Η υποχρέωση δεν βρέθηκε.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        # Scoped resolution: ξένη και ανύπαρκτη υποχρέωση → ίδιο ουδέτερο 404
+        obligation = get_accessible_obligation_or_404(
+            request.user, obligation_id, request=request
+        )
 
-        # Verify document belongs to same client
+        # Invariant: το έγγραφο και η υποχρέωση πρέπει να είναι ίδιου πελάτη.
+        # (Το document είναι ήδη scoped από το get_object.) Ασυμφωνία →
+        # ουδέτερο 404 ώστε να μη διακρίνεται από «δεν βρέθηκε».
         if document.client_id != obligation.client_id:
-            return Response(
-                {'error': 'Το έγγραφο ανήκει σε διαφορετικό πελάτη.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            raise Http404
 
-        document.obligation = obligation
-        document.save()
+        # Κοινό transactional service: validation → perms → locks →
+        # reload+lock document → exact target-key conflict → mutation → audit
+        from django.core.exceptions import ValidationError
+        from .services import filing
+        try:
+            document = filing.attach_document_service(
+                request.user, document, obligation)
+        except (filing.MultipleCurrentDocumentsError,
+                filing.DocumentKeyConflict, filing.DocumentGone,
+                ValidationError) as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -314,11 +401,18 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     def detach_from_obligation(self, request, pk=None):
         """
         POST /api/v1/documents/{id}/detach-from-obligation/
-        Remove document association with obligation
+        Remove document association with obligation (κοινό service)
         """
+        from django.core.exceptions import ValidationError
+        from .services import filing
         document = self.get_object()
-        document.obligation = None
-        document.save()
+        try:
+            document = filing.detach_document_service(request.user, document)
+        except (filing.MultipleCurrentDocumentsError,
+                filing.DocumentKeyConflict, filing.DocumentGone,
+                ValidationError) as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -327,17 +421,22 @@ class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
         })
 
     def destroy(self, request, *args, **kwargs):
-        """Override delete to also remove file from storage"""
+        """
+        Διαγραφή μέσω delete_document_service: πολιτική versioned deletion
+        (descendants → 400, current → προαγωγή προηγούμενης), DB πρώτα,
+        αρχείο μόνο on_commit.
+        """
+        from django.core.exceptions import ValidationError
+        from .services import filing
+
         document = self.get_object()
-
-        # Delete file from storage
-        if document.file:
-            try:
-                document.file.delete(save=False)
-            except Exception:
-                pass  # File might not exist
-
-        document.delete()
+        try:
+            filing.delete_document_service(request.user, document)
+        except (filing.MultipleCurrentDocumentsError,
+                filing.DocumentKeyConflict, filing.DocumentGone,
+                ValidationError) as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
         return Response({'message': 'Το έγγραφο διαγράφηκε επιτυχώς.'})
 
 
@@ -356,9 +455,27 @@ def attach_document_to_obligation(request, obligation_id):
     1. Attach existing: { "document_id": 123 }
     2. Upload new: multipart/form-data with 'file' and optional 'description'
     """
+    from django.http import Http404
+    from accounting.services.access import (
+        get_accessible_obligation_or_404, get_accessible_document_or_404,
+        check_model_perms,
+    )
+    # Σύνδεση υπάρχοντος = change, upload νέου αρχείου = add
+    required_perm = (
+        'accounting.change_clientdocument'
+        if request.data.get('document_id')
+        else 'accounting.add_clientdocument'
+    )
+    if not check_model_perms(request, required_perm):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
-    except MonthlyObligation.DoesNotExist:
+        obligation = get_accessible_obligation_or_404(
+            request.user, obligation_id, request=request
+        )
+    except Http404:
         return Response(
             {'error': 'Η υποχρέωση δεν βρέθηκε.'},
             status=status.HTTP_404_NOT_FOUND
@@ -368,22 +485,26 @@ def attach_document_to_obligation(request, obligation_id):
     document_id = request.data.get('document_id')
     if document_id:
         try:
-            document = ClientDocument.objects.get(id=document_id)
-        except ClientDocument.DoesNotExist:
+            document = get_accessible_document_or_404(
+                request.user, document_id, request=request
+            )
+        except Http404:
             return Response(
                 {'error': 'Το έγγραφο δεν βρέθηκε.'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Verify same client
-        if document.client_id != obligation.client_id:
-            return Response(
-                {'error': 'Το έγγραφο ανήκει σε διαφορετικό πελάτη.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        document.obligation = obligation
-        document.save()
+        # Κοινό transactional service — ίδια πολιτική με το ViewSet action
+        from django.core.exceptions import ValidationError
+        from .services import filing as _filing
+        try:
+            document = _filing.attach_document_service(
+                request.user, document, obligation)
+        except (_filing.MultipleCurrentDocumentsError,
+                _filing.DocumentKeyConflict, _filing.DocumentGone,
+                ValidationError) as e:
+            message, code = _filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -391,47 +512,23 @@ def attach_document_to_obligation(request, obligation_id):
             'document': serializer.data
         })
 
-    # Check if uploading new file
+    # Check if uploading new file — ΠΑΝΤΑ μέσω filing service (validation
+    # βάσει ρυθμίσεων, dangerous-content check, ονομασία, versioning)
     if 'file' in request.FILES:
-        uploaded_file = request.FILES['file']
+        from django.core.exceptions import ValidationError
+        from .services import filing
 
-        # Validate file
-        allowed_extensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png']
-        ext = os.path.splitext(uploaded_file.name)[1].lower()
-
-        if ext not in allowed_extensions:
-            return Response(
-                {'error': f'Μη επιτρεπτός τύπος αρχείου. Επιτρέπονται: {", ".join(allowed_extensions)}'},
-                status=status.HTTP_400_BAD_REQUEST
+        try:
+            document = filing.create_client_document(
+                client=obligation.client,
+                obligation=obligation,
+                uploaded_file=request.FILES['file'],
+                user=request.user,
+                description=request.data.get('description', ''),
             )
-
-        if uploaded_file.size > 10 * 1024 * 1024:
-            return Response(
-                {'error': 'Το αρχείο είναι μεγαλύτερο από 10MB.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Determine category based on obligation type
-        category = 'general'
-        if obligation.obligation_type:
-            type_code = obligation.obligation_type.code.upper()
-            if 'ΦΠΑ' in type_code or 'VAT' in type_code:
-                category = 'vat'
-            elif 'ΜΥΦ' in type_code:
-                category = 'myf'
-            elif 'ΑΠΔ' in type_code:
-                category = 'payroll'
-            elif 'Ε1' in type_code or 'Ε3' in type_code:
-                category = 'tax'
-
-        # Create document
-        document = ClientDocument.objects.create(
-            client=obligation.client,
-            obligation=obligation,
-            file=uploaded_file,
-            document_category=category,
-            description=request.data.get('description', '')
-        )
+        except ValidationError as e:
+            message, code = filing.document_error_status(e)
+            return Response({'error': message}, status=code)
 
         serializer = DocumentSerializer(document, context={'request': request})
         return Response({
@@ -452,9 +549,23 @@ def obligation_documents(request, obligation_id):
     GET /api/v1/obligations/{id}/documents/
     List all documents attached to an obligation
     """
+    from django.http import Http404
+    from accounting.services.access import (
+        check_model_perms, get_accessible_obligation_or_404,
+    )
+    # Model permissions ΠΡΙΝ από κάθε ανάκτηση: επιστρέφει στοιχεία
+    # υποχρέωσης ΚΑΙ εγγράφων (με signed URLs)
+    if not check_model_perms(request, 'accounting.view_monthlyobligation',
+                             'accounting.view_clientdocument'):
+        return Response(
+            {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     try:
-        obligation = MonthlyObligation.objects.get(id=obligation_id)
-    except MonthlyObligation.DoesNotExist:
+        obligation = get_accessible_obligation_or_404(
+            request.user, obligation_id, request=request
+        )
+    except Http404:
         return Response(
             {'error': 'Η υποχρέωση δεν βρέθηκε.'},
             status=status.HTTP_404_NOT_FOUND

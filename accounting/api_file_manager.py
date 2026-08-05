@@ -68,6 +68,8 @@ from .models import (
     DocumentTag, DocumentTagAssignment, SharedLink, SharedLinkAccess,
     DocumentFavorite, DocumentCollection, get_client_folder
 )
+from .mixins import ClientScopedQuerysetMixin
+from .permissions import CanAccessClient, ClientModelPermissions, RequiredModelPerms
 
 logger = logging.getLogger(__name__)
 
@@ -272,8 +274,43 @@ class SharedLinkSerializer(serializers.ModelSerializer):
             'is_active', 'is_expired', 'is_valid',
             'public_url', 'created_at', 'created_by', 'created_by_name'
         ]
+        # created_by: αυστηρά read-only — αλλιώς PATCH θα άλλαζε ιδιοκτήτη link
         read_only_fields = ['token', 'download_count', 'view_count', 'upload_count',
-                            'last_accessed_at', 'created_at']
+                            'last_accessed_at', 'created_at', 'created_by']
+
+    def validate(self, attrs):
+        """
+        Invariant στόχου σε create/PUT/PATCH (Γύρος 22).
+
+        Στο partial update συνδυάζονται οι ΝΕΕΣ τιμές με την τρέχουσα
+        κατάσταση της instance — αλλιώς ένα PATCH που προσθέτει το δεύτερο
+        target θα περνούσε (το άλλο πεδίο απλώς λείπει από το payload).
+        """
+        attrs = super().validate(attrs)
+        instance = self.instance
+
+        def _resolved(field):
+            if field in attrs:
+                return attrs[field]
+            return getattr(instance, field, None) if instance else None
+
+        document = _resolved('document')
+        client = _resolved('client')
+        is_active = _resolved('is_active')
+        if is_active is None:
+            is_active = True
+
+        if not is_active:
+            # Ανενεργά links επιτρέπεται να διατηρούν legacy κατάσταση
+            return attrs
+        if document and client:
+            raise serializers.ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει ΕΝΑΝ στόχο: είτε έγγραφο είτε '
+                'πελάτη — όχι και τα δύο.')
+        if not document and not client:
+            raise serializers.ValidationError(
+                'Ο σύνδεσμος πρέπει να έχει έναν στόχο (έγγραφο ή πελάτη).')
+        return attrs
 
     def get_public_url(self, obj):
         request = self.context.get('request')
@@ -281,6 +318,24 @@ class SharedLinkSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(f'/share/{obj.token}/')
         return f'/share/{obj.token}/'
 
+
+    def validate_client(self, client):
+        """RBAC: το client FK δεν μπορεί να δείξει σε πελάτη εκτός ανάθεσης."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and client is not None and \
+                not user_can_access_client(request.user, client):
+            raise serializers.ValidationError('Ο πελάτης δεν βρέθηκε.')
+        return client
+
+    def validate_document(self, document):
+        """RBAC: το document FK μόνο σε προσβάσιμο έγγραφο."""
+        from accounting.services.access import user_can_access_client
+        request = self.context.get('request')
+        if request is not None and document is not None and \
+                not user_can_access_client(request.user, document.client):
+            raise serializers.ValidationError('Το έγγραφο δεν βρέθηκε.')
+        return document
 
 class SharedLinkCreateSerializer(serializers.Serializer):
     """Serializer for creating shared links"""
@@ -298,6 +353,14 @@ class SharedLinkCreateSerializer(serializers.Serializer):
     max_uploads = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
     def validate(self, data):
+        # Invariant στόχου (Γύρος 22): ΑΚΡΙΒΩΣ ένας στόχος. Το payload με
+        # ΚΑΙ τα δύο απορρίπτεται ρητά — δεν αγνοείται σιωπηλά το ένα
+        # (θα οδηγούσε σε link που δείχνει έγγραφο πελάτη Α αλλά
+        # αποθηκεύει uploads στον πελάτη Β).
+        if data.get('document_id') and data.get('client_id'):
+            raise serializers.ValidationError(
+                'Δώστε ΕΝΑΝ στόχο: είτε document_id είτε client_id — '
+                'όχι και τα δύο.')
         if not data.get('document_id') and not data.get('client_id'):
             raise serializers.ValidationError("Πρέπει να δοθεί document_id ή client_id")
         from .models import ClientDocument
@@ -318,9 +381,27 @@ class DocumentFavoriteSerializer(serializers.ModelSerializer):
 
 
 class DocumentCollectionSerializer(serializers.ModelSerializer):
-    document_count = serializers.IntegerField(source='documents.count', read_only=True)
+    document_count = serializers.SerializerMethodField()
     owner_name = serializers.CharField(source='owner.username', read_only=True)
-    documents = DocumentListSerializer(many=True, read_only=True)
+    documents = serializers.SerializerMethodField()
+
+    def _accessible_docs(self, obj):
+        # RBAC: shared collection μπορεί να περιέχει έγγραφα ξένων πελατών —
+        # ο καλών βλέπει ΜΟΝΟ όσα έγγραφα της συλλογής του είναι προσβάσιμα
+        from accounting.services.access import accessible_documents
+        request = self.context.get('request')
+        qs = obj.documents.all()
+        if request is not None:
+            qs = qs.filter(pk__in=accessible_documents(request.user))
+        return qs
+
+    def get_documents(self, obj):
+        return DocumentListSerializer(
+            self._accessible_docs(obj), many=True, context=self.context
+        ).data
+
+    def get_document_count(self, obj):
+        return self._accessible_docs(obj).count()
 
     class Meta:
         model = DocumentCollection
@@ -335,7 +416,16 @@ class DocumentCollectionSerializer(serializers.ModelSerializer):
 
 class DocumentCollectionListSerializer(serializers.ModelSerializer):
     """Lightweight for list views"""
-    document_count = serializers.IntegerField(source='documents.count', read_only=True)
+    document_count = serializers.SerializerMethodField()
+
+    def get_document_count(self, obj):
+        # RBAC: μέτρα μόνο τα προσβάσιμα έγγραφα της συλλογής
+        from accounting.services.access import accessible_documents
+        request = self.context.get('request')
+        qs = obj.documents.all()
+        if request is not None:
+            qs = qs.filter(pk__in=accessible_documents(request.user))
+        return qs.count()
 
     class Meta:
         model = DocumentCollection
@@ -346,13 +436,20 @@ class DocumentCollectionListSerializer(serializers.ModelSerializer):
 # DOCUMENT VIEWSET
 # ============================================
 
-class DocumentViewSet(viewsets.ModelViewSet):
+class DocumentViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     Main ViewSet for document operations
     """
     queryset = ClientDocument.objects.filter(is_current=True)
     serializer_class = DocumentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    # Custom actions: POST δεν σημαίνει πάντα add — map στο σωστό permission
+    action_perms = {
+        'bulk_delete': ['accounting.delete_clientdocument'],
+        'add_tags': ['accounting.change_clientdocument'],
+        'remove_tag': ['accounting.change_clientdocument'],
+    }
+    client_field = 'client__assigned_users'
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = DocumentFilter
@@ -384,17 +481,23 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if not client_id:
             return Response({'error': 'Απαιτείται client_id'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from django.http import Http404 as _Http404
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_obligation_or_404,
+        )
         try:
-            client = ClientProfile.objects.get(id=client_id)
-        except ClientProfile.DoesNotExist:
+            client = get_accessible_client_or_404(request.user, client_id, request=request)
+        except _Http404:
             return Response({'error': 'Ο πελάτης δεν βρέθηκε'}, status=status.HTTP_404_NOT_FOUND)
 
         obligation_id = request.data.get('obligation_id')
         obligation = None
         if obligation_id:
             try:
-                obligation = MonthlyObligation.objects.get(id=obligation_id)
-            except MonthlyObligation.DoesNotExist:
+                obligation = get_accessible_obligation_or_404(
+                    request.user, obligation_id, request=request
+                )
+            except _Http404:
                 return Response({'error': 'Η υποχρέωση δεν βρέθηκε'}, status=status.HTTP_404_NOT_FOUND)
 
         category = request.data.get('document_category', 'general')
@@ -421,18 +524,24 @@ class DocumentViewSet(viewsets.ModelViewSet):
                     user=request.user,
                     description=description,
                 )
-            except ValidationError as e:
-                errors.append(f'{f.name}: {"; ".join(e.messages)}')
+            except (ValidationError, filing.DocumentKeyConflict,
+                    filing.DocumentGone) as e:
+                # Κοινό contract: το μήνυμα προκύπτει από τον mapper
+                # (MultipleCurrentDocumentsError → conflict, όχι 400)
+                message = filing.document_error_status(e)[0]
+                errors.append(f'{f.name}: {message}')
                 continue
             uploaded_docs.append(doc)
 
         result_serializer = DocumentSerializer(uploaded_docs, many=True, context={'request': request})
+        # ΠΟΤΕ 201 όταν δεν μεταφορτώθηκε κανένα αρχείο
         return Response({
             'message': f'Μεταφορτώθηκαν {len(uploaded_docs)} αρχεία',
             'uploaded': len(uploaded_docs),
             'errors': errors,
             'documents': result_serializer.data
-        }, status=status.HTTP_201_CREATED)
+        }, status=status.HTTP_201_CREATED if uploaded_docs
+           else status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], url_path='bulk-delete')
     def bulk_delete(self, request):
@@ -441,20 +550,34 @@ class DocumentViewSet(viewsets.ModelViewSet):
         if not doc_ids:
             return Response({'error': 'Δεν δόθηκαν document_ids'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from accounting.services.access import accessible_documents
+        allowed = accessible_documents(request.user)
         deleted_count = 0
+        skipped = 0
         for doc_id in doc_ids:
             try:
-                doc = ClientDocument.objects.get(id=doc_id)
-                if doc.file:
-                    doc.file.delete(save=False)
-                doc.delete()
+                # Μόνο έγγραφα πελατών ανατεθειμένων στον χρήστη
+                doc = allowed.get(id=doc_id)
+                # Κοινό delete service (versioned policy + on_commit file)
+                from django.core.exceptions import ValidationError as _VErr
+                from accounting.services import filing as _filing
+                try:
+                    _filing.delete_document_service(request.user, doc)
+                except (_filing.MultipleCurrentDocumentsError,
+                        _filing.DocumentKeyConflict, _filing.DocumentGone,
+                        _VErr):
+                    # έχει νεότερες εκδόσεις / corrupted / ήδη διαγραμμένο —
+                    # παραλείπεται με μέτρηση (controlled, όχι 500)
+                    skipped += 1
+                    continue
                 deleted_count += 1
             except ClientDocument.DoesNotExist:
                 continue
 
         return Response({
             'message': f'Διαγράφηκαν {deleted_count} έγγραφα',
-            'deleted_count': deleted_count
+            'deleted_count': deleted_count,
+            'skipped_count': skipped,
         })
 
     @action(detail=True, methods=['get'], url_path='preview')
@@ -558,7 +681,8 @@ class TagViewSet(viewsets.ModelViewSet):
     """ViewSet for document tags"""
     queryset = DocumentTag.objects.all()
     serializer_class = DocumentTagSerializer
-    permission_classes = [IsAuthenticated]
+    # Global tags: ο read-only ρόλος δεν τα δημιουργεί/αλλάζει/σβήνει
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering = ['name']
@@ -575,15 +699,38 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
     """ViewSet for shared links management"""
     queryset = SharedLink.objects.all()
     serializer_class = SharedLinkSerializer
-    permission_classes = [IsAuthenticated]
+    # ClientModelPermissions: ο read-only ρόλος (Βοηθός) δεν δημιουργεί
+    # δημόσια shared links — απαιτείται add/change/delete_sharedlink
+    permission_classes = [IsAuthenticated, ClientModelPermissions]
+    # POST regenerate-token αλλάζει υπάρχον link → change, όχι add
+    action_perms = {
+        'regenerate_token': ['accounting.change_sharedlink'],
+    }
     pagination_class = StandardPagination
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     ordering = ['-created_at']
 
     def get_queryset(self):
-        return super().get_queryset().select_related(
-            'document', 'client', 'created_by'
-        ).filter(created_by=self.request.user)
+        # Current-access scoping: δεν αρκεί το created_by — αν ο δημιουργός
+        # έχασε την ανάθεση του πελάτη (ή το link αφορά ξένο πελάτη/έγγραφο),
+        # δεν βλέπει/διαχειρίζεται πλέον το link. Orphan links (χωρίς client
+        # και χωρίς document) ορατά μόνο σε see-all χρήστες. Ισχύει για list,
+        # retrieve, update, destroy, regenerate-token και access-logs (όλα
+        # περνούν από εδώ μέσω get_object).
+        from django.db.models import Q
+        from accounting.mixins import user_sees_all_clients
+        from accounting.services.access import accessible_clients
+        qs = super().get_queryset().select_related(
+            'document', 'document__client', 'client', 'created_by'
+        )
+        user = self.request.user
+        if user_sees_all_clients(user):
+            return qs
+        accessible = accessible_clients(user)
+        return qs.filter(created_by=user).filter(
+            Q(client__in=accessible)
+            | Q(client__isnull=True, document__client__in=accessible)
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = SharedLinkCreateSerializer(data=request.data)
@@ -591,12 +738,21 @@ class SharedLinkViewSet(viewsets.ModelViewSet):
         data = serializer.validated_data
 
         # Get document or client
+        # RBAC: shared link μόνο για έγγραφα/πελάτες στους οποίους έχει
+        # πρόσβαση ο χρήστης — αλλιώς ένα link θα δημοσιοποιούσε ξένα αρχεία
+        from accounting.services.access import (
+            get_accessible_client_or_404, get_accessible_document_or_404,
+        )
         document = None
         client = None
         if data.get('document_id'):
-            document = get_object_or_404(ClientDocument, id=data['document_id'])
+            document = get_accessible_document_or_404(
+                request.user, data['document_id'], request=request
+            )
         elif data.get('client_id'):
-            client = get_object_or_404(ClientProfile, id=data['client_id'])
+            client = get_accessible_client_or_404(
+                request.user, data['client_id'], request=request
+            )
 
         # Calculate expiration
         expires_at = None
@@ -667,48 +823,88 @@ ACCESS_TOKEN_SALT = 'accounting.shared-link-access'
 ACCESS_TOKEN_MAX_AGE = 4 * 3600  # 4 ώρες
 
 
-def _password_fingerprint(shared_link):
-    """Σύντομο αποτύπωμα του password_hash — αλλαγή κωδικού ακυρώνει τα tokens"""
+def shared_link_is_protected(shared_link):
+    """Προστατευμένο link = απαιτεί κωδικό Ή email πριν από κάθε πρόσβαση."""
+    return bool(shared_link.password_hash) or shared_link.requires_email
+
+
+def _link_fingerprint(shared_link):
+    """
+    Αποτύπωμα της security-relevant διαμόρφωσης του link: αλλαγή κωδικού
+    ή εναλλαγή του requires_email ακυρώνει όλα τα εκδοθέντα tokens.
+    """
     import hashlib
-    return hashlib.sha256((shared_link.password_hash or '').encode()).hexdigest()[:16]
+    material = '|'.join([
+        shared_link.password_hash or '',
+        '1' if shared_link.requires_email else '0',
+    ])
+    return hashlib.sha256(material.encode()).hexdigest()[:16]
 
 
-def make_shared_access_token(shared_link):
+def _email_proof(email):
+    """Hash του normalized email — αποδεικνύει ότι δόθηκε email χωρίς να
+    μεταφέρεται το ίδιο το email μέσα στο token."""
+    import hashlib
+    normalized = (email or '').strip().lower()
+    if not normalized:
+        return ''
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+def make_shared_access_token(shared_link, email=''):
     from django.core import signing
     return signing.dumps(
-        {'t': shared_link.token, 'p': _password_fingerprint(shared_link)},
+        {
+            't': shared_link.token,
+            'p': _link_fingerprint(shared_link),
+            'e': _email_proof(email),
+        },
         salt=ACCESS_TOKEN_SALT,
     )
 
 
-def verify_shared_access_token(shared_link, token_value):
+def load_shared_access_payload(shared_link, token_value):
+    """
+    Επιστρέφει το payload ενός έγκυρου access token για ΤΟ συγκεκριμένο
+    link (με έλεγχο fingerprint/max-age) ή None. Το payload χρειάζεται
+    όπου πρέπει να δεθεί το email proof με το email του request.
+    """
     from django.core import signing
     if not token_value:
-        return False
+        return None
     try:
         data = signing.loads(token_value, salt=ACCESS_TOKEN_SALT,
                              max_age=ACCESS_TOKEN_MAX_AGE)
     except signing.BadSignature:
-        return False
-    return (
-        data.get('t') == shared_link.token
-        and data.get('p') == _password_fingerprint(shared_link)
-    )
+        return None
+    if data.get('t') != shared_link.token:
+        return None
+    if data.get('p') != _link_fingerprint(shared_link):
+        return None
+    # Για requires_email το token πρέπει να περιέχει απόδειξη email —
+    # tokens που εκδόθηκαν πριν ενεργοποιηθεί το requires_email
+    # απορρίπτονται ήδη από το fingerprint παραπάνω.
+    if shared_link.requires_email and not data.get('e'):
+        return None
+    return data
+
+
+def verify_shared_access_token(shared_link, token_value):
+    return load_shared_access_payload(shared_link, token_value) is not None
 
 
 def shared_link_auth_ok(shared_link, request):
     """
-    Έλεγχος εξουσιοδότησης για ενέργεια σε προστατευμένο link:
-    είτε έγκυρο υπογεγραμμένο access token, είτε σωστός κωδικός στο request.
-    Τα links χωρίς κωδικό είναι πάντα OK.
+    Έλεγχος εξουσιοδότησης για ενέργεια (download/upload) σε προστατευμένο
+    link: απαιτείται ΜΟΝΟ έγκυρο υπογεγραμμένο access token, το οποίο
+    εκδίδεται αποκλειστικά από το POST /share/{token}/ αφού περάσουν ΟΛΟΙ
+    οι απαιτούμενοι έλεγχοι (κωδικός ΚΑΙ email, όποιοι ισχύουν).
+    Τα μη προστατευμένα links είναι πάντα OK.
     """
-    if not shared_link.password_hash:
+    if not shared_link_is_protected(shared_link):
         return True
     token_value = request.query_params.get('auth') or request.data.get('auth')
-    if verify_shared_access_token(shared_link, token_value):
-        return True
-    password = request.data.get('password', '')
-    return bool(password) and shared_link.check_password(password)
+    return verify_shared_access_token(shared_link, token_value)
 
 
 class SharedLinkAuthThrottle(ScopedRateThrottle):
@@ -757,9 +953,13 @@ class PublicSharedLinkView(APIView):
                 'access_level': shared_link.access_level
             })
 
-        # Record view access
+        # Ατομική καταγραφή ΠΡΙΝ επιστραφεί περιεχόμενο ή access token
+        # (Γύρος 23): ταυτόχρονη ανάκληση/λήξη/αλλαγή ρυθμίσεων ακυρώνει
+        # την πρόσβαση — ισχύει και για unlimited links.
+        if not shared_link.try_record_access():
+            return Response({'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                            status=status.HTTP_410_GONE)
         self._log_access(request, shared_link, 'view')
-        shared_link.record_access(is_download=False)
 
         return self._get_content_response(request, shared_link)
 
@@ -777,23 +977,34 @@ class PublicSharedLinkView(APIView):
                 return Response({'error': 'Λάθος κωδικός'}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Verify email if required
-        email = request.data.get('email', '')
-        if shared_link.requires_email and not email:
-            return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+        email = (request.data.get('email') or '').strip()
+        if shared_link.requires_email:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            from django.core.validators import validate_email
+            if not email:
+                return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                validate_email(email)
+            except DjangoValidationError:
+                return Response({'error': 'Μη έγκυρο email'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Log access
+        # Ατομική καταγραφή ΠΡΙΝ εκδοθεί το access token (Γύρος 23):
+        # ανάκληση/λήξη/αλλαγή password/token/target ανάμεσα στον έλεγχο
+        # κωδικού και εδώ ακυρώνει την έκδοση — κανένα token, κανένα log.
+        if not shared_link.try_record_access():
+            return Response({'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                            status=status.HTTP_410_GONE)
         self._log_access(request, shared_link, 'view', email)
-        shared_link.record_access(is_download=False)
 
-        return self._get_content_response(request, shared_link)
+        return self._get_content_response(request, shared_link, email=email)
 
-    def _get_content_response(self, request, shared_link):
+    def _get_content_response(self, request, shared_link, email=''):
         """Get the content based on link type"""
         # Access token για επόμενες ενέργειες (download/upload) χωρίς
         # επανάληψη κωδικού — εκδίδεται μόνο εδώ, μετά τον έλεγχο
         common = {
             'access_level': shared_link.access_level,
-            'access_token': make_shared_access_token(shared_link),
+            'access_token': make_shared_access_token(shared_link, email=email),
             'allow_upload': shared_link.can_upload,
             'upload_note': shared_link.upload_note if shared_link.can_upload else '',
             'document_request': self._get_document_request(shared_link),
@@ -808,7 +1019,12 @@ class PublicSharedLinkView(APIView):
                     'filename': doc.filename,
                     'file_type': doc.file_type,
                     'file_size_display': doc.file_size_display,
-                    'preview_url': signed_media_url(doc.file, request) if doc.file else None,
+                    # SECURITY: όχι γενικό signed media URL — το preview
+                    # περνά από shared-link-aware endpoint που ελέγχει την
+                    # κατάσταση του link στη βάση σε ΚΑΘΕ request
+                    'preview_url': self._shared_preview_url(
+                        request, shared_link, doc, email=email
+                    ) if doc.file else None,
                     'can_download': shared_link.access_level == 'download'
                 },
                 **common,
@@ -837,6 +1053,18 @@ class PublicSharedLinkView(APIView):
                 } for doc in docs],
                 **common,
             })
+
+    def _shared_preview_url(self, request, shared_link, doc, email=''):
+        """URL προς το shared-link-aware preview endpoint (όχι γενικό
+        media token) — με access token στο query για προστατευμένα links."""
+        from django.urls import reverse
+        from urllib.parse import urlencode
+        url = reverse('accounting:shared_link_preview', args=[shared_link.token])
+        params = {'doc_id': doc.id}
+        if shared_link_is_protected(shared_link):
+            params['auth'] = make_shared_access_token(shared_link, email=email)
+        url = f'{url}?{urlencode(params)}'
+        return request.build_absolute_uri(url)
 
     def _get_document_request(self, shared_link):
         """Το ανοιχτό αίτημα εγγράφων του link (ή None) — για το portal checklist."""
@@ -895,13 +1123,13 @@ class PublicSharedLinkDownloadView(APIView):
         if shared_link.access_level != 'download':
             return Response({'error': 'Δεν επιτρέπεται η λήψη'}, status=status.HTTP_403_FORBIDDEN)
 
-        # SECURITY: σε προστατευμένα links απαιτείται το access token που
-        # εκδόθηκε μετά τον έλεγχο κωδικού — πριν, το download δεν έλεγχε
-        # καθόλου τον κωδικό
-        if shared_link.password_hash and not verify_shared_access_token(
+        # SECURITY: προστατευμένο = κωδικός Ή requires_email — και στις δύο
+        # περιπτώσεις απαιτείται το access token που εκδόθηκε αφού πέρασαν
+        # όλοι οι έλεγχοι (πριν, το requires_email δεν ελεγχόταν καθόλου εδώ)
+        if shared_link_is_protected(shared_link) and not verify_shared_access_token(
             shared_link, request.query_params.get('auth')
         ):
-            return Response({'error': 'Απαιτείται έλεγχος κωδικού'},
+            return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
                             status=status.HTTP_401_UNAUTHORIZED)
 
         # Εύρεση αρχείου: document link ή folder link με ?doc_id=
@@ -915,10 +1143,29 @@ class PublicSharedLinkDownloadView(APIView):
         if not doc or not doc.file:
             raise Http404("Το αρχείο δεν βρέθηκε")
 
-        # Record download
-        shared_link.record_access(is_download=True)
+        # Ατομική δέσμευση download slot — concurrent requests στο τελευταίο
+        # slot δεν μπορούν να υπερβούν το max_downloads. Ο guard του
+        # try_record_download ξαναελέγχει active/expiry/token/password/
+        # target/access_level, οπότε ταυτόχρονη ανάκληση ακυρώνει τη λήψη.
+        if not shared_link.try_record_download():
+            return Response({'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                            status=status.HTTP_410_GONE)
 
-        # Log access
+        # Γύρος 22 (P3): το αρχείο ανοίγει ΠΡΙΝ γραφτεί success access log.
+        # Αποτυχία storage.open() → αποδέσμευση του slot (compensation με
+        # conditional UPDATE, χωρίς δυνατότητα underflow) και ΚΑΝΕΝΑ
+        # success log. Κανένα DB lock δεν κρατιέται κατά το streaming: το
+        # FileResponse επιστρέφεται αφού ολοκληρωθούν όλες οι εγγραφές.
+        try:
+            file_handle = doc.file.open('rb')
+        except Exception:
+            shared_link.release_download()
+            logger.warning(
+                'Αποτυχία ανοίγματος αρχείου για shared link id=%s '
+                'document id=%s', shared_link.pk, doc.pk)
+            raise Http404("Σφάλμα κατά τη λήψη")
+
+        # Log access ΜΟΝΟ αφού το αρχείο άνοιξε επιτυχώς
         SharedLinkAccess.objects.create(
             shared_link=shared_link,
             ip_address=request.META.get('REMOTE_ADDR'),
@@ -926,15 +1173,95 @@ class PublicSharedLinkDownloadView(APIView):
             action='download'
         )
 
+        response = FileResponse(file_handle, as_attachment=True,
+                                filename=doc.filename)
+        content_type, _ = mimetypes.guess_type(doc.filename)
+        if content_type:
+            response['Content-Type'] = content_type
+        return response
+
+
+class PublicSharedLinkPreviewView(APIView):
+    """
+    Inline preview (iframe/img) εγγράφου μέσω shared link.
+
+    Shared-link-aware: σε ΚΑΘΕ request φορτώνει το SharedLink από τη
+    βάση και ελέγχει active/expiration/ιδιοκτησία εγγράφου/access token —
+    deactivation, λήξη, token regeneration ή αλλαγή password/requires_email
+    ακυρώνουν αμέσως την πρόσβαση (όχι μόνο μέσω expiry του signed token).
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        shared_link = get_object_or_404(SharedLink, token=token)
+
+        if not shared_link.is_active or shared_link.is_expired:
+            return Response({'error': 'Μη έγκυρος σύνδεσμος'},
+                            status=status.HTTP_410_GONE)
+
+        if shared_link_is_protected(shared_link) and not verify_shared_access_token(
+            shared_link, request.query_params.get('auth')
+        ):
+            return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        # Το έγγραφο πρέπει να ανήκει ΣΤΟ link (ή στον shared client folder)
+        doc = shared_link.document
+        if not doc and shared_link.client:
+            doc_id = request.query_params.get('doc_id')
+            if doc_id:
+                doc = ClientDocument.objects.filter(
+                    id=doc_id, client=shared_link.client, is_current=True
+                ).first()
+        if not doc or not doc.file:
+            raise Http404('Το αρχείο δεν βρέθηκε')
+
+        # Το preview ΔΕΝ παρακάμπτει το max_downloads: όταν υπάρχει όριο
+        # λήψεων, κάθε preview δεσμεύει ατομικά ένα slot (streams ολόκληρο
+        # το αρχείο — ισοδύναμο με λήψη)
+        quota_reserved = False
+        if shared_link.max_downloads is not None:
+            if not shared_link.try_record_download():
+                return Response(
+                    {'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                    status=status.HTTP_410_GONE)
+            quota_reserved = True
+        else:
+            # Unlimited link: ΑΤΟΜΙΚΗ καταγραφή με τον ίδιο revocation
+            # guard (Γύρος 23) — χωρίς αυτό, ανάκληση/λήξη ανάμεσα στο
+            # αρχικό validation και εδώ επέστρεφε ούτως ή άλλως το αρχείο.
+            if not shared_link.try_record_access():
+                return Response(
+                    {'error': 'Ο σύνδεσμος δεν είναι πλέον διαθέσιμος'},
+                    status=status.HTTP_410_GONE)
+
+        # Γύρος 22 (P3): άνοιγμα ΠΡΙΝ το success log· αποτυχία storage →
+        # αποδέσμευση slot και κανένα log επιτυχίας
         try:
             file_handle = doc.file.open('rb')
-            response = FileResponse(file_handle, as_attachment=True, filename=doc.filename)
-            content_type, _ = mimetypes.guess_type(doc.filename)
-            if content_type:
-                response['Content-Type'] = content_type
-            return response
         except Exception:
-            raise Http404("Σφάλμα κατά τη λήψη")
+            if quota_reserved:
+                shared_link.release_download()
+            logger.warning(
+                'Αποτυχία ανοίγματος αρχείου (preview) για shared link '
+                'id=%s document id=%s', shared_link.pk, doc.pk)
+            raise Http404('Σφάλμα κατά την προβολή')
+
+        SharedLinkAccess.objects.create(
+            shared_link=shared_link,
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+            action='view',
+        )
+
+        content_type, _ = mimetypes.guess_type(doc.filename)
+        response = FileResponse(
+            file_handle,
+            content_type=content_type or 'application/octet-stream',
+        )
+        response['Content-Disposition'] = 'inline'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
 
 
 class PublicSharedLinkUploadView(APIView):
@@ -969,13 +1296,23 @@ class PublicSharedLinkUploadView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        if not shared_link_auth_ok(shared_link, request):
-            return Response({'error': 'Απαιτείται έλεγχος κωδικού'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-
-        email = request.data.get('email', '')
-        if shared_link.requires_email and not email:
-            return Response({'error': 'Απαιτείται email'}, status=status.HTTP_400_BAD_REQUEST)
+        # SECURITY: προστατευμένο link (κωδικός Ή requires_email) → μόνο με
+        # έγκυρο access token, που εκδίδεται αφού περάσουν όλοι οι έλεγχοι
+        email = (request.data.get('email') or '').strip()
+        if shared_link_is_protected(shared_link):
+            token_value = (request.query_params.get('auth')
+                           or request.data.get('auth'))
+            payload = load_shared_access_payload(shared_link, token_value)
+            if payload is None:
+                return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
+                                status=status.HTTP_401_UNAUTHORIZED)
+            if shared_link.requires_email:
+                # Το email του request πρέπει να ταυτίζεται με το proof του
+                # token — token που εκδόθηκε για email Α δεν καταγράφει
+                # email Β (ή κενό) στο access log
+                if not email or _email_proof(email) != payload.get('e'):
+                    return Response({'error': 'Απαιτείται έλεγχος πρόσβασης'},
+                                    status=status.HTTP_401_UNAUTHORIZED)
 
         client = shared_link.upload_target_client
         if not client:
@@ -990,16 +1327,9 @@ class PublicSharedLinkUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Σεβασμός του ορίου uploads και μέσα στο ίδιο αίτημα
-        if shared_link.max_uploads:
-            remaining = shared_link.max_uploads - shared_link.upload_count
-            if len(files) > remaining:
-                return Response(
-                    {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # Προαιρετική αντιστοίχιση σε item αιτήματος εγγράφων
+        # Προαιρετική αντιστοίχιση σε item αιτήματος εγγράφων — επικύρωση
+        # ΠΡΙΝ από τη δέσμευση slots, ώστε άκυρο request_item_id να μην
+        # καταναλώνει quota
         request_item = None
         request_item_id = request.data.get('request_item_id')
         if request_item_id:
@@ -1016,44 +1346,69 @@ class PublicSharedLinkUploadView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # Ατομική δέσμευση slots ΠΡΙΝ την επεξεργασία — conditional UPDATE
+        # στη βάση, ώστε concurrent requests να μην υπερβούν το max_uploads
+        if not shared_link.try_reserve_uploads(len(files)):
+            remaining = max(
+                0, (shared_link.max_uploads or 0) - shared_link.upload_count
+            )
+            return Response(
+                {'error': f'Απομένουν μόνο {remaining} διαθέσιμες μεταφορτώσεις'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         sender = email or 'πελάτη'
         uploaded = []
         uploaded_docs = []
         errors = []
-        for f in files:
-            try:
-                # on_existing='keep': τα uploads πελατών δεν εκτοπίζουν ΠΟΤΕ
-                # υπάρχοντα έγγραφα του γραφείου ως «νέα έκδοση»
-                doc = filing.create_client_document(
-                    client=client,
-                    uploaded_file=f,
-                    category=(
-                        (request_item.category if request_item else '')
-                        or shared_link.upload_category or 'general'
-                    ),
-                    user=None,
-                    description=f'Μεταφόρτωση από {sender} μέσω portal',
-                    on_existing='keep',
-                )
-            except DjangoValidationError as e:
-                errors.append({'filename': f.name, 'error': '; '.join(e.messages)})
-                continue
-            entry = {
-                'filename': doc.original_filename,
-                'stored_as': doc.filename,
-                'file_size_display': doc.file_size_display,
-            }
-            if doc.afm_mismatch:
-                entry['warning'] = 'Το ΑΦΜ στο έγγραφο δεν αντιστοιχεί στον πελάτη'
-            uploaded.append(entry)
-            uploaded_docs.append(doc)
+        try:
+            for f in files:
+                try:
+                    # on_existing='keep': τα uploads πελατών δεν εκτοπίζουν
+                    # ΠΟΤΕ υπάρχοντα έγγραφα του γραφείου ως «νέα έκδοση»
+                    doc = filing.create_client_document(
+                        client=client,
+                        uploaded_file=f,
+                        category=(
+                            (request_item.category if request_item else '')
+                            or shared_link.upload_category or 'general'
+                        ),
+                        user=None,
+                        description=f'Μεταφόρτωση από {sender} μέσω portal',
+                        on_existing='keep',
+                        # Explicit capability: το σκέτο user=None ΔΕΝ
+                        # εξουσιοδοτεί — το token κατασκευάζεται μόνο εδώ,
+                        # αφού έχει ήδη επικυρωθεί το shared link, και
+                        # δεσμεύεται στον πελάτη του link (confused-deputy)
+                        portal_capability=filing.PortalUploadCapability(
+                            shared_link.pk, client.pk),
+                    )
+                except DjangoValidationError as e:
+                    errors.append(
+                        {'filename': f.name, 'error': '; '.join(e.messages)})
+                    continue
+                entry = {
+                    'filename': doc.original_filename,
+                    'stored_as': doc.filename,
+                    'file_size_display': doc.file_size_display,
+                }
+                if doc.afm_mismatch:
+                    entry['warning'] = 'Το ΑΦΜ στο έγγραφο δεν αντιστοιχεί στον πελάτη'
+                uploaded.append(entry)
+                uploaded_docs.append(doc)
+        finally:
+            # Κάθε δεσμευμένο slot που ΔΕΝ κατέληξε σε επιτυχές upload
+            # αποδεσμεύεται — και σε validation failures και σε unexpected
+            # exception (το finally τρέχει πριν φύγει το response/raise)
+            unused = len(files) - len(uploaded)
+            if unused > 0:
+                shared_link.release_uploads(unused)
 
         if uploaded and request_item:
             self._mark_item_received(request_item, uploaded_docs[0])
 
         if uploaded:
             self._dispatch_upload_notification(shared_link, uploaded_docs)
-            shared_link.record_upload(count=len(uploaded))
             x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
             ip_address = (
                 x_forwarded_for.split(',')[0].strip()
@@ -1140,8 +1495,12 @@ class FavoriteViewSet(viewsets.ViewSet):
 
     def list(self, request):
         """List user's favorite documents"""
+        from accounting.services.access import accessible_documents
+        # RBAC: favorites μόνο για έγγραφα που ο χρήστης έχει ΑΚΟΜΗ πρόσβαση
+        # (η ανάθεση πελάτη μπορεί να έχει αφαιρεθεί στο μεταξύ)
         favorites = DocumentFavorite.objects.filter(
-            user=request.user
+            user=request.user,
+            document__in=accessible_documents(request.user),
         ).select_related('document', 'document__client')
 
         serializer = DocumentFavoriteSerializer(favorites, many=True, context={'request': request})
@@ -1155,8 +1514,9 @@ class FavoriteViewSet(viewsets.ViewSet):
         if not document_id:
             return Response({'error': 'Απαιτείται document_id'}, status=status.HTTP_400_BAD_REQUEST)
 
+        from accounting.services.access import accessible_documents
         try:
-            document = ClientDocument.objects.get(id=document_id)
+            document = accessible_documents(request.user).get(id=document_id)
         except ClientDocument.DoesNotExist:
             return Response({'error': 'Το έγγραφο δεν βρέθηκε'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1203,6 +1563,17 @@ class CollectionViewSet(viewsets.ModelViewSet):
             return DocumentCollectionListSerializer
         return DocumentCollectionSerializer
 
+    def get_object(self):
+        # Shared collections είναι ορατές σε όλους, αλλά update/delete
+        # επιτρέπονται ΜΟΝΟ στον owner (πριν, κάθε authenticated χρήστης
+        # μπορούσε να μετονομάσει/διαγράψει ξένη shared collection)
+        obj = super().get_object()
+        if self.action in ('update', 'partial_update', 'destroy') and \
+                obj.owner != self.request.user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Δεν έχετε δικαίωμα επεξεργασίας')
+        return obj
+
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
@@ -1213,11 +1584,13 @@ class CollectionViewSet(viewsets.ModelViewSet):
         if collection.owner != request.user:
             return Response({'error': 'Δεν έχετε δικαίωμα επεξεργασίας'}, status=status.HTTP_403_FORBIDDEN)
 
+        from accounting.services.access import accessible_documents
+        allowed = accessible_documents(request.user)
         document_ids = request.data.get('document_ids', [])
         added = 0
         for doc_id in document_ids:
             try:
-                doc = ClientDocument.objects.get(id=doc_id)
+                doc = allowed.get(id=doc_id)
                 collection.documents.add(doc)
                 added += 1
             except ClientDocument.DoesNotExist:
@@ -1245,35 +1618,37 @@ class CollectionViewSet(viewsets.ModelViewSet):
 
 class FileManagerStatsView(APIView):
     """Get file manager statistics"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequiredModelPerms]
+    required_perms = ['accounting.view_clientdocument']
 
     def get(self, request):
+        from accounting.services.access import accessible_documents
+        scoped = accessible_documents(request.user).filter(is_current=True)
+
         # Total documents
-        total_docs = ClientDocument.objects.filter(is_current=True).count()
+        total_docs = scoped.count()
 
         # Size stats
-        total_size = ClientDocument.objects.filter(is_current=True).aggregate(
-            total=Sum('file_size'))['total'] or 0
+        total_size = scoped.aggregate(total=Sum('file_size'))['total'] or 0
 
         # By category
-        by_category = ClientDocument.objects.filter(is_current=True).values(
+        by_category = scoped.values(
             'document_category'
         ).annotate(count=Count('id')).order_by('-count')
 
         # By file type
-        by_type = ClientDocument.objects.filter(is_current=True).values(
+        by_type = scoped.values(
             'file_type'
         ).annotate(count=Count('id')).order_by('-count')[:10]
 
         # Recent uploads (last 7 days)
         week_ago = timezone.now() - timedelta(days=7)
-        recent_count = ClientDocument.objects.filter(
-            is_current=True,
-            uploaded_at__gte=week_ago
-        ).count()
+        recent_count = scoped.filter(uploaded_at__gte=week_ago).count()
 
-        # Shared links
-        active_links = SharedLink.objects.filter(is_active=True).count()
+        # Shared links (μόνο του χρήστη)
+        active_links = SharedLink.objects.filter(
+            is_active=True, created_by=request.user
+        ).count()
 
         # Favorites count for user
         favorites_count = DocumentFavorite.objects.filter(user=request.user).count()
@@ -1303,7 +1678,8 @@ class FileManagerStatsView(APIView):
 
 class RecentDocumentsView(APIView):
     """Get recent documents"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequiredModelPerms]
+    required_perms = ['accounting.view_clientdocument']
 
     def get(self, request):
         try:
@@ -1312,7 +1688,8 @@ class RecentDocumentsView(APIView):
             limit = 20
         limit = min(max(limit, 1), 50)
 
-        recent = ClientDocument.objects.filter(is_current=True).select_related(
+        from accounting.services.access import accessible_documents
+        recent = accessible_documents(request.user).filter(is_current=True).select_related(
             'client', 'obligation', 'uploaded_by'
         ).order_by('-uploaded_at')[:limit]
 
@@ -1322,11 +1699,15 @@ class RecentDocumentsView(APIView):
 
 class BrowseFoldersView(APIView):
     """Browse folder structure"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, RequiredModelPerms]
+    required_perms = ['accounting.view_clientdocument', 'accounting.view_clientprofile']
 
     def get(self, request):
-        # Get distinct clients with documents
-        clients_with_docs = ClientProfile.objects.filter(
+        from accounting.services.access import (
+            accessible_clients, get_accessible_client_or_404,
+        )
+        # Get distinct clients with documents (μόνο ανατεθειμένοι)
+        clients_with_docs = accessible_clients(request.user).filter(
             documents__isnull=False
         ).distinct().annotate(
             doc_count=Count('documents', filter=Q(documents__is_current=True))
@@ -1354,7 +1735,7 @@ class BrowseFoldersView(APIView):
 
         if client_id:
             # Get years for specific client
-            client = get_object_or_404(ClientProfile, id=client_id)
+            client = get_accessible_client_or_404(request.user, client_id, request=request)
             docs = ClientDocument.objects.filter(client=client, is_current=True)
 
             if year:

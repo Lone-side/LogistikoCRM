@@ -4,6 +4,7 @@ Regression tests για N+1 queries: ο αριθμός των queries πρέπε
 σταθερός όταν αυξάνονται οι γραμμές της λίστας.
 """
 from django.contrib.auth.models import User
+from tests.utils.helpers import grant_accounting_model_perms
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import TestCase
@@ -87,7 +88,7 @@ class DocumentApiListQueriesTest(QueryCountBase):
     """DocumentViewSet list: σταθερά queries ανεξαρτήτως πλήθους εγγράφων."""
 
     def setUp(self):
-        user = User.objects.create_user('tester', password='x', is_staff=True)
+        user = grant_accounting_model_perms(User.objects.create_user('tester', password='x', is_staff=True))
         self.client.force_login(user)
         make_clients(3)
 

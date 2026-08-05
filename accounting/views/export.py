@@ -28,12 +28,17 @@ def export_filtered_excel(request):
     """
     Export filtered obligations to Excel with formatting
     """
+    # Το export περιέχει ΑΦΜ/επωνυμίες — απαιτεί το ξεχωριστό export permission
+    if not request.user.has_perm('accounting.export_clientprofile'):
+        return JsonResponse(
+            {'error': 'Δεν έχετε δικαίωμα εξαγωγής στοιχείων πελατών.'}, status=403
+        )
     try:
         # Get filters from request
         filters = _get_filters_from_request(request)
 
         # Build query
-        query = _build_export_query(filters)
+        query = _build_export_query(filters, request.user)
 
         # Create Excel workbook
         wb = openpyxl.Workbook()

@@ -39,6 +39,10 @@ jobs:
       DEBUG: 'False'
       SECRET_KEY: 'test-secret-key-for-ci-only'
       FRITZ_API_TOKEN: 'test-fritz-token-for-ci-only'
+      # CI-only Fernet key (το production hard-fail απαιτεί έγκυρο κλειδί
+      # και ρητή απόφαση για το RBAC ακόμη και στο migrate step)
+      DATA_ENCRYPTION_KEY_CURRENT: 'jhgAUo9ScsDy8CjlAM8XO5cFANKz_Nb2i01amVUla0c='
+      ALLOW_UNSCOPED_CLIENT_ACCESS: 'True'
       DB_ENGINE: 'django.db.backends.postgresql'
       DB_NAME: 'test_db'
       DB_USER: 'test_user'
@@ -72,6 +76,16 @@ jobs:
         run: |
           python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata --keepdb -v 2
 
+      # PostgreSQL concurrency proof (Γύρος 18 — F2, Γύρος 22): πραγματικά
+      # race tests με δύο threads/connections — filing services ΚΑΙ
+      # SharedLink quota/revocation (SharedLinkConcurrencyTest). BLOCKING:
+      # το test αποτυγχάνει (όχι skip) αν δεν τρέχει σε PostgreSQL.
+      - name: PostgreSQL concurrency tests (blocking)
+        env:
+          REQUIRE_POSTGRES_TESTS: '1'
+        run: |
+          python manage.py test tests.accounting.test_concurrency_postgres --keepdb -v 2
+
       - name: Run tests with coverage
         run: |
           coverage run manage.py test tests.accounting tests.crm tests.common tests.mydata --keepdb
@@ -101,17 +115,24 @@ jobs:
         run: |
           pip install black flake8 isort
 
-      - name: Check code formatting with Black
-        run: |
-          black --check --diff . || echo "::warning::Code formatting issues found. Run 'black .' to fix."
+      # Black/isort: το ιστορικό codebase δεν είναι φορμαρισμένο (repo-wide
+      # follow-up). Τα steps τρέχουν κανονικά και ΦΑΙΝΟΝΤΑΙ κόκκινα όταν
+      # αποτυγχάνουν (χωρίς "|| echo" που έκρυβε το exit code), αλλά δεν
+      # μπλοκάρουν ακόμη το job μέχρι το φορμάρισμα του legacy κώδικα.
+      - name: Check code formatting with Black (non-blocking until repo reformat)
+        continue-on-error: true
+        run: black --check --diff .
 
-      - name: Check import sorting with isort
-        run: |
-          isort --check-only --diff . || echo "::warning::Import sorting issues found. Run 'isort .' to fix."
+      - name: Check import sorting with isort (non-blocking until repo reformat)
+        continue-on-error: true
+        run: isort --check-only --diff .
 
-      - name: Lint with flake8
+      - name: Lint with flake8 (errors are blocking)
         run: |
+          # Σφάλματα σύνταξης/ονομάτων/συγκρίσεων: πάντα αποτυχία CI
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Flake8 full report (informational)
+        run: |
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
   frontend:
@@ -134,8 +155,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check
-        run: npm run build -- --noEmit || echo "::warning::TypeScript errors found"
+      - name: Type check (blocking)
+        run: npx tsc --noEmit
 
       - name: Build
         run: npm run build
@@ -143,5 +164,101 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Lint
-        run: npm run lint || echo "::warning::Linting issues found"
+      # 32 προϋπάρχοντα eslint errors (react-hooks rules) — ορατά αλλά μη
+      # μπλοκαριστικά μέχρι το lint follow-up. Χωρίς "|| echo" ώστε το step
+      # να κοκκινίζει και να μη χάνεται το αποτέλεσμα.
+      - name: Lint (non-blocking until eslint cleanup)
+        continue-on-error: true
+        run: npm run lint
+
+  # Production security smoke: επιβεβαιώνει ότι η εφαρμογή εκκινεί και τα
+  # RBAC tests περνούν με ΠΡΑΓΜΑΤΙΚΟ production configuration —
+  # DEBUG=False, ENFORCE_CLIENT_ASSIGNMENT=True, έγκυρο Fernet key,
+  # ΧΩΡΙΣ ALLOW_UNSCOPED_CLIENT_ACCESS escape hatch.
+  security-smoke:
+    runs-on: ubuntu-latest
+
+    env:
+      DEBUG: 'False'
+      DJANGO_ENV: 'production'
+      SECRET_KEY: 'ci-smoke-secret-key-not-for-production'
+      FRITZ_API_TOKEN: 'ci-smoke-fritz-token'
+      ALLOWED_HOSTS: 'localhost,127.0.0.1'
+      ENFORCE_CLIENT_ASSIGNMENT: 'True'
+      # CI-only Fernet key — δεν χρησιμοποιείται πουθενά αλλού
+      DATA_ENCRYPTION_KEY_CURRENT: 'jhgAUo9ScsDy8CjlAM8XO5cFANKz_Nb2i01amVUla0c='
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Django deploy checks
+        run: python manage.py check --deploy
+
+      - name: Migration consistency
+        run: |
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+          python manage.py migrate --check
+
+      - name: Setup roles (RBAC groups)
+        run: python manage.py setup_roles
+
+      - name: RBAC smoke tests
+        run: |
+          python manage.py test \
+            tests.accounting.test_rbac_enforcement \
+            tests.accounting.test_final_hardening \
+            tests.accounting.test_rbac_round12 \
+            tests.accounting.test_rbac_round13 \
+            tests.accounting.test_rbac_round14 \
+            tests.accounting.test_rbac_round15 \
+            tests.accounting.test_rbac_round16 \
+            tests.accounting.test_rbac_round17 \
+            tests.accounting.test_rbac_round18 \
+            tests.accounting.test_rbac_round19 \
+            tests.accounting.test_rbac_round20 \
+            tests.accounting.test_rbac_round21 \
+            tests.accounting.test_rbac_round22 \
+            tests.accounting.test_rbac_round23 \
+            -v 2
+
+      # Blocking production-mode έλεγχοι (Γύρος 20): fail-closed libmagic
+      # στην πραγματική upload διαδρομή + document invariant enforcement.
+      # REQUIRE_LIBMAGIC=True → κάθε αποτυχία detection απορρίπτει upload.
+      - name: Production-mode libmagic + invariant enforcement (blocking)
+        env:
+          REQUIRE_LIBMAGIC: 'True'
+        run: |
+          python manage.py test \
+            tests.accounting.test_rbac_round20.MimeFailClosedTest \
+            tests.accounting.test_rbac_round20.PermissionsBeforeLocksTest \
+            tests.accounting.test_rbac_round19.DbConstraintTest \
+            tests.accounting.test_rbac_round19.KeepSlotTest \
+            tests.accounting.test_rbac_round21.PermissionBeforeParsingTest \
+            tests.accounting.test_rbac_round21.CapabilityClientBindingTest \
+            tests.accounting.test_rbac_round22.SharedLinkTargetInvariantTest \
+            tests.accounting.test_rbac_round22.SharedLinkAtomicRevocationTest \
+            -v 2
+
+      # Το audit command πρέπει να τρέχει καθαρά σε ΦΡΕΣΚΙΑ (κενή) βάση.
+      # ΠΡΟΣΟΧΗ — ΜΟΝΟ για CI: σε πραγματική production βάση τα findings
+      # `legacy-slot-needs-review` είναι ΑΝΑΜΕΝΟΜΕΝΑ μετά τα migrations
+      # 10020/10021, οπότε το --fail-on-findings ΔΕΝ πρέπει να μπει ως
+      # blocking deploy gate. Στο production runbook: εκτέλεση ΧΩΡΙΣ το
+      # flag, αποθήκευση του output και χειροκίνητη αξιολόγηση· blocking
+      # μόνο για απρόσμενες κατηγορίες findings (βλ. DEPLOYMENT.md).
+      - name: ClientDocument invariant audit (blocking — CI only)
+        run: python manage.py audit_clientdocument_invariants --fail-on-findings

@@ -131,6 +131,7 @@ from .api_file_manager import (
     CollectionViewSet,
     PublicSharedLinkView,
     PublicSharedLinkDownloadView,
+    PublicSharedLinkPreviewView,
     PublicSharedLinkUploadView,
     FileManagerStatsView,
     RecentDocumentsView,
@@ -199,7 +200,7 @@ urlpatterns = [
 
     # VOIP MANAGEMENT
     path("voip/dashboard/", views.voip_dashboard, name="voip_dashboard"),
-    path("voip/list/", views.VoIPCallsListView.as_view(), name="voip_list"),
+    # voip/list/ αφαιρέθηκε: νεκρό legacy view (χωρίς template) — χρήση /api/v1/calls/
 
     # Fritz!Box Webhook (Token authenticated, no session required)
     path("api/fritz-webhook/", views.fritz_webhook, name="fritz_webhook"),
@@ -329,6 +330,17 @@ urlpatterns = [
         name="client_credentials_reveal",
     ),
 
+    # Standalone endpoints ΠΡΙΝ από τα router includes — αλλιώς τα detail
+    # routes των viewsets (calls/<pk>/, clients/<pk>/) τα σκιάζουν με 404
+    path("api/v1/calls/stats/", calls_stats, name="api_calls_stats"),
+    path("api/v1/tickets/stats/", tickets_stats, name="api_tickets_stats"),
+    path("api/v1/clients/search-for-match/", search_clients_for_match, name="search_clients_for_match"),
+
+    # Explicit document paths ΠΡΙΝ το router: αλλιώς το detail route του
+    # DocumentViewSet (documents/<pk>/) τα «σκιάζει» (pk='check-existing')
+    path("api/v1/documents/check-existing/", check_existing_document, name="api_check_existing_document"),
+    path("api/v1/documents/upload-with-version/", upload_document_with_version, name="api_upload_document_with_version"),
+
     # REST ROUTER
     path("api/", include(router.urls)),
     path("api/v1/", include(router.urls)),  # Versioned API endpoint
@@ -337,9 +349,6 @@ urlpatterns = [
     # ENHANCED VOIP/TICKETS API (v2)
     # ============================================
     path("api/v1/", include(router_v2.urls)),  # New calls/tickets endpoints
-    path("api/v1/calls/stats/", calls_stats, name="api_calls_stats"),
-    path("api/v1/tickets/stats/", tickets_stats, name="api_tickets_stats"),
-    path("api/v1/clients/search-for-match/", search_clients_for_match, name="search_clients_for_match"),
 
     # ==================================================
     # JWT AUTHENTICATION ENDPOINTS
@@ -397,8 +406,7 @@ urlpatterns = [
     # ==================================================
     # DOCUMENT UPLOAD API WITH VERSIONING
     # ==================================================
-    path("api/v1/documents/check-existing/", check_existing_document, name="api_check_existing_document"),
-    path("api/v1/documents/upload-with-version/", upload_document_with_version, name="api_upload_document_with_version"),
+    # (check-existing / upload-with-version μετακινήθηκαν ΠΡΙΝ το router)
     path("api/v1/documents/<int:document_id>/preview/", document_preview, name="api_document_preview"),
 
     # ==================================================
@@ -527,5 +535,6 @@ urlpatterns = [
     # Public Shared Link Access (NO AUTH REQUIRED)
     path("share/<str:token>/", PublicSharedLinkView.as_view(), name="shared_link_access"),
     path("share/<str:token>/download/", PublicSharedLinkDownloadView.as_view(), name="shared_link_download"),
+    path("share/<str:token>/preview/", PublicSharedLinkPreviewView.as_view(), name="shared_link_preview"),
     path("share/<str:token>/upload/", PublicSharedLinkUploadView.as_view(), name="shared_link_upload"),
 ]

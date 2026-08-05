@@ -11,7 +11,7 @@ Django REST Framework Views για myDATA module.
 
 from datetime import date, timedelta
 from calendar import monthrange
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import logging
 
 from django.db.models import Sum, Count, Q
@@ -25,6 +25,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounting.models import ClientProfile
+from accounting.mixins import ClientScopedQuerysetMixin
+from accounting.permissions import CanAccessClient, ClientModelPermissions
+from accounting.services.access import (
+    accessible_clients, check_model_perms, user_can_access_client,
+)
+
+_PERM_DENIED = {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'}
 from .models import MyDataCredentials, VATRecord, VATSyncLog
 from .serializers import (
     MyDataCredentialsSerializer,
@@ -60,6 +67,31 @@ def _parse_int(value, param='παράμετρος', default=None, min_val=None, 
     if (min_val is not None and result < min_val) or (max_val is not None and result > max_val):
         raise ValidationError({'error': f'Η παράμετρος {param} είναι εκτός επιτρεπτών ορίων'})
     return result
+
+
+def _audit_vat_sync(user, client_id, success, period_id=None):
+    """
+    Audit event για εξωτερικό myDATA VAT sync — χωρίς πλήρες ΑΦΜ,
+    credentials, raw response ή exception text (μόνο internal IDs).
+    """
+    try:
+        from common.models import AuditLog
+        detail = f'client id={client_id}'
+        if period_id is not None:
+            detail += f', period id={period_id}'
+        AuditLog.objects.create(
+            user=user if getattr(user, 'is_authenticated', False) else None,
+            action='update',
+            model_name='MyDataSync',
+            object_id=str(client_id),
+            description=(
+                f'myDATA VAT sync {"επιτυχία" if success else "αποτυχία"}: '
+                f'{detail}'
+            ),
+            severity='medium',
+        )
+    except Exception:
+        logger.warning('Could not write mydata sync audit', exc_info=True)
 
 
 def get_vat_rate_for_category(category: int) -> int:
@@ -189,7 +221,7 @@ def build_date_range_category_breakdown(client, date_from, date_to, rec_type: in
 # CREDENTIALS VIEWSET
 # =============================================================================
 
-class MyDataCredentialsViewSet(viewsets.ModelViewSet):
+class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet):
     """
     ViewSet για MyDataCredentials.
 
@@ -206,7 +238,25 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 
     queryset = MyDataCredentials.objects.select_related('client').all()
     serializer_class = MyDataCredentialsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
+    # Όλα τα custom POST actions τροποποιούν credentials → change permission
+    action_perms = {
+        'verify': ['mydata.change_mydatacredentials'],
+        'update_credentials': ['mydata.change_mydatacredentials'],
+        'set_initial_credit': ['mydata.change_mydatacredentials'],
+        # Εξωτερικό myDATA sync: ΔΕΝ αρκεί το change στα credentials —
+        # απαιτείται το dedicated mydata.sync_vatdata
+        'sync': ['mydata.change_mydatacredentials', 'mydata.sync_vatdata'],
+        'by_client': ['mydata.view_mydatacredentials'],
+    }
+
+    def perform_create(self, serializer):
+        from django.http import Http404
+        client = serializer.validated_data.get('client')
+        if client is not None and not user_can_access_client(self.request.user, client):
+            raise Http404('ClientProfile not found')
+        serializer.save()
 
     def get_queryset(self):
         """Filter by client if specified."""
@@ -237,7 +287,7 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
         GET /api/mydata/credentials/by-client/{client_id}/
         """
         try:
-            credentials = MyDataCredentials.objects.select_related('client').get(
+            credentials = self.get_queryset().get(
                 client_id=client_id,
                 is_active=True
             )
@@ -308,9 +358,20 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            period_year = request.data.get('initial_credit_period_year')
+            period = request.data.get('initial_credit_period')
+            if period_year is not None:
+                period_year = int(period_year)
+                if not 2000 <= period_year <= 2100:
+                    raise ValueError('year out of range')
+            if period is not None:
+                period = int(period)
+                if not 1 <= period <= 12:
+                    raise ValueError('period out of range')
+
             credentials.initial_credit_balance = balance
-            credentials.initial_credit_period_year = request.data.get('initial_credit_period_year')
-            credentials.initial_credit_period = request.data.get('initial_credit_period')
+            credentials.initial_credit_period_year = period_year
+            credentials.initial_credit_period = period
             credentials.save(update_fields=[
                 'initial_credit_balance',
                 'initial_credit_period_year',
@@ -322,9 +383,9 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
                 'message': f'Το αρχικό πιστωτικό ορίστηκε σε {balance}€',
                 'initial_credit_balance': str(balance),
             })
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError, InvalidOperation):
             return Response(
-                {'error': f'Μη έγκυρο ποσό: {e}'},
+                {'error': 'Μη έγκυρη τιμή — απαιτούνται αριθμοί (ποσό, έτος, περίοδος)'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -348,10 +409,33 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Get sync parameters
-        days = request.data.get('days', 30)
-        year = request.data.get('year')
-        month = request.data.get('month')
+        # Get sync parameters — validated με λογικά bounds
+        try:
+            days = int(request.data.get('days', 30))
+            year = request.data.get('year')
+            month = request.data.get('month')
+            if year is not None:
+                year = int(year)
+            if month is not None:
+                month = int(month)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Μη έγκυρες παράμετροι — απαιτούνται αριθμοί'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not 1 <= days <= 365:
+            return Response(
+                {'error': 'Το days πρέπει να είναι 1-365'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if year is not None and not 2000 <= year <= 2100:
+            return Response(
+                {'error': 'Μη έγκυρο έτος'}, status=status.HTTP_400_BAD_REQUEST
+            )
+        if month is not None and not 1 <= month <= 12:
+            return Response(
+                {'error': 'Μη έγκυρος μήνας'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             out = StringIO()
@@ -364,15 +448,21 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 
             call_command('mydata_sync_vat', *args, stdout=out)
 
+            _audit_vat_sync(request.user, credentials.client_id, success=True)
             return Response({
                 'success': True,
                 'message': out.getvalue(),
             })
 
-        except Exception as e:
-            logger.error(f"Sync error for {credentials.client.afm}: {e}")
+        except Exception:
+            # Client DB id αντί για πλήρες ΑΦΜ στα logs· χωρίς raw
+            # exception text στον χρήστη
+            logger.exception(
+                f"Sync error for client id={credentials.client_id}"
+            )
+            _audit_vat_sync(request.user, credentials.client_id, success=False)
             return Response(
-                {'error': str(e)},
+                {'error': 'Σφάλμα συγχρονισμού myDATA'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -381,7 +471,7 @@ class MyDataCredentialsViewSet(viewsets.ModelViewSet):
 # VAT RECORD VIEWSET
 # =============================================================================
 
-class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class VATRecordViewSet(ClientScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet για VATRecord (read-only).
 
@@ -393,7 +483,8 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
     """
 
     queryset = VATRecord.objects.select_related('client').all()
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -466,7 +557,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         try:
-            client = ClientProfile.objects.get(afm=afm)
+            client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Δεν βρέθηκε πελάτης'},
@@ -501,7 +592,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         try:
-            client = ClientProfile.objects.get(afm=afm)
+            client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Δεν βρέθηκε πελάτης'},
@@ -532,7 +623,7 @@ class VATRecordViewSet(viewsets.ReadOnlyModelViewSet):
 # SYNC LOG VIEWSET
 # =============================================================================
 
-class VATSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
+class VATSyncLogViewSet(ClientScopedQuerysetMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet για VATSyncLog (read-only).
 
@@ -543,7 +634,8 @@ class VATSyncLogViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = VATSyncLog.objects.select_related('client').all()
     serializer_class = VATSyncLogSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    client_field = 'client__assigned_users'
 
     def get_queryset(self):
         """Apply filters."""
@@ -594,19 +686,36 @@ class MyDataDashboardView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        # Επιστρέφει client metadata (ΑΦΜ/επωνυμίες) → απαιτεί και
+        # accounting.view_clientprofile
+        if not check_model_perms(
+            request, 'mydata.view_vatrecord', 'accounting.view_clientprofile'
+        ):
+            return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
+        can_see_credentials = request.user.has_perm('mydata.view_mydatacredentials')
         today = date.today()
         year = _parse_int(request.query_params.get('year'), 'year', default=today.year)
         month = _parse_int(request.query_params.get('month'), 'month', default=today.month, min_val=1, max_val=12)
 
-        # Get all clients with mydata credentials
-        credentials_qs = MyDataCredentials.objects.select_related('client').all()
+        # Μόνο πελάτες στους οποίους έχει πρόσβαση ο χρήστης (RBAC scoping)
+        allowed_clients = accessible_clients(request.user)
+        credentials_qs = MyDataCredentials.objects.select_related('client').filter(
+            client__in=allowed_clients
+        )
 
-        total_clients = ClientProfile.objects.count()
-        clients_with_credentials = credentials_qs.count()
-        verified_credentials = credentials_qs.filter(is_verified=True).count()
+        total_clients = allowed_clients.count()
+        # Aggregate credential metadata μόνο με view_mydatacredentials —
+        # χωρίς αυτό ακόμη και τα σύνολα δεν διαρρέουν (null)
+        if can_see_credentials:
+            clients_with_credentials = credentials_qs.count()
+            verified_credentials = credentials_qs.filter(is_verified=True).count()
+        else:
+            clients_with_credentials = None
+            verified_credentials = None
 
         # Aggregate totals for the period
         period_records = VATRecord.objects.filter(
+            client__in=allowed_clients,
             issue_date__year=year,
             issue_date__month=month,
             is_cancelled=False
@@ -622,24 +731,37 @@ class MyDataDashboardView(APIView):
             total_vat=Sum('vat_amount'),
         )
 
-        # Per-client summaries
+        # Per-client summaries — ΠΑΝΤΑ πάνω σε ΟΛΟΥΣ τους προσβάσιμους
+        # πελάτες, ΟΧΙ στο credentials_qs: αλλιώς η ίδια η ύπαρξη του πελάτη
+        # στη λίστα θα διέρρεε ποιος έχει MyDataCredentials row (side channel)
+        # ακόμη και χωρίς το view_mydatacredentials permission.
+        creds_by_client = {c.client_id: c for c in credentials_qs}
         clients_data = []
-        for creds in credentials_qs:
-            client = creds.client
+        for client in allowed_clients:
+            creds = creds_by_client.get(client.id)
             summary = build_period_summary(client, year, month)
             income_breakdown = build_category_breakdown(client, year, month, 1)
             expense_breakdown = build_category_breakdown(client, year, month, 2)
 
-            clients_data.append({
+            entry = {
                 'client_afm': client.afm,
                 'client_name': client.eponimia,
-                'has_credentials': creds.has_credentials,
-                'is_verified': creds.is_verified,
-                'last_sync': creds.last_vat_sync_at,
                 'current_period': summary,
                 'income_by_category': income_breakdown,
                 'expense_by_category': expense_breakdown,
-            })
+            }
+            # Credential-derived πεδία ΜΟΝΟ με mydata.view_mydatacredentials —
+            # χωρίς το permission είναι null για ΟΛΟΥΣ (ίδια μορφή, καμία
+            # διάκριση ποιος έχει/δεν έχει credentials)
+            if can_see_credentials:
+                entry['has_credentials'] = bool(creds and creds.has_credentials)
+                entry['is_verified'] = bool(creds and creds.is_verified)
+                entry['last_sync'] = creds.last_vat_sync_at if creds else None
+            else:
+                entry['has_credentials'] = None
+                entry['is_verified'] = None
+                entry['last_sync'] = None
+            clients_data.append(entry)
 
         return Response({
             'period': {
@@ -681,8 +803,12 @@ class ClientVATDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, afm):
+        if not check_model_perms(
+            request, 'mydata.view_vatrecord', 'accounting.view_clientprofile'
+        ):
+            return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         try:
-            client = ClientProfile.objects.get(afm=afm)
+            client = accessible_clients(request.user).get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Δεν βρέθηκε πελάτης'},
@@ -754,11 +880,15 @@ class ClientVATDetailView(APIView):
                     'afm': client.afm,
                     'name': client.eponimia,
                 },
-                'credentials': {
-                    'has_credentials': has_credentials,
-                    'is_verified': is_verified,
-                    'last_sync': last_sync,
-                },
+                'credentials': (
+                    {
+                        'has_credentials': has_credentials,
+                        'is_verified': is_verified,
+                        'last_sync': last_sync,
+                    }
+                    if request.user.has_perm('mydata.view_mydatacredentials')
+                    else None
+                ),
                 'period': {
                     'year': year,
                     'month': month,
@@ -786,7 +916,10 @@ class ClientVATDetailView(APIView):
             return Response(response_data)
 
         except Exception:
-            logger.exception('Σφάλμα στο ClientVATDetailView για ΑΦΜ %s', afm)
+            from accounting.services.access import mask_pii_value
+            logger.exception(
+                'Σφάλμα στο ClientVATDetailView για ΑΦΜ %s', mask_pii_value(afm)
+            )
             return Response(
                 {'error': 'Εσωτερικό σφάλμα διακομιστή'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -812,6 +945,8 @@ class MonthlyTrendView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        if not check_model_perms(request, 'mydata.view_vatrecord'):
+            return Response(_PERM_DENIED, status=status.HTTP_403_FORBIDDEN)
         afm = request.query_params.get('afm')
         months_count = _parse_int(request.query_params.get('months'), 'months', default=6)
         # Clamp σε λογικά όρια 1..36
@@ -832,8 +967,11 @@ class MonthlyTrendView(APIView):
 
         months.reverse()  # Oldest first
 
-        # Build queryset filter
-        base_qs = VATRecord.objects.filter(is_cancelled=False)
+        # Build queryset filter (RBAC: μόνο προσβάσιμοι πελάτες)
+        base_qs = VATRecord.objects.filter(
+            is_cancelled=False,
+            client__in=accessible_clients(request.user),
+        )
         if afm:
             base_qs = base_qs.filter(client__afm=afm)
 
@@ -906,12 +1044,20 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
     - POST /periods/{id}/unlock/ - Ξεκλείδωμα περιόδου
     - POST /periods/{id}/set_credit/ - Ορισμός πιστωτικού
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions, CanAccessClient]
+    action_perms = {
+        'calculate': ['mydata.change_vatperiodresult'],
+        'lock': ['mydata.change_vatperiodresult'],
+        'unlock': ['mydata.change_vatperiodresult'],
+        'set_credit': ['mydata.change_vatperiodresult'],
+    }
 
     def get_queryset(self):
         from .models import VATPeriodResult
 
-        qs = VATPeriodResult.objects.select_related('client', 'locked_by')
+        qs = VATPeriodResult.objects.select_related('client', 'locked_by').filter(
+            client__in=accessible_clients(self.request.user)
+        )
 
         # Filter by client
         client_id = self.request.query_params.get('client')
@@ -944,6 +1090,10 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Δημιουργία νέας περιόδου με κληρονομιά πιστωτικού."""
+        from django.http import Http404
+        client = serializer.validated_data.get('client')
+        if client is not None and not user_can_access_client(self.request.user, client):
+            raise Http404('ClientProfile not found')
         instance = serializer.save()
         # Αυτόματη κληρονομιά πιστωτικού από προηγούμενη περίοδο
         instance.inherit_credit_from_previous(save=True)
@@ -965,55 +1115,205 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Optional: sync missing months first
-        sync_first = request.data.get('sync_first', False)
+        # Optional: sync missing months first — εξωτερικό side effect, ΧΩΡΙΣ
+        # το dedicated permission επιτρέπεται μόνο απλός υπολογισμός.
+        # Αυστηρό boolean parsing: "false"/"0" → False, άκυρη τιμή → 400.
+        from accounting.services.access import parse_strict_bool
+        sync_first = parse_strict_bool(
+            request.data.get('sync_first'), 'sync_first', default=False)
         if sync_first:
-            self._sync_period_months(period)
+            if not request.user.has_perm('mydata.sync_vatdata'):
+                return Response(
+                    {'error': 'Δεν έχετε δικαίωμα συγχρονισμού δεδομένων ΦΠΑ.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            sync_result = self._normalize_sync_result(
+                self._sync_period_months(period))
+            # Το audit αντικατοπτρίζει το ΠΡΑΓΜΑΤΙΚΟ αποτέλεσμα (Γύρος 23)
+            _audit_vat_sync(
+                request.user, period.client_id,
+                success=(sync_result['status'] == 'success'),
+                period_id=period.pk)
+
+            if sync_result['status'] == 'failed':
+                # Fail closed: ΔΕΝ υπολογίζουμε πάνω σε stale δεδομένα
+                http_status = (
+                    status.HTTP_422_UNPROCESSABLE_ENTITY
+                    if sync_result['reason'] in ('missing_credentials',
+                                                 'authentication')
+                    else status.HTTP_502_BAD_GATEWAY
+                )
+                return Response({
+                    'success': False,
+                    'sync_status': 'failed',
+                    'error': 'Ο συγχρονισμός myDATA απέτυχε — ο υπολογισμός '
+                             'δεν εκτελέστηκε για να μη χρησιμοποιηθούν '
+                             'παλαιά δεδομένα.',
+                    'sync_reason': sync_result['reason'],
+                    'failed_months': sync_result['failed_months'],
+                }, status=http_status)
 
         # Calculate from records
         result = period.calculate_from_records(save=True)
 
-        return Response({
+        response = {
             'success': True,
             'message': 'Ο υπολογισμός ολοκληρώθηκε',
             'result': result,
             'period': self.get_serializer(period).data
-        })
+        }
+        if sync_first:
+            # Ρητή δήλωση κατάστασης συγχρονισμού — ποτέ «πλήρως
+            # ενημερωμένο» όταν κάποιοι μήνες απέτυχαν
+            response['sync_status'] = sync_result['status']
+            if sync_result['status'] == 'partial':
+                response['warning'] = (
+                    'Ο συγχρονισμός myDATA ολοκληρώθηκε ΜΕΡΙΚΩΣ — ο '
+                    'υπολογισμός μπορεί να μην περιλαμβάνει όλα τα '
+                    'δεδομένα της περιόδου.'
+                )
+                response['failed_months'] = sync_result['failed_months']
+                response['synced_months'] = sync_result['successful_months']
+        return Response(response)
+
+    @staticmethod
+    def _normalize_sync_result(result):
+        """
+        Fail-closed κανονικοποίηση του αποτελέσματος συγχρονισμού.
+
+        Αν το `_sync_period_months` (π.χ. σε override/patch) επιστρέψει
+        κάτι που δεν είναι αναγνωρίσιμο δομημένο αποτέλεσμα, το
+        θεωρούμε **αποτυχία** αντί να σκάσει ο caller ή —χειρότερα— να
+        θεωρηθεί επιτυχία.
+        """
+        valid = ('success', 'partial', 'failed')
+        if isinstance(result, dict) and result.get('status') in valid:
+            return {
+                'status': result['status'],
+                'reason': result.get('reason', ''),
+                'successful_months': result.get('successful_months', []),
+                'failed_months': result.get('failed_months', []),
+                'errors': result.get('errors', []),
+            }
+        logger.error(
+            'myDATA sync: μη αναγνωρίσιμο αποτέλεσμα συγχρονισμού (%s) — '
+            'θεωρείται αποτυχία', type(result).__name__)
+        return {
+            'status': 'failed',
+            'reason': 'unexpected_error',
+            'successful_months': [],
+            'failed_months': [],
+            'errors': ['Μη αναγνωρίσιμο αποτέλεσμα συγχρονισμού.'],
+        }
 
     def _sync_period_months(self, period):
-        """Sync all months in the period."""
+        """
+        Sync all months in the period.
+
+        Γύρος 23 — ΔΟΜΗΜΕΝΟ αποτέλεσμα αντί για σιωπηλή κατάποση
+        σφαλμάτων. Ο caller ΔΕΝ επιτρέπεται να δηλώσει success=True όταν
+        ο συγχρονισμός απέτυχε ολικά ή μερικά, ούτε να παρουσιάσει stale
+        δεδομένα ως ενημερωμένα.
+
+        Returns dict:
+            {
+              'status': 'success' | 'partial' | 'failed',
+              'reason': '' | 'missing_credentials' | 'authentication'
+                        | 'api_failure' | 'unexpected_error',
+              'successful_months': [...],
+              'failed_months': [...],
+              'errors': [...],   # γενικά μηνύματα, ΧΩΡΙΣ credentials/PII
+            }
+        """
+        result = {
+            'status': 'failed',
+            'reason': '',
+            'successful_months': [],
+            'failed_months': [],
+            'errors': [],
+        }
+        months = list(period.months_in_period)
+
         try:
             credentials = period.client.mydata_credentials
-            if not credentials.has_credentials:
-                return
+        except Exception:
+            logger.warning(
+                'myDATA sync: δεν βρέθηκαν credentials για client id=%s',
+                period.client_id)
+            result.update(reason='missing_credentials',
+                          failed_months=months,
+                          errors=['Δεν υπάρχουν διαπιστευτήρια myDATA.'])
+            return result
 
-            from django.core.management import call_command
-            from io import StringIO
+        if not credentials.has_credentials:
+            logger.warning(
+                'myDATA sync: ελλιπή credentials για client id=%s',
+                period.client_id)
+            result.update(reason='missing_credentials',
+                          failed_months=months,
+                          errors=['Δεν υπάρχουν διαπιστευτήρια myDATA.'])
+            return result
 
-            for month in period.months_in_period:
-                # Sync μήνα μέσω του ίδιου command με το credentials.sync action
-                # (το παλιό `from .services import sync_vat_records_for_client`
-                # έκανε ImportError και το sync_first ήταν σιωπηλό no-op).
-                # Per-month try: ο μήνας σημειώνεται synced ΜΟΝΟ σε επιτυχία.
-                try:
-                    call_command(
-                        'mydata_sync_vat',
-                        '--client', period.client.afm,
-                        '--year', str(period.year),
-                        '--month', str(month),
-                        stdout=StringIO(),
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"Sync failed for {period.client.afm} {month}/{period.year}: {e}"
-                    )
-                    continue
-                if month not in period.months_synced:
-                    period.months_synced.append(month)
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from io import StringIO
 
+        for month in months:
+            # Sync μήνα μέσω του ίδιου command με το credentials.sync action.
+            # Per-month try: ο μήνας σημειώνεται synced ΜΟΝΟ σε επιτυχία και
+            # η αποτυχία ΚΑΤΑΓΡΑΦΕΤΑΙ στο αποτέλεσμα (δεν καταπίνεται).
+            try:
+                call_command(
+                    'mydata_sync_vat',
+                    '--client', period.client.afm,
+                    '--year', str(period.year),
+                    '--month', str(month),
+                    stdout=StringIO(),
+                )
+            except Exception as exc:
+                # Ταξινόμηση χωρίς να διαρρεύσει raw exception text
+                text = str(exc).lower()
+                if any(k in text for k in ('auth', '401', 'unauthor',
+                                           'διαπιστευτ')):
+                    reason = 'authentication'
+                elif isinstance(exc, CommandError):
+                    reason = 'api_failure'
+                else:
+                    reason = 'unexpected_error'
+                if not result['reason']:
+                    result['reason'] = reason
+                logger.error(
+                    'myDATA sync απέτυχε: client id=%s %s/%s (%s)',
+                    period.client_id, month, period.year,
+                    type(exc).__name__)
+                result['failed_months'].append(month)
+                result['errors'].append(
+                    f'Αποτυχία συγχρονισμού για τον μήνα {month}.')
+                continue
+
+            result['successful_months'].append(month)
+            if month not in period.months_synced:
+                period.months_synced.append(month)
+
+        try:
             period.save(update_fields=['months_synced'])
-        except Exception as e:
-            logger.error(f"Error syncing period months: {e}")
+        except Exception:
+            logger.exception(
+                'myDATA sync: αποτυχία αποθήκευσης months_synced για '
+                'period id=%s', period.pk)
+            result.update(status='failed', reason='unexpected_error')
+            result['errors'].append('Αποτυχία αποθήκευσης κατάστασης '
+                                    'συγχρονισμού.')
+            return result
+
+        if not result['failed_months']:
+            result['status'] = 'success'
+            result['reason'] = ''
+        elif result['successful_months']:
+            result['status'] = 'partial'
+        else:
+            result['status'] = 'failed'
+        return result
 
     @action(detail=True, methods=['post'])
     def lock(self, request, pk=None):
@@ -1045,8 +1345,13 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Only admin can unlock
-        if not request.user.is_staff:
+        # Μόνο Διαχειριστής (superuser ή view_all_clients) — το σκέτο
+        # is_staff θα επέτρεπε σε staff Λογιστή με change_vatperiodresult
+        # να ξεκλειδώνει κλειδωμένες περιόδους
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm('accounting.view_all_clients')
+        ):
             return Response(
                 {'error': 'Μόνο διαχειριστές μπορούν να ξεκλειδώσουν περιόδους'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1084,6 +1389,11 @@ class VATPeriodResultViewSet(viewsets.ModelViewSet):
 
         try:
             period.previous_credit = Decimal(str(credit))
+            if period.previous_credit < 0:
+                return Response(
+                    {'error': 'Το πιστωτικό δεν μπορεί να είναι αρνητικό'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             period.save(update_fields=['previous_credit', 'updated_at'])
 
             # Recalculate with new credit
@@ -1111,6 +1421,13 @@ class VATPeriodCalculatorView(APIView):
 
     def get(self, request):
         from .models import VATPeriodResult
+
+        # Read endpoint: απαιτεί το view model permission, όχι μόνο auth
+        if not request.user.has_perm('mydata.view_vatperiodresult'):
+            return Response(
+                {'error': 'Δεν έχετε δικαίωμα για αυτή την ενέργεια.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         client_id = request.query_params.get('client_id')
         afm = request.query_params.get('afm')
@@ -1141,28 +1458,41 @@ class VATPeriodCalculatorView(APIView):
         max_period = 12 if period_type == 'monthly' else 4
         period = _parse_int(period, 'period', min_val=1, max_val=max_period)
 
-        # Get client
+        # Get client (RBAC: μόνο προσβάσιμοι πελάτες)
         try:
+            allowed = accessible_clients(request.user)
             if client_id:
-                client = ClientProfile.objects.get(pk=client_id)
+                client = allowed.get(pk=client_id)
             else:
-                client = ClientProfile.objects.get(afm=afm)
+                client = allowed.get(afm=afm)
         except ClientProfile.DoesNotExist:
             return Response(
                 {'error': 'Ο πελάτης δεν βρέθηκε'},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # Get or create period result
-        period_result, created = VATPeriodResult.get_or_create_for_period(
-            client=client,
-            period_type=period_type,
-            year=year,
-            period=period
-        )
+        # Το GET δεν δημιουργεί εγγραφές για read-only χρήστες: η δημιουργία
+        # ή ο επανυπολογισμός απαιτούν το change permission
+        can_write = request.user.has_perm('mydata.change_vatperiodresult')
+        period_result = VATPeriodResult.objects.filter(
+            client=client, period_type=period_type, year=year, period=period,
+        ).first()
+        created = False
+        if period_result is None:
+            if not can_write:
+                return Response(
+                    {'error': 'Δεν έχει υπολογιστεί ακόμη αυτή η περίοδος.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            period_result, created = VATPeriodResult.get_or_create_for_period(
+                client=client,
+                period_type=period_type,
+                year=year,
+                period=period
+            )
 
         # If new or request wants recalculation
-        if created or request.query_params.get('recalculate'):
+        if (created or request.query_params.get('recalculate')) and can_write:
             period_result.calculate_from_records(save=True)
 
         # Build response - flat structure matching frontend interface
@@ -1202,6 +1532,20 @@ class VATPeriodCalculatorView(APIView):
 # INVOICE SUBMISSION (Αποστολή τιμολογίων στο myDATA)
 # =============================================================================
 
+class _CanSubmitInvoices(permissions.BasePermission):
+    """Απαιτεί inventory.change_invoice για υποβολή/ακύρωση στην ΑΑΔΕ."""
+
+    def has_permission(self, request, view):
+        return request.user.has_perm('inventory.change_invoice')
+
+
+class _CanViewInvoices(permissions.BasePermission):
+    """Απαιτεί inventory.view_invoice για ανάγνωση τιμολογίων."""
+
+    def has_permission(self, request, view):
+        return request.user.has_perm('inventory.view_invoice')
+
+
 class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Τιμολόγια (inventory.Invoice) με actions αποστολής/ακύρωσης στο myDATA.
@@ -1213,16 +1557,22 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_permissions(self):
-        # Υποβολή/ακύρωση φορολογικών παραστατικών στην ΑΑΔΕ: μόνο staff
+        # Υποβολή/ακύρωση φορολογικών παραστατικών στην ΑΑΔΕ: staff ΚΑΙ
+        # ρητό model permission (όχι απλώς is_staff)
         if self.action in ('send', 'cancel'):
-            return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
-        return super().get_permissions()
+            return [permissions.IsAuthenticated(), permissions.IsAdminUser(),
+                    _CanSubmitInvoices()]
+        # list/retrieve: όχι μόνο authenticated — και view permission
+        return [permissions.IsAuthenticated(), _CanViewInvoices()]
 
     def get_queryset(self):
         from inventory.models import Invoice
         from .serializers import InvoiceListSerializer  # noqa: F401 (import check)
 
-        qs = Invoice.objects.select_related('counterpart').prefetch_related('items')
+        # RBAC: μόνο τιμολόγια αντισυμβαλλομένων στους οποίους έχει πρόσβαση
+        qs = Invoice.objects.select_related('counterpart').prefetch_related('items').filter(
+            counterpart__in=accessible_clients(self.request.user)
+        )
 
         direction = self.request.query_params.get('direction', 'outgoing')
         if direction == 'outgoing':
@@ -1254,12 +1604,24 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             result = MyDataService().submit_invoice(invoice)
         except ValueError as e:
+            # Ελεγχόμενα guard messages (λάθος κατεύθυνση, ήδη απεσταλμένο,
+            # χωρίς γραμμές) — hand-written, χωρίς traceback/credentials.
+            logger.warning('myDATA submit rejected invoice id=%s', invoice.pk)
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except MyDataValidationError as e:
-            # Η ΑΑΔΕ απέρριψε το παραστατικό (business validation) — 422, όχι 502
-            return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        except MyDataAPIError as e:
-            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+            # Η ΑΑΔΕ απέρριψε το παραστατικό (business validation) — 422, όχι 502.
+            # Μόνο το ελεγχόμενο .message, όχι raw response_text.
+            logger.warning('myDATA validation rejected invoice id=%s', invoice.pk)
+            return Response(
+                {'error': e.message or 'Το παραστατικό απορρίφθηκε από το myDATA.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        except MyDataAPIError:
+            logger.exception('myDATA submit failed for invoice id=%s', invoice.pk)
+            return Response(
+                {'error': 'Σφάλμα επικοινωνίας με το myDATA'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         invoice.refresh_from_db()
         return Response({
@@ -1279,11 +1641,21 @@ class InvoiceViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             result = MyDataService().cancel_invoice(invoice)
         except ValueError as e:
+            # Ελεγχόμενα guard messages — hand-written, χωρίς traceback/credentials.
+            logger.warning('myDATA cancel rejected invoice id=%s', invoice.pk)
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except MyDataValidationError as e:
-            return Response({'error': str(e)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
-        except MyDataAPIError as e:
-            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+            logger.warning('myDATA validation rejected cancel invoice id=%s', invoice.pk)
+            return Response(
+                {'error': e.message or 'Η ακύρωση απορρίφθηκε από το myDATA.'},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        except MyDataAPIError:
+            logger.exception('myDATA cancel failed for invoice id=%s', invoice.pk)
+            return Response(
+                {'error': 'Σφάλμα επικοινωνίας με το myDATA'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
         invoice.refresh_from_db()
         return Response({
