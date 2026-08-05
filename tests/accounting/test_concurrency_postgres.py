@@ -709,3 +709,157 @@ class UnlimitedSharedLinkConcurrencyTest(TransactionTestCase):
         views, downloads, _l = self._state()
         self.assertEqual(views, 2)
         self.assertEqual(downloads, 0)
+
+
+@override_settings(MEDIA_ROOT=TEMP_MEDIA, ENFORCE_CLIENT_ASSIGNMENT=True)
+class AdminDeleteTOCTOUTest(TransactionTestCase):
+    """TOCTOU στα single-object admin delete paths (Γύρος Ε).
+
+    Ένα thread κρατά select_for_update lock και αλλάζει τη σχέση/πελάτη
+    ΠΡΙΝ ολοκληρωθεί η διαγραφή· η διαγραφή πρέπει να κάνει authorization
+    ΠΑΝΩ στο locked (τρέχον) state, όχι στο stale obj/call_id.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL — το TOCTOU '
+                    'test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL (blocking στο CI test job).')
+        from accounting.models import Ticket, VoIPCall
+        from django.contrib.auth.models import Permission
+        self.Ticket, self.VoIPCall = Ticket, VoIPCall
+        self.mine = ClientProfile.objects.create(
+            afm='094014201', eponimia='OWNER')
+        self.theirs = ClientProfile.objects.create(
+            afm='998877665', eponimia='FOREIGN')
+        u = User.objects.create_user('toctou', password='x', is_staff=True)
+        for cn in ('view_ticket', 'delete_ticket', 'view_voipcall',
+                   'delete_voipcall', 'change_voipcall', 'change_ticket'):
+            u.user_permissions.add(Permission.objects.get(
+                codename=cn, content_type__app_label='accounting'))
+        self.mine.assigned_users.add(u)
+        self.user_pk = u.pk
+
+    def _client(self):
+        from django.test import Client
+        c = Client()
+        c.force_login(User.objects.get(pk=self.user_pk))
+        return c
+
+    def _call(self, cid, client_profile):
+        return self.VoIPCall.objects.create(
+            call_id=cid, phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(), client=client_profile)
+
+    def _deletion_count(self, model, pk):
+        from django.contrib.admin.models import DELETION, LogEntry
+        from django.contrib.contenttypes.models import ContentType
+        return LogEntry.objects.filter(
+            content_type=ContentType.objects.get_for_model(model),
+            object_id=str(pk), action_flag=DELETION).count()
+
+    def _delete_url(self, ticket_pk):
+        from django.urls import reverse
+        return reverse('admin:accounting_ticket_delete', args=[ticket_pk])
+
+    def _run_with_attacker(self, ticket_pk, mutate):
+        """attacker: lock ticket, wait barrier, εφάρμοσε mutate(locked), commit.
+        main: μετά το barrier κάνε delete_call POST (μπλοκάρει στο lock)."""
+        from django.db import transaction
+        barrier = threading.Barrier(2)
+        errors = []
+
+        import time
+
+        def attacker():
+            try:
+                with transaction.atomic():
+                    locked = (self.Ticket.objects.select_for_update()
+                              .get(pk=ticket_pk))
+                    barrier.wait()
+                    # Κράτα το lock ώστε το admin request να προλάβει να
+                    # κάνει get_object (stale read) και ΜΕΤΑ να μπλοκάρει
+                    # στο select_for_update· μόνο τότε εφάρμοσε το mutate.
+                    # Έτσι εξασκείται ντετερμινιστικά το stale-vs-locked
+                    # path (όχι απλώς attacker-commits-first).
+                    time.sleep(0.8)
+                    mutate(locked)
+                    locked.save()
+            except Exception as e:  # noqa: BLE001
+                errors.append(e)
+            finally:
+                connections.close_all()
+
+        t = threading.Thread(target=attacker)
+        t.start()
+        barrier.wait()
+        resp = self._client().post(
+            self._delete_url(ticket_pk),
+            {'delete_call': '1', 'post': 'yes'}, secure=True)
+        t.join()
+        self.assertEqual(errors, [])
+        return resp
+
+    def test_A_ticket_repointed_to_foreign_call_fails_closed(self):
+        call_mine = self._call('A-MINE', self.mine)
+        call_foreign = self._call('A-FOR', self.theirs)
+        ticket = self.Ticket.objects.create(
+            client=self.mine, call=call_mine, title='t',
+            description='-', status='open')
+
+        def repoint(locked):
+            locked.call = call_foreign
+
+        resp = self._run_with_attacker(ticket.pk, repoint)
+
+        # Το locked ticket δείχνει πλέον σε foreign call → 403
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(self.Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertTrue(self.VoIPCall.objects.filter(pk=call_mine.pk).exists())
+        self.assertTrue(
+            self.VoIPCall.objects.filter(pk=call_foreign.pk).exists())
+        self.assertEqual(self._deletion_count(self.Ticket, ticket.pk), 0)
+        self.assertEqual(
+            self._deletion_count(self.VoIPCall, call_foreign.pk), 0)
+        self.assertEqual(self._deletion_count(self.VoIPCall, call_mine.pk), 0)
+
+    def test_B_call_client_changed_to_foreign_fails_closed(self):
+        call_mine = self._call('B-MINE', self.mine)
+        ticket = self.Ticket.objects.create(
+            client=self.mine, call=call_mine, title='t',
+            description='-', status='open')
+
+        def steal_call_client(locked):
+            # αλλάζει τον πελάτη της συνδεδεμένης κλήσης σε foreign
+            self.VoIPCall.objects.filter(pk=call_mine.pk).update(
+                client=self.theirs)
+
+        resp = self._run_with_attacker(ticket.pk, steal_call_client)
+
+        # authorization πάνω στο locked (foreign πλέον) call → 403
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(self.Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertTrue(self.VoIPCall.objects.filter(pk=call_mine.pk).exists())
+        self.assertEqual(self._deletion_count(self.Ticket, ticket.pk), 0)
+        self.assertEqual(self._deletion_count(self.VoIPCall, call_mine.pk), 0)
+
+    def test_C_relationship_removed_does_not_delete_stale_call(self):
+        call_mine = self._call('C-MINE', self.mine)
+        ticket = self.Ticket.objects.create(
+            client=self.mine, call=call_mine, title='t',
+            description='-', status='open')
+
+        def detach(locked):
+            locked.call = None
+
+        resp = self._run_with_attacker(ticket.pk, detach)
+
+        # Η σχέση αφαιρέθηκε → διαγράφεται ΜΟΝΟ το ticket, ΟΧΙ το stale call
+        self.assertIn(resp.status_code, (200, 302))
+        self.assertFalse(self.Ticket.objects.filter(pk=ticket.pk).exists())
+        self.assertTrue(self.VoIPCall.objects.filter(pk=call_mine.pk).exists())
+        self.assertEqual(self._deletion_count(self.Ticket, ticket.pk), 1)
+        self.assertEqual(self._deletion_count(self.VoIPCall, call_mine.pk), 0)

@@ -1457,3 +1457,118 @@ class CrossClientCascadeDeleteTest(TestCase):
         self.assertEqual(resp.status_code, 403)
         self.assertTrue(Ticket.objects.filter(pk=ticket.pk).exists())
         self.assertTrue(VoIPCall.objects.filter(pk=foreign_call.pk).exists())
+
+
+class VoIPCallLogMigrationWindowTest(TestCase):
+    """Finding 3.8: το catch-up backfill του 10026 πιάνει snapshot-less
+    logs που δημιούργησε παλιό application code στο deployment window."""
+
+    def _mig(self):
+        from importlib import import_module
+        return import_module(
+            'accounting.migrations.10026_voipcalllog_call_set_null')
+
+    def test_catch_up_backfills_snapshotless_log(self):
+        from django.apps import apps as django_apps
+        from accounting.models import VoIPCallLog
+
+        owner = ClientProfile.objects.create(afm='094014201', eponimia='O')
+        call = VoIPCall.objects.create(
+            call_id='WIN-1', phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now(), client=owner)
+        log = VoIPCallLog.objects.create(call=call, action='started')
+        # Προσομοίωση παλιού code: snapshot κενό (bypass του save())
+        VoIPCallLog.objects.filter(pk=log.pk).update(
+            call_reference='', phone_number='', client=None)
+
+        mod = self._mig()
+        mod._catch_up_backfill(django_apps, None)
+
+        log.refresh_from_db()
+        self.assertEqual(log.call_reference, 'WIN-1')
+        self.assertEqual(log.phone_number, '2101234567')
+        self.assertEqual(log.client_id, owner.pk)
+        # Το validation δεν πρέπει να σκάσει πλέον
+        mod._validate(django_apps, None)
+
+    def test_validation_aborts_on_snapshotless_log(self):
+        from django.apps import apps as django_apps
+        from accounting.models import VoIPCallLog
+
+        call = VoIPCall.objects.create(
+            call_id='WIN-2', phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now())
+        log = VoIPCallLog.objects.create(call=call, action='started')
+        VoIPCallLog.objects.filter(pk=log.pk).update(call_reference='')
+
+        mod = self._mig()
+        with self.assertRaises(RuntimeError):
+            mod._validate(django_apps, None)
+
+    def test_audit_command_fail_closed(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from accounting.models import VoIPCallLog
+
+        call = VoIPCall.objects.create(
+            call_id='WIN-3', phone_number='2101234567', direction='incoming',
+            status='missed', started_at=timezone.now())
+        log = VoIPCallLog.objects.create(call=call, action='started')
+        VoIPCallLog.objects.filter(pk=log.pk).update(call_reference='')
+
+        with self.assertRaises(CommandError):
+            call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+
+class DeletionCounterAccuracyTest(_OwnedMixin, TestCase):
+    """Finding 4: τα εμφανιζόμενα counts δεν φουσκώνουν από related rows."""
+
+    def test_delete_with_tickets_count_ignores_related_logs(self):
+        from django.contrib.messages import get_messages
+        from accounting.models import VoIPCallLog
+
+        user = self._su('cnt_call', 'view_voipcall', 'delete_voipcall',
+                        'delete_ticket', 'change_ticket')
+        call = self._mk_call()
+        ticket = Ticket.objects.create(
+            client=self.owner, call=call, title='t', description='-',
+            status='open')
+        # Related audit rows (SET_NULL) — ΔΕΝ πρέπει να μετρηθούν
+        for i in range(3):
+            VoIPCallLog.objects.create(call=call, action='started')
+        self.client.force_login(user)
+
+        resp = self.client.post(
+            changelist_url(VoIPCall),
+            {'action': 'delete_with_tickets',
+             '_selected_action': [str(call.pk)]},
+            follow=True, secure=True)
+
+        msgs = ' '.join(str(m) for m in get_messages(resp.wsgi_request))
+        # Ακριβώς 1 κλήση + 1 ticket — όχι φουσκωμένο από τα 3 logs
+        self.assertIn('1 κλήσεις και 1 tickets', msgs)
+        self.assertFalse(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertFalse(Ticket.objects.filter(pk=ticket.pk).exists())
+        # Τα logs επιβιώνουν (audit trail, SET_NULL)
+        self.assertEqual(VoIPCallLog.objects.filter(call__isnull=True).count(), 3)
+
+    def test_delete_without_tickets_reports_detached_count(self):
+        from django.contrib.messages import get_messages
+
+        user = self._su('cnt_det', 'view_voipcall', 'delete_voipcall',
+                        'change_ticket')
+        call = self._mk_call()
+        Ticket.objects.create(
+            client=self.owner, call=call, title='t', description='-',
+            status='open')
+        self.client.force_login(user)
+
+        resp = self.client.post(
+            changelist_url(VoIPCall),
+            {'action': 'delete_without_tickets',
+             '_selected_action': [str(call.pk)]},
+            follow=True, secure=True)
+
+        msgs = ' '.join(str(m) for m in get_messages(resp.wsgi_request))
+        self.assertIn('1 κλήσεις', msgs)
+        self.assertIn('1 tickets αποσυνδέθηκαν', msgs)
