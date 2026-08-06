@@ -16,6 +16,7 @@ import shutil
 from django.conf import settings as dj_settings
 from django.utils import timezone
 
+from accounting.services.text_normalization import normalize_search_text
 from common.utils.afm import find_afm_candidates
 
 logger = logging.getLogger(__name__)
@@ -131,10 +132,12 @@ def _try_tesseract_image(fileobj):
 
 
 def _normalize(text):
-    """Κεφαλαία χωρίς τόνους — για accent-insensitive matching ελληνικών."""
-    import unicodedata
-    decomposed = unicodedata.normalize('NFD', text or '')
-    return ''.join(c for c in decomposed if not unicodedata.combining(c)).upper()
+    """
+    Κεφαλαία χωρίς τόνους και χωρίς οπτικούς σωσίες (λατινικό «A» αντί
+    ελληνικού «Α», «∆» U+2206 αντί «Δ») — για accent-/confusable-insensitive
+    matching ελληνικών.
+    """
+    return normalize_search_text(text)
 
 
 def suggest_category(text, filename=''):
@@ -175,7 +178,12 @@ def process_document(document):
         if candidates and client_afm not in candidates and client_afm not in text:
             mismatch = True
 
-    document.extracted_text = text
+    # Το extracted_text είναι πεδίο αναζήτησης (δεν εμφανίζεται σε UI/API),
+    # οπότε αποθηκεύεται κανονικοποιημένο: χωρίς τόνους, κεφαλαία, με τους
+    # οπτικούς σωσίες του PDF/OCR («∆», λατινικό «A») χαρτογραφημένους σε
+    # ελληνικούς. Ο όρος αναζήτησης περνά από την ίδια συνάρτηση.
+    # Προσοχή: ο έλεγχος ΑΦΜ παραπάνω γίνεται στο ΑΡΧΙΚΟ κείμενο.
+    document.extracted_text = normalize_search_text(text)
     document.ocr_status = status
     document.ocr_processed_at = timezone.now()
     document.afm_mismatch = mismatch

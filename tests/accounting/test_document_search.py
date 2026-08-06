@@ -137,3 +137,65 @@ class CleanupStaleSyncLogsTest(TestCase):
         cleanup_stale_sync_logs(stale_minutes=5)
         log.refresh_from_db()
         self.assertEqual(log.status, 'ERROR')
+
+
+class GreekConfusablesSearchTest(TestCase):
+    """
+    Οι χαρακτήρες που παράγει η εξαγωγή κειμένου από PDF δεν είναι πάντα
+    οι πραγματικοί ελληνικοί. Δύο επιβεβαιωμένες περιπτώσεις από παραγωγή:
+    «∆» U+2206 INCREMENT αντί «Δ» U+0394, και λατινικοί σωσίες («ΦΠA»
+    με λατινικό A). Πριν τη διόρθωση καμία από τις δύο δεν βρισκόταν.
+    """
+    def setUp(self):
+        self.client_profile = ClientProfile.objects.create(
+            afm='123456783', eponimia='ΕΤΑΙΡΕΙΑ ΑΕ', eidos_ipoxreou='company'
+        )
+
+    def _search(self, term):
+        return apply_document_search(
+            ClientDocument.objects.all(), term, include_client_fields=False
+        )
+
+    def _make(self, name, text):
+        from accounting.services.text_normalization import normalize_search_text
+        # Το extracted_text αποθηκεύεται πάντα κανονικοποιημένο από το
+        # process_document — εδώ αναπαράγεται η ίδια συνθήκη.
+        return make_document(self.client_profile, name,
+                             extracted_text=normalize_search_text(text))
+
+    def test_increment_sign_in_document_found_by_greek_delta(self):
+        doc = self._make('a.pdf', '∆ΟΚΙΜΩΝ ΕΤΑΙΡΕΙΑ')
+        self.assertEqual(list(self._search('ΔΟΚΙΜΩΝ')), [doc])
+
+    def test_greek_delta_in_document_found_by_increment_sign(self):
+        doc = self._make('b.pdf', 'ΔΟΚΙΜΩΝ ΕΤΑΙΡΕΙΑ')
+        self.assertEqual(list(self._search('∆ΟΚΙΜΩΝ')), [doc])
+
+    def test_latin_lookalike_in_document_found_by_greek_term(self):
+        # «ΦΠA» με λατινικό A (U+0041)
+        doc = self._make('c.pdf', 'ΦΠA ΙΑΝΟΥΑΡΙΟΥ')
+        self.assertEqual(list(self._search('ΦΠΑ')), [doc])
+
+    def test_greek_term_with_latin_lookalike_query(self):
+        doc = self._make('d.pdf', 'ΦΠΑ ΙΑΝΟΥΑΡΙΟΥ')
+        self.assertEqual(list(self._search('ΦΠA')), [doc])
+
+    def test_accent_and_case_insensitive(self):
+        doc = self._make('e.pdf', 'Περιοδική δήλωση ΦΠΑ')
+        self.assertEqual(list(self._search('δηλωση')), [doc])
+        self.assertEqual(list(self._search('ΔΉΛΩΣΗ')), [doc])
+
+    def test_final_sigma_folds(self):
+        doc = self._make('f.pdf', 'Κατάσταση εσόδων εξόδων')
+        self.assertEqual(list(self._search('κατασταση')), [doc])
+
+    def test_latin_only_term_still_matches_filename(self):
+        # Ο μη-κανονικοποιημένος όρος διατηρείται για filename/description,
+        # ώστε λατινικά ονόματα να μη «χαθούν» στη χαρτογράφηση.
+        doc = make_document(self.client_profile, 'ACME_invoice.pdf')
+        self.assertEqual(list(self._search('ACME')), [doc])
+
+    def test_empty_and_plain_terms_unaffected(self):
+        doc = self._make('g.pdf', 'Μισθοδοσία προσωπικού')
+        self.assertEqual(list(self._search('μισθοδοσια')), [doc])
+        self.assertEqual(list(self._search('ανύπαρκτο')), [])
