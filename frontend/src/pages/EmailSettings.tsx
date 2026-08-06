@@ -21,6 +21,7 @@ import {
   Save,
 } from 'lucide-react';
 import { Button } from '../components';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 import {
   useEmailSettings,
   useUpdateEmailSettings,
@@ -571,7 +572,7 @@ export default function EmailSettings() {
               {formData.email_signature ? (
                 <div
                   className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: formData.email_signature }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(formData.email_signature) }}
                 />
               ) : (
                 <p className="text-slate-400 text-sm italic">
