@@ -7,6 +7,7 @@ from email.message import Message
 from typing import Optional
 from django.core.handlers.wsgi import WSGIRequest
 from django.utils.translation import gettext_lazy as _
+from django.shortcuts import get_object_or_404
 from django.shortcuts import render
 from django.template.defaultfilters import linebreaks
 from django.http import HttpResponse
@@ -17,14 +18,17 @@ from crm.utils.crm_imap import CrmIMAP
 from crm.utils.helpers import ensure_decoding
 from crm.utils.helpers import get_crmimap
 from massmail.models import EmailAccount
+from common.utils.email_account_access import get_accessible_email_account_or_404
 
 not_enough_data_str = _("Not enough data to identify the "
                         "email or email has been deleted")
 something_wrong_str = _("Something went wrong")
 
 
-def view_original_email(request: WSGIRequest, object_id=None, ea_id=None, uid=None):  
-    ea, eml, uid, err = get_ea_eml_uid(object_id, ea_id, uid)
+def view_original_email(request: WSGIRequest, object_id=None, ea_id=None, uid=None):
+    # Ο έλεγχος ιδιοκτησίας γίνεται ΠΡΙΝ από οποιαδήποτε σύνδεση IMAP:
+    # το get_ea_eml_uid ρίχνει Http404 για ξένο/ανύπαρκτο account.
+    ea, eml, uid, err = get_ea_eml_uid(request.user, object_id, ea_id, uid)
     if not err:
         box = 'INBOX' if ea_id or eml.incoming else 'Sent'
         crmimap = get_crmimap(ea, box)
@@ -102,14 +106,24 @@ def get_context(msg: Message):
     return context, err
 
 
-def get_ea_eml_uid(object_id: int, ea_id, uid: Optional[int]) -> tuple:
+def get_ea_eml_uid(user, object_id: int, ea_id, uid: Optional[int]) -> tuple:
+    """
+    Επιλύει (EmailAccount, CrmEmail, uid) ΜΟΝΟ εντός της πρόσβασης του χρήστη.
+
+    Fail closed: ξένο ή ανύπαρκτο CrmEmail/EmailAccount δίνει Http404 —
+    ίδια εξωτερική συμπεριφορά, χωρίς να αποκαλύπτεται η ύπαρξή τους και
+    χωρίς να ανοίγει ποτέ IMAP σύνδεση.
+    """
     ea = eml = err = None
     if object_id:   # crmemail.id
-        eml = CrmEmail.objects.get(id=object_id)
+        eml = get_object_or_404(CrmEmail, id=object_id)
         uid = eml.uid
-        ea = EmailAccount.objects.filter(email_host_user=eml.email_host_user).first()
+        # Το mailbox είναι ο πραγματικός πόρος: η πρόσβαση κρίνεται στο
+        # EmailAccount του μηνύματος, όχι στο ίδιο το CrmEmail.
+        ea = get_accessible_email_account_or_404(
+            user, email_host_user=eml.email_host_user)
     elif ea_id:
-        ea = EmailAccount.objects.get(id=ea_id)
+        ea = get_accessible_email_account_or_404(user, id=ea_id)
     if not ea:
         err = OBJ_DOESNT_EXIT_STR.format(
             EmailAccount._meta.verbose_name, ea_id  # NOQA

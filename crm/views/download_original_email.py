@@ -4,10 +4,12 @@ from django.http import HttpResponse
 from django.utils.encoding import escape_uri_path
 from django.utils.translation import gettext
 
+from django.shortcuts import get_object_or_404
+
 from crm.models import CrmEmail
 from crm.utils.helpers import ensure_decoding
 from crm.utils.helpers import get_crmimap
-from massmail.models import EmailAccount
+from common.utils.email_account_access import get_accessible_email_account_or_404
 
 err_msg = gettext('Not enough data to identify the email or email has been deleted')
 
@@ -15,10 +17,13 @@ err_msg = gettext('Not enough data to identify the email or email has been delet
 def download_original_email(request: WSGIRequest, object_id: int) -> HttpResponse:
     """Downloads original email from IMAP server by uid or message_id."""
 
-    crm_email = CrmEmail.objects.get(id=object_id)
-    ea = EmailAccount.objects.get(
+    crm_email = get_object_or_404(CrmEmail, id=object_id)
+    # Έλεγχος ιδιοκτησίας mailbox ΠΡΙΝ από κάθε IMAP σύνδεση/ανάκτηση.
+    # Ξένο ή ανύπαρκτο account -> Http404 (fail closed, χωρίς αποκάλυψη).
+    ea = get_accessible_email_account_or_404(
+        request.user,
         imap_host=crm_email.imap_host,
-        email_host_user=crm_email.email_host_user
+        email_host_user=crm_email.email_host_user,
     )
     crmimap = get_crmimap(ea, 'INBOX')
     if crmimap is None:
