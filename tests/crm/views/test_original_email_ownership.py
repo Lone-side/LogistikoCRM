@@ -266,6 +266,110 @@ class OriginalEmailOwnershipTest(BaseTestCase):
 
 
 @tag('TestCase')
+class MailboxIdentityDisambiguationTest(BaseTestCase):
+    """
+    Δύο EmailAccount με ΤΟ ΙΔΙΟ email_host_user σε ΔΙΑΦΟΡΕΤΙΚΟ imap_host.
+
+    Το `email_host_user` δεν είναι μοναδικό: η ίδια διεύθυνση μπορεί να
+    υπάρχει σε δύο IMAP hosts. Lookup μόνο με email_host_user + `.first()`
+    θα επέλεγε αυθαίρετο mailbox — δηλαδή δυνητικά ΞΕΝΟ mailbox, ή το
+    λάθος mailbox του ίδιου χρήστη. Το lookup πρέπει να χρησιμοποιεί
+    ΚΑΙ τα δύο πεδία ταυτότητας (imap_host + email_host_user).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.owner = USER_MODEL.objects.get(username="Andrew.Manager.Global")
+        global_sales = Group.objects.get(pk=GLOBAL_SALES)
+        shared_address = "shared@example.com"
+
+        # Account A — ο mailbox στον οποίο ανήκει πραγματικά το CrmEmail
+        cls.ea_a = EmailAccount.objects.create(
+            name="Mailbox A", email_host="smtp-a.example.com",
+            imap_host="imap-a.example.com", email_host_user=shared_address,
+            email_host_password="x", email_port=465,
+            from_email=shared_address, owner=cls.owner,
+            department=global_sales, main=True,
+        )
+        # Account B — ίδια διεύθυνση, ΑΛΛΟΣ IMAP host
+        cls.ea_b = EmailAccount.objects.create(
+            name="Mailbox B", email_host="smtp-b.example.com",
+            imap_host="imap-b.example.com", email_host_user=shared_address,
+            email_host_password="x", email_port=465,
+            from_email=shared_address, owner=cls.owner,
+            department=global_sales, main=False,
+        )
+        # Το μήνυμα ανήκει ΡΗΤΑ στον host του account B
+        cls.eml_on_b = CrmEmail.objects.create(
+            subject="On host B", content="body", uid=7,
+            imap_host="imap-b.example.com", email_host_user=shared_address,
+            # ίδιο Message-ID με το RAW_EML ώστε το update_eml_uid να μη
+            # χρειάζεται IMAP search (δεν είναι αντικείμενο αυτού του test)
+            message_id="<mid-owner@example.com>", incoming=True,
+            owner=cls.owner, department=global_sales,
+        )
+
+    def setUp(self):
+        print("Run Test Method:", self._testMethodName)
+
+    def test_resolver_picks_account_matching_imap_host(self):
+        from crm.views.view_original_email import get_ea_eml_uid
+        ea, eml, uid, err = get_ea_eml_uid(
+            self.owner, self.eml_on_b.id, None, None)
+        self.assertFalse(err)
+        self.assertEqual(
+            ea.pk, self.ea_b.pk,
+            'Επιλέχθηκε λάθος mailbox: το lookup πρέπει να χρησιμοποιεί '
+            'imap_host ΚΑΙ email_host_user, όχι μόνο τη διεύθυνση.')
+        self.assertEqual(ea.imap_host, self.eml_on_b.imap_host)
+
+    def test_view_opens_imap_on_correct_account(self):
+        """Η IMAP σύνδεση ανοίγει στο account του σωστού host."""
+        self.client.force_login(self.owner)
+        url = reverse('view_original_email', args=(self.eml_on_b.id,))
+        with patch('crm.views.view_original_email.get_crmimap') as gci:
+            gci.return_value = _imap_ok_mock(7)
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200, response.reason_phrase)
+        gci.assert_called_once()
+        self.assertEqual(gci.call_args[0][0].pk, self.ea_b.pk)
+        self.assertEqual(gci.call_args[0][0].imap_host, "imap-b.example.com")
+
+    def test_download_opens_imap_on_correct_account(self):
+        self.client.force_login(self.owner)
+        url = reverse('download_original_email', args=(self.eml_on_b.id,))
+        with patch('crm.views.download_original_email.get_crmimap') as gci:
+            crmimap = _imap_ok_mock(7)
+            crmimap.uid_fetch.return_value = ('OK', [(b'1 (UID 7', RAW_EML)], '')
+            gci.return_value = crmimap
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200, response.reason_phrase)
+        gci.assert_called_once()
+        self.assertEqual(gci.call_args[0][0].pk, self.ea_b.pk)
+
+    def test_foreign_host_account_not_reachable_via_message(self):
+        """
+        Αν το ταίριασμα γίνει με σκέτη τη διεύθυνση, ένα μήνυμα θα μπορούσε
+        να ανοίξει mailbox που ανήκει σε ΑΛΛΟΝ χρήστη με την ίδια
+        διεύθυνση. Εδώ το account B περνά σε ξένο owner: το μήνυμα του
+        host B δεν πρέπει πια να είναι προσβάσιμο από τον owner του A.
+        """
+        stranger = USER_MODEL.objects.get(
+            username="Masha.Co-worker.Bookkeeping")
+        self.ea_b.owner = stranger
+        self.ea_b.department = Group.objects.get(pk=BOOKKEEPING)
+        self.ea_b.save(update_fields=['owner', 'department'])
+
+        self.client.force_login(self.owner)
+        url = reverse('view_original_email', args=(self.eml_on_b.id,))
+        with patch('crm.views.view_original_email.get_crmimap') as gci:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 404, response.reason_phrase)
+        gci.assert_not_called()
+
+
+@tag('TestCase')
 class OriginalEmailPreFixRegressionTest(BaseTestCase):
     """
     Αποδεικνύει τη ΔΙΑΦΟΡΑ πριν/μετά το fix.

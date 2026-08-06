@@ -120,8 +120,15 @@ def get_ea_eml_uid(user, object_id: int, ea_id, uid: Optional[int]) -> tuple:
         uid = eml.uid
         # Το mailbox είναι ο πραγματικός πόρος: η πρόσβαση κρίνεται στο
         # EmailAccount του μηνύματος, όχι στο ίδιο το CrmEmail.
+        # Το lookup απαιτεί ΚΑΙ τα δύο πεδία ταυτότητας του mailbox: το
+        # email_host_user από μόνο του δεν είναι μοναδικό (ίδια διεύθυνση
+        # μπορεί να υπάρχει σε δύο IMAP hosts) και το .first() θα επέλεγε
+        # αυθαίρετα λάθος mailbox. Ίδιο ζεύγος με το download view.
         ea = get_accessible_email_account_or_404(
-            user, email_host_user=eml.email_host_user)
+            user,
+            imap_host=eml.imap_host,
+            email_host_user=eml.email_host_user,
+        )
     elif ea_id:
         ea = get_accessible_email_account_or_404(user, id=ea_id)
     if not ea:
