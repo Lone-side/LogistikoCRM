@@ -530,6 +530,7 @@ celery -A webcrm worker -l info
 | `CHANGELOG.md` | Ιστορικό αλλαγών |
 | `setup.cfg` | Linting/testing config |
 | `.env.example` | Παράδειγμα environment |
+| `SECURITY_EXCEPTIONS.md` | Γνωστά advisories που παραμένουν ανοιχτά + σκεπτικό |
 
 ---
 
