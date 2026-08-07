@@ -932,6 +932,15 @@ ADMIN_DATA = [
                 'add_url': '/en/456-admin/accounting/voipcall/add/',
             },
             {
+                'model': django_apps.get_model('accounting', 'ClientCredential'),
+                'name': 'Κωδικοί Πελατών',
+                'object_name': 'ClientCredential',
+                'perms': {'add': True, 'change': True, 'delete': True, 'view': True},
+                'admin_url': '/en/456-admin/accounting/clientcredential/',
+                'view_only': False,
+                'add_url': '/en/456-admin/accounting/clientcredential/add/',
+            },
+            {
                 'model': django_apps.get_model('accounting', 'MonthlyObligation'),
                 'name': 'Μηνιαίες Υποχρεώσεις',
                 'object_name': 'MonthlyObligation',
