@@ -46,7 +46,7 @@ geoip2>=4.7.0
 
 # Security & Environment
 python-dotenv>=1.0.0  # .env file support
-cryptography>=46.0.6  # Για encryption αν χρειαστεί — ελάχιστη ασφαλής έκδοση (pip-audit 07/2026)
+cryptography>=50.0.0  # Fernet (mydata/encryption.py) — ελάχιστη ασφαλής έκδοση (PYSEC-2026-3552, pip-audit 08/2026)
 # Ελάχιστες ασφαλείς εκδόσεις transitive dependencies (pip-audit 07/2026)
 PyJWT>=2.13.0  # χρησιμοποιείται από djangorestframework-simplejwt
 urllib3>=2.7.0

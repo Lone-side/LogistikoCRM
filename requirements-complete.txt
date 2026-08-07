@@ -51,7 +51,7 @@ maxminddb==2.8.2
 
 # Security & Environment
 python-dotenv>=1.0.0
-cryptography>=41.0.7
+cryptography>=50.0.0  # PYSEC-2026-3552
 
 # Utilities
 python-dateutil==2.9.0.post0
