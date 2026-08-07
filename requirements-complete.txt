@@ -22,6 +22,7 @@ drf-spectacular>=0.27.0  # OpenAPI/Swagger docs
 # Async Tasks & Background Jobs
 celery>=5.3.4
 redis>=5.0.1
+django-redis>=5.4.0  # Cache/session backend όταν έχει οριστεί REDIS_CACHE_URL
 django-q2>=1.6.0  # Django 5.x compatible
 tendo==0.3.0  # Singleton instance control
 
@@ -56,7 +57,7 @@ maxminddb==2.8.2
 
 # Security & Environment
 python-dotenv>=1.0.0
-cryptography>=41.0.7
+cryptography>=50.0.0  # PYSEC-2026-3552
 
 # Utilities
 python-dateutil==2.9.0.post0
