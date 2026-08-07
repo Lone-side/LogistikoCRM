@@ -30,6 +30,12 @@ MEDIA_SUFFIX = '.tar.gz'
 # το BACKUP_PREFIX ώστε να μην επιλέγονται ποτέ από --latest/--list.
 PARTIAL_PREFIX = 'partial_crm_db_'
 
+# Πόσα ημιτελή backups κρατάμε. Επειδή δεν μετρούν στον κανονικό καθαρισμό
+# (δεν ταιριάζουν με το BACKUP_PREFIX), μια επαναλαμβανόμενη αποτυχία media
+# θα γέμιζε τον δίσκο με partial_* για πάντα. Κρατάμε τα 3 νεότερα: αρκετά
+# για διάγνωση, όχι αρκετά για να γεμίσει ο δίσκος.
+MAX_PARTIAL_BACKUPS = 3
+
 
 def default_backup_dir():
     """Ο προεπιλεγμένος φάκελος backup (κοινός με το restore_database)."""
@@ -120,8 +126,27 @@ class Command(BaseCommand):
             backup_path.rename(partial)
         except OSError:
             backup_path.unlink(missing_ok=True)
+            self._prune_partials(backup_path.parent)
             return backup_path
+        self._prune_partials(partial.parent)
         return partial
+
+    def _prune_partials(self, backup_dir):
+        """
+        Κρατά μόνο τα MAX_PARTIAL_BACKUPS νεότερα partial_*.
+
+        Τα ημιτελή backups δεν περνούν από τον κανονικό καθαρισμό (σκόπιμα —
+        δεν πρέπει να μετρούν στα «30 τελευταία» καλά backups), οπότε χωρίς
+        αυτό μια μόνιμη αποτυχία των media θα γέμιζε τον δίσκο.
+        """
+        partials = sorted(
+            [p for p in backup_dir.iterdir()
+             if p.name.startswith(PARTIAL_PREFIX)],
+            key=lambda p: p.stat().st_mtime,
+        )
+        for old in partials[:-MAX_PARTIAL_BACKUPS] if MAX_PARTIAL_BACKUPS else partials:
+            old.unlink(missing_ok=True)
+            self.stdout.write(f'🗑️ Διαγράφηκε παλιό ημιτελές backup: {old.name}')
 
     def _backup_sqlite(self, db, backup_dir, timestamp):
         db_path = Path(db['NAME'])

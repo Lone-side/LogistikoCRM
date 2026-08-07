@@ -54,6 +54,25 @@ class MediaArchiveError(Exception):
     """Το media archive λείπει, είναι κατεστραμμένο ή μη ασφαλές."""
 
 
+class _NoPreviousMedia:
+    """
+    Sentinel: το swap έγινε, αλλά ΔΕΝ υπήρχαν προηγούμενα media.
+
+    Χρειάζεται ξεχωριστή τιμή από το `None` γιατί τα δύο σενάρια θέλουν
+    αντίθετο rollback:
+      * `None`  → το swap δεν έτρεξε ποτέ· μην αγγίξεις τα media.
+      * sentinel → το swap έβαλε ΝΕΑ media εκεί που δεν υπήρχε τίποτα· το
+        rollback πρέπει να τα **αφαιρέσει**, αλλιώς μένουν πίσω media που
+        δεν αντιστοιχούν στη βάση μετά το rollback.
+    """
+
+    def __repr__(self):  # pragma: no cover — μόνο για διαγνωστικά
+        return '<NO_PREVIOUS_MEDIA>'
+
+
+NO_PREVIOUS_MEDIA = _NoPreviousMedia()
+
+
 class Command(BaseCommand):
     help = 'Επαναφορά βάσης δεδομένων και media από backup.'
 
@@ -134,14 +153,19 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('✅ Η βάση επαναφέρθηκε'))
 
             # --- 3. Ό,τι αποτύχει από εδώ και πέρα → rollback ΚΑΙ των δύο.
-            previous_media = None
+            #
+            # Το media_state γεμίζει ΜΕΣΑ στο _swap_media, όχι από την τιμή
+            # επιστροφής: αν το swap σκάσει στη μέση, η επιστροφή δεν γίνεται
+            # ποτέ και το rollback πρέπει παρ' όλα αυτά να ξέρει τι είχε ήδη
+            # μετακινηθεί.
+            media_state = {}
             try:
                 if staged_media is not None:
-                    previous_media = self._swap_media(staged_media)
+                    self._swap_media(staged_media, media_state)
                     self.stdout.write(
                         self.style.SUCCESS('✅ Τα media επαναφέρθηκαν'))
             except Exception as exc:  # noqa: BLE001
-                self._rollback_all(safety, previous_media, exc)
+                self._rollback_all(safety, media_state.get('previous'), exc)
         finally:
             if staging_root is not None:
                 shutil.rmtree(staging_root, ignore_errors=True)
@@ -254,10 +278,13 @@ class Command(BaseCommand):
                 # filter='data' (Python 3.11.4+): δεύτερη γραμμή άμυνας πάνω
                 # από τη ρητή επικύρωση — αγνοεί devices/symlinks και
                 # απορρίπτει paths εκτός προορισμού.
-                try:
-                    tar.extractall(path=staging_root, filter='data')
-                except TypeError:  # pragma: no cover — παλαιότερη Python
-                    tar.extractall(path=staging_root)
+                #
+                # ΧΩΡΙΣ fallback σε unfiltered extractall: σε παλιά Python το
+                # σωστό είναι να αποτύχει η εντολή (fail closed), όχι να
+                # αποσυμπιέσει χωρίς προστασία. Ένα backup που δεν έγινε
+                # restore είναι πρόβλημα· ένα archive που γράφει έξω από το
+                # MEDIA_ROOT είναι παραβίαση.
+                tar.extractall(path=staging_root, filter='data')
         except Exception as exc:  # noqa: BLE001
             shutil.rmtree(staging_root, ignore_errors=True)
             raise CommandError(
@@ -408,7 +435,39 @@ class Command(BaseCommand):
 
     def _restore_sqlite(self, db, db_file):
         connections.close_all()
-        shutil.copy2(db_file, Path(db['NAME']))
+        try:
+            self._atomic_copy(db_file, Path(db['NAME']))
+        except OSError as exc:
+            # Χάρη στο temp file + os.replace, η υπάρχουσα βάση δεν έχει
+            # αγγιχτεί καθόλου — το μήνυμα το λέει ρητά αντί να αφήσει
+            # γυμνό OSError στον χειριστή.
+            raise CommandError(
+                f'Η επαναφορά της βάσης απέτυχε: {exc}\n'
+                f'Η υπάρχουσα βάση ΔΕΝ άλλαξε (ατομική αντικατάσταση).'
+            ) from exc
+
+    def _atomic_copy(self, source, target):
+        """
+        Αντιγραφή αρχείου βάσης χωρίς ενδιάμεση «μισή» κατάσταση.
+
+        Το `shutil.copy2` απευθείας πάνω στη ζωντανή βάση την τρυπάει: αν ο
+        δίσκος γεμίσει ή το backup είναι κομμένο, το αρχείο έχει ήδη
+        αντικατασταθεί μερικώς και η προηγούμενη βάση έχει χαθεί. Γράφουμε
+        πρώτα σε προσωρινό αρχείο **στον ίδιο φάκελο** (άρα ίδιο filesystem)
+        και μετά `os.replace`, που είναι ατομικό: ή βλέπεις την παλιά βάση ή
+        την καινούργια, ποτέ κάτι ενδιάμεσο.
+        """
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f'.{target.name}.restore_', dir=str(target.parent))
+        os.close(fd)
+        tmp_path = Path(tmp_name)
+        try:
+            shutil.copy2(source, tmp_path)
+            os.replace(tmp_path, target)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     def _restore_postgres(self, db, db_file):
         pg_restore = shutil.which('pg_restore')
@@ -441,31 +500,33 @@ class Command(BaseCommand):
     # Media swap + rollback
     # ------------------------------------------------------------------ #
 
-    def _swap_media(self, staged_media):
+    def _swap_media(self, staged_media, state):
         """
         Ατομική αντικατάσταση του MEDIA_ROOT από τον staged φάκελο.
 
-        Επιστρέφει τη διαδρομή των προηγούμενων media (ή None αν δεν
-        υπήρχαν), ώστε να είναι δυνατό το rollback.
+        Καταγράφει στο `state['previous']` τι βρέθηκε πριν το swap:
+        διαδρομή των παλιών media, ή `NO_PREVIOUS_MEDIA` αν δεν υπήρχαν.
+        Το state ενημερώνεται **πριν** από κάθε επικίνδυνη κίνηση, ώστε το
+        rollback να ξέρει την πραγματική κατάσταση ακόμη κι αν σκάσουμε στη μέση.
         """
         media_root = Path(settings.MEDIA_ROOT)
-        previous = None
+        previous = NO_PREVIOUS_MEDIA
         if media_root.exists():
             stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             previous = (
                 media_root.parent / f'{media_root.name}_before_restore_{stamp}')
             shutil.move(str(media_root), str(previous))
             self.stdout.write(f'📋 Τα τρέχοντα media φυλάχθηκαν στο: {previous}')
+        state['previous'] = previous
         try:
             shutil.move(str(staged_media), str(media_root))
         except Exception:
             # Το rename απέτυχε: γύρνα αμέσως τα προηγούμενα στη θέση τους
             # ώστε ο φάκελος media να μη μείνει ανύπαρκτος.
-            if previous is not None and not media_root.exists():
+            if previous is not NO_PREVIOUS_MEDIA and not media_root.exists():
                 shutil.move(str(previous), str(media_root))
-                previous = None
+                state['previous'] = None
             raise
-        return previous
 
     def _rollback_all(self, safety, previous_media, original_exc):
         """
@@ -478,7 +539,18 @@ class Command(BaseCommand):
         problems = []
 
         media_root = Path(settings.MEDIA_ROOT)
-        if previous_media is not None:
+        if previous_media is NO_PREVIOUS_MEDIA:
+            # Δεν υπήρχαν media πριν την επαναφορά: το rollback σημαίνει
+            # «ξαναφτιάξε το τίποτα». Αν αφήναμε τα νέα media, η βάση θα
+            # γύριζε πίσω αλλά τα αρχεία όχι — ακριβώς η ασυμφωνία που
+            # προσπαθούμε να αποτρέψουμε.
+            try:
+                if media_root.exists():
+                    shutil.rmtree(media_root)
+            except Exception as exc:  # noqa: BLE001
+                problems.append(
+                    f'τα νέα media δεν αφαιρέθηκαν από το {media_root} ({exc})')
+        elif previous_media is not None:
             try:
                 if media_root.exists():
                     shutil.rmtree(media_root, ignore_errors=True)
@@ -515,7 +587,7 @@ class Command(BaseCommand):
         db = settings.DATABASES['default']
         connections.close_all()
         if kind == 'sqlite':
-            shutil.copy2(safety_path, Path(db['NAME']))
+            self._atomic_copy(safety_path, Path(db['NAME']))
             return
         pg_restore = shutil.which('pg_restore')
         if not pg_restore:

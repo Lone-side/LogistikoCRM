@@ -401,6 +401,181 @@ class BackupRestoreContractTests(SimpleTestCase):
         self.assertEqual(doc.read_text(encoding='utf-8'), 'ΤΡΕΧΟΝ ΠΕΡΙΕΧΟΜΕΝΟ')
 
 
+    # ------------- retention ημιτελών backups --------------------------- #
+
+    def test_partial_backups_are_capped(self):
+        """
+        Τα partial_* δεν περνούν από τον κανονικό καθαρισμό (σκόπιμα), οπότε
+        χωρίς δικό τους όριο μια μόνιμη αποτυχία των media γεμίζει τον δίσκο.
+        """
+        from accounting.management.commands.backup_database import (
+            MAX_PARTIAL_BACKUPS,
+        )
+
+        for i in range(MAX_PARTIAL_BACKUPS + 3):
+            with mock.patch(
+                'accounting.management.commands.backup_database.subprocess.run',
+                return_value=_FakeProc(1, 'tar failed'),
+            ):
+                with self.assertRaises(CommandError):
+                    self._backup()
+            # Διαφορετικό mtime ανά αρχείο ώστε η σειρά «νεότερα» να ορίζεται.
+            for p in self.backup_dir.glob('partial_crm_db_*'):
+                os.utime(p, (1_000_000 + i, 1_000_000 + i))
+
+        partials = list(self.backup_dir.glob('partial_crm_db_*'))
+        self.assertLessEqual(
+            len(partials), MAX_PARTIAL_BACKUPS,
+            f'συσσωρεύτηκαν {len(partials)} ημιτελή backups')
+
+    # ------------- ατομική επαναφορά SQLite ----------------------------- #
+
+    def test_sqlite_restore_is_atomic_on_copy_failure(self):
+        """
+        Αποτυχία στη μέση της αντιγραφής δεν πρέπει να αφήνει μισή βάση.
+
+        Με απευθείας copy2 πάνω στο ζωντανό αρχείο, ένας γεμάτος δίσκος
+        αφήνει κατεστραμμένη βάση ΚΑΙ χωρίς επιστροφή. Με temp file +
+        os.replace, το αρχείο ή είναι το παλιό ή το νέο.
+        """
+        self._backup('--skip-media')
+
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ')")
+        conn.commit()
+        conn.close()
+        before = sorted(r[0] for r in self._rows())
+        size_before = self.db_path.stat().st_size
+
+        real_copy2 = shutil.copy2
+
+        def copy_that_fails_on_restore_temp(src, dst, *a, **kw):
+            if '.restore_' in str(dst):
+                raise OSError('προσομοιωμένος γεμάτος δίσκος')
+            return real_copy2(src, dst, *a, **kw)
+
+        with mock.patch(
+            'accounting.management.commands.restore_database.shutil.copy2',
+            side_effect=copy_that_fails_on_restore_temp,
+        ):
+            with self.assertRaises(CommandError):
+                self._restore('--latest', '--skip-media')
+
+        self.assertEqual(sorted(r[0] for r in self._rows()), before,
+                         'η βάση άλλαξε παρότι η αντιγραφή απέτυχε')
+        self.assertEqual(self.db_path.stat().st_size, size_before)
+        leftovers = list(self.tmp.glob('.test_db.sqlite3.restore_*'))
+        self.assertEqual(leftovers, [], f'έμεινε προσωρινό αρχείο: {leftovers}')
+
+    # ------------- sentinel: δεν υπήρχαν προηγούμενα media --------------- #
+
+    def test_rollback_removes_new_media_when_none_existed_before(self):
+        """
+        Αν δεν υπήρχαν media πριν, το rollback πρέπει να τα ΑΦΑΙΡΕΣΕΙ.
+
+        Με σκέτο `None` για «δεν υπήρχαν προηγούμενα», το rollback δεν
+        ξεχώριζε αυτή την περίπτωση από το «το swap δεν έτρεξε ποτέ» και
+        άφηνε πίσω media που δεν αντιστοιχούν στη βάση μετά το rollback.
+        """
+        from accounting.management.commands.restore_database import (
+            Command as RestoreCommand,
+        )
+
+        self._backup()
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ ΤΟ BACKUP')")
+        conn.commit()
+        conn.close()
+        db_before = sorted(r[0] for r in self._rows())
+
+        # Καμία προηγούμενη κατάσταση media.
+        shutil.rmtree(self.media)
+
+        real_swap = RestoreCommand._swap_media
+
+        def swap_then_fail(cmd, staged_media, state):
+            real_swap(cmd, staged_media, state)
+            raise OSError('προσομοιωμένη αποτυχία μετά το swap')
+
+        with mock.patch.object(RestoreCommand, '_swap_media', swap_then_fail):
+            with self.assertRaises(CommandError) as ctx:
+                self._restore('--latest')
+
+        self.assertIn('rollback', str(ctx.exception).lower())
+        self.assertFalse(
+            self.media.exists(),
+            'το rollback άφησε πίσω media ενώ πριν δεν υπήρχαν')
+        self.assertEqual(sorted(r[0] for r in self._rows()), db_before,
+                         'η βάση δεν επανήλθε')
+
+    def test_rollback_distinguishes_no_previous_media_from_no_swap(self):
+        """
+        Το ουσιώδες του sentinel: δύο καταστάσεις, αντίθετο rollback.
+
+        Άμεσος έλεγχος στο _rollback_all γιατί μόνο έτσι φαίνεται ότι το
+        `None` («το swap δεν έτρεξε») και το NO_PREVIOUS_MEDIA («έτρεξε, αλλά
+        δεν υπήρχαν προηγούμενα») δεν είναι πια η ίδια τιμή.
+        """
+        from accounting.management.commands.restore_database import (
+            NO_PREVIOUS_MEDIA, Command as RestoreCommand,
+        )
+
+        cmd = RestoreCommand()
+        cmd.stdout = StringIO()
+        exc = OSError('αποτυχία')
+
+        # (α) Το swap δεν έτρεξε ποτέ → τα media μένουν ως έχουν.
+        with override_settings(MEDIA_ROOT=str(self.media),
+                               DATABASES=_sqlite_settings(self.db_path)):
+            with self.assertRaises(CommandError):
+                cmd._rollback_all(('sqlite', None), None, exc)
+        self.assertTrue(self.media.exists(),
+                        'το rollback έσβησε media που δεν είχε αγγίξει')
+
+        # (β) Το swap έβαλε νέα media εκεί που δεν υπήρχε τίποτα → αφαίρεση.
+        with override_settings(MEDIA_ROOT=str(self.media),
+                               DATABASES=_sqlite_settings(self.db_path)):
+            with self.assertRaises(CommandError):
+                cmd._rollback_all(('sqlite', None), NO_PREVIOUS_MEDIA, exc)
+        self.assertFalse(self.media.exists(),
+                         'τα νέα media έμειναν πίσω μετά το rollback')
+
+    # ------------- fail closed αντί για unfiltered extractall ----------- #
+
+    def test_extraction_fails_closed_without_tar_filter(self):
+        """
+        Χωρίς υποστήριξη `filter='data'` η εντολή ΠΡΕΠΕΙ να αποτύχει.
+
+        Το παλιό fallback έπιανε το TypeError και ξανακαλούσε το extractall
+        χωρίς φίλτρο — δηλαδή ακριβώς η ανασφαλής αποσυμπίεση, σιωπηλά.
+        Το side_effect εδώ αποτυγχάνει μόνο στην πρώτη κλήση: αν υπήρχε
+        fallback, η δεύτερη θα πετύχαινε και η εντολή θα τερμάτιζε κανονικά.
+        """
+        self._backup()
+        doc = self.media / 'clients' / 'τιμολόγιο.txt'
+        doc.write_text('ΤΡΕΧΟΝ', encoding='utf-8')
+
+        real_extractall = tarfile.TarFile.extractall
+        calls = []
+
+        def extractall_without_filter(tar_self, *a, **kw):
+            calls.append(kw)
+            if len(calls) == 1:
+                raise TypeError("extractall() got an unexpected keyword "
+                                "argument 'filter'")
+            return real_extractall(tar_self, *a, **kw)
+
+        with mock.patch.object(tarfile.TarFile, 'extractall',
+                               extractall_without_filter):
+            with self.assertRaises(CommandError):
+                self._restore('--latest')
+
+        self.assertEqual(len(calls), 1,
+                         'έγινε δεύτερη, αφιλτράριστη αποσυμπίεση')
+        self.assertEqual(doc.read_text(encoding='utf-8'), 'ΤΡΕΧΟΝ',
+                         'τα media άλλαξαν παρά την αποτυχία')
+
+
 class _FakeProc:
     """Ελάχιστο stand-in για CompletedProcess."""
 
