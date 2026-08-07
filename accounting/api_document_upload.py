@@ -113,7 +113,7 @@ def check_existing_document(request):
                     'category': existing.document_category,
                     'uploaded_at': existing.uploaded_at.strftime('%d/%m/%Y %H:%M'),
                     'uploaded_by': existing.uploaded_by.get_full_name() if existing.uploaded_by else None,
-                    'url': signed_media_url(existing.file) if existing.file else None,
+                    'url': signed_media_url(existing.file, request) if existing.file else None,
                 }
             })
         else:
@@ -244,7 +244,7 @@ def upload_document_with_version(request):
                 'success': False,
                 'action': 'exists',
                 'message': 'Υπάρχει ήδη αρχείο για αυτόν τον συνδυασμό',
-                'existing_document': _document_to_dict(existing),
+                'existing_document': _document_to_dict(existing, request),
                 'requires_decision': True,
             }, status=409)  # Conflict
 
@@ -285,7 +285,7 @@ def upload_document_with_version(request):
             'success': True,
             'action': action,
             'message': message,
-            'document': _document_to_dict(new_doc),
+            'document': _document_to_dict(new_doc, request),
         }
         if action == 'new_version':
             response['previous_version'] = previous_version
@@ -345,7 +345,7 @@ def document_preview(request, document_id):
         'file_type': document.file_type,
         'preview_type': preview_type,
         'can_preview': can_preview,
-        'url': signed_media_url(document.file) if document.file else None,
+        'url': signed_media_url(document.file, request) if document.file else None,
         'file_size': document.file_size,
         'file_size_display': document.file_size_display,
         'uploaded_at': document.uploaded_at.strftime('%d/%m/%Y %H:%M'),
@@ -358,7 +358,7 @@ def document_preview(request, document_id):
 # HELPER FUNCTIONS
 # =============================================================================
 
-def _document_to_dict(doc):
+def _document_to_dict(doc, request=None):
     """Convert ClientDocument to dictionary for JSON response"""
     return {
         'id': doc.id,
@@ -372,7 +372,7 @@ def _document_to_dict(doc):
         'month': doc.month,
         'version': doc.version,
         'is_current': doc.is_current,
-        'url': signed_media_url(doc.file) if doc.file else None,
+        'url': signed_media_url(doc.file, request) if doc.file else None,
         # ΟΧΙ folder_path/file.path: absolute filesystem paths δεν εκτίθενται
         # σε JSON, και το file.path δεν υπάρχει σε μη-local storage backends
         'uploaded_at': doc.uploaded_at.strftime('%d/%m/%Y %H:%M'),

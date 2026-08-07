@@ -25,6 +25,7 @@ from crm.utils.import_emails import get_email_headers_page
 from crm.utils.import_emails import parse_message_bytes
 from crm.site.crmadminsite import crm_site
 from massmail.models import EmailAccount
+from common.utils.email_account_access import get_accessible_email_account_or_404
 
 
 @csrf_protect
@@ -35,7 +36,10 @@ def select_emails_import(request: WSGIRequest):
             ea_id = int(data.pop('ea_id')[0])
         except (KeyError, ValueError):
             return HttpResponseBadRequest('Invalid "ea_id" parameter.')
-        ea = get_object_or_404(EmailAccount, id=ea_id)
+        # Ίδια ευπάθεια ιδιοκτησίας με τα original-email views: το ea_id
+        # έρχεται από τον client και ακολουθούν IMAP delete/spam/seen.
+        # Έλεγχος ΠΡΙΝ από κάθε IMAP πρόσβαση, fail closed (404).
+        ea = get_accessible_email_account_or_404(request.user, id=ea_id)
         data.pop('csrfmiddlewaretoken', None)
         action_list = data.pop('action', None)
         if not action_list:
@@ -71,7 +75,8 @@ def select_emails_import(request: WSGIRequest):
         ea_id = request.GET.get('ea')
         if ea_id and not ea_id.isdigit():
             return HttpResponseBadRequest('Invalid "ea" parameter.')
-        ea = get_object_or_404(EmailAccount, id=ea_id) if ea_id else None
+        ea = get_accessible_email_account_or_404(
+            request.user, id=ea_id) if ea_id else None
         if not ea:
             q_params = Q(owner=request.user) | Q(co_owner=request.user)
             q_params = q_params & Q(do_import=True)

@@ -9,7 +9,7 @@ from django.utils.translation import gettext as _
 from crm.models import Request
 from crm.site.crmadminsite import crm_site
 from massmail.forms.radio_select_form import RadioSelectForm
-from massmail.models import EmailAccount
+from common.utils.email_account_access import accessible_email_accounts
 
 
 def select_email_account(request: WSGIRequest):
@@ -25,7 +25,9 @@ def select_email_account(request: WSGIRequest):
         if not ids_str:
             return HttpResponseBadRequest('The "eas" parameter is required.')
         ids = ids_str.split(',')
-        eas = EmailAccount.objects.filter(
+        # Τα ids έρχονται από query string: περιορισμός στα accounts του
+        # χρήστη ώστε να μη διαρρέουν ονόματα ξένων mailboxes.
+        eas = accessible_email_accounts(request.user).filter(
             id__in=ids
         ).distinct().order_by('name').values_list('id', 'name')
         form = RadioSelectForm(eas)

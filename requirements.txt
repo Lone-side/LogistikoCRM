@@ -24,6 +24,7 @@ drf-spectacular>=0.27.0  # OpenAPI schema generation
 # Async Tasks & Queue
 celery>=5.3.4
 redis>=5.0.1  # Celery broker
+django-redis>=5.4.0  # Cache/session backend όταν έχει οριστεί REDIS_CACHE_URL
 django-q2>=1.6.0  # Django 5.0+ compatible (fork of django-q)
 tendo>=0.3.0  # Singleton instance control
 
@@ -31,8 +32,12 @@ tendo>=0.3.0  # Singleton instance control
 openpyxl>=3.1.2  # Excel export/import
 Pillow>=10.1.0  # Image processing
 python-magic>=0.4.27  # File type validation (SECURITY)
-pypdf>=4.0  # Εξαγωγή κειμένου από ψηφιακά PDF (αρχειοθέτηση/αναζήτηση)
-xhtml2pdf>=0.2.11  # PDF report generation (Windows compatible)
+# ⚠️ ΚΑΡΦΩΜΕΝΕΣ ΕΚΔΟΣΕΙΣ — ΜΗΝ ΤΙΣ ΧΑΛΑΡΩΣΕΙΣ ΧΩΡΙΣ ΕΛΕΓΧΟ ΕΛΛΗΝΙΚΩΝ.
+# Το pypdf 6.15.0 εξάγει το ελληνικό «Δ» (U+0394) ως «∆» (U+2206, INCREMENT),
+# οπότε κάθε αναζήτηση σε έγγραφο με Δ (ΔΗΛΩΣΗ, ΔΟΥ, ΑΔΕΙΑ…) γυρίζει κενή.
+# Το 6.14.2 είναι σωστό. Regression test: tests/accounting/test_pdf_greek_extraction.py
+pypdf==6.14.2  # Εξαγωγή κειμένου από ψηφιακά PDF (αρχειοθέτηση/αναζήτηση)
+xhtml2pdf==0.2.17  # PDF report generation (Windows compatible)
 XlsxWriter>=3.2.0  # Excel writing
 pandas>=2.0.0  # Data analysis
 numpy>=1.24.0  # Numerical computing
