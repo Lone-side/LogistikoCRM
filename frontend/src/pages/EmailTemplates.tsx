@@ -41,6 +41,7 @@ import {
 import { useObligationTypes } from '../hooks/useObligations';
 import { useClients } from '../hooks/useClients';
 import type { EmailTemplate, EmailLog } from '../types';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 // Available variables for templates
 const TEMPLATE_VARIABLES = [
@@ -557,7 +558,7 @@ function EmailHistoryTab() {
                 </label>
                 <div
                   className="p-4 bg-slate-50 rounded-lg prose prose-sm max-w-none max-h-64 overflow-y-auto"
-                  dangerouslySetInnerHTML={{ __html: selectedEmail.body }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedEmail.body) }}
                 />
               </div>
             )}
@@ -892,7 +893,7 @@ function EmailTemplatesTab() {
               </label>
               <div
                 className="p-4 bg-slate-50 rounded-lg prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: previewContent.body }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewContent.body) }}
               />
             </div>
             <div className="flex justify-end pt-4 border-t border-slate-200">
