@@ -77,8 +77,15 @@ SITE_URL=https://crm.example.gr
 ## Backups
 
 - Αυτόματο backup βάσης καθημερινά 02:00 (Celery beat → `backup_database`), στο volume `backups_volume` (`/app/backups`).
-- PostgreSQL: χρησιμοποιείται `pg_dump --format=custom` (αρχεία `.pgdump`). Επαναφορά: `pg_restore -d logistikocrm crm_db_<ts>.pgdump`
+- Μαζί με τη βάση γίνεται backup και των media (`crm_media_<ts>.tar.gz`) — τα έγγραφα πελατών. Παράλειψη με `--skip-media`.
+- PostgreSQL: χρησιμοποιείται `pg_dump --format=custom` (αρχεία `.pgdump`).
 - Χειροκίνητο: `docker compose -f docker-compose.prod.yml exec web python manage.py backup_database`
+- Επαναφορά (βάση + media, με αντίγραφο ασφαλείας του τρέχοντος πριν την αντικατάσταση):
+  ```bash
+  docker compose -f docker-compose.prod.yml exec web python manage.py restore_database --list
+  docker compose -f docker-compose.prod.yml exec web python manage.py restore_database --latest
+  ```
+- ⚠️ **Δοκίμασε την επαναφορά σε staging πριν τη χρειαστείς στα αλήθεια** — ένα backup που δεν έχει επαναφερθεί ποτέ δεν είναι backup.
 - ⚠️ Κράτα αντίγραφα των volumes `media_volume` και `backups_volume` και **εκτός** server (rsync/rclone).
 
 ## Ενημέρωση σε νέα έκδοση

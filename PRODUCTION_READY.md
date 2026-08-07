@@ -73,22 +73,35 @@
 
 **Management Commands**:
 ```bash
-# Backup
+# Backup (default: BASE_DIR/backups)
 python manage.py backup_database --output-dir /backups
 
-# Restore
-python manage.py restore_database backup_20241126_143022
+# Δες τι υπάρχει διαθέσιμο
+python manage.py restore_database --list --backup-dir /backups
+
+# Restore — με timestamp, με όνομα αρχείου, ή το πιο πρόσφατο
+python manage.py restore_database 20260807_134442 --backup-dir /backups
+python manage.py restore_database --latest --backup-dir /backups
 ```
+
+**Παραγόμενα αρχεία** (backup και restore μοιράζονται τα ίδια ονόματα):
+- `crm_db_{timestamp}.backup` — SQLite (αντίγραφο αρχείου)
+- `crm_db_{timestamp}.pgdump` — PostgreSQL (`pg_dump --format=custom`)
+- `crm_media_{timestamp}.tar.gz` — media αρχεία (παράλειψη με `--skip-media`)
 
 **Features**:
 - PostgreSQL & SQLite support
 - Database + media files backup
-- Automatic cleanup (30 days)
+- Πριν από κάθε επαναφορά κρατείται αντίγραφο της τρέχουσας βάσης/media
+  (`*.before_restore_*`), ώστε λάθος επαναφορά να είναι αναστρέψιμη
+- Guard: SQLite backup δεν επαναφέρεται σε PostgreSQL και αντίστροφα
+- Automatic cleanup (τελευταία 30, ή `--keep-days N`) — τα media tarballs
+  διαγράφονται μαζί με το αντίστοιχο backup βάσης
 - Cron script: `scripts/backup_cron.sh`
 
 **Files**:
-- `common/management/commands/backup_database.py`
-- `common/management/commands/restore_database.py`
+- `accounting/management/commands/backup_database.py`
+- `accounting/management/commands/restore_database.py`
 
 ### 2. Audit Trail System
 

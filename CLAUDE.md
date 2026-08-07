@@ -76,7 +76,7 @@ Backlog skills (θα γραφτούν όταν αγγίξουμε τα αντί�
 2. ~~Dashboard αναβάθμιση~~ ✅ (PR #163)
 3. ~~myDATA αποστολή τιμολογίων~~ ✅ (επίσημο XML συμβόλαιο, tab «Τιμολόγια», admin action, tests/mydata)
 4. ~~Frontend tests~~ ✅ (vitest + React Testing Library, `npm test` και στο CI)
-5. **myDATA sandbox δοκιμή** — end-to-end υποβολή σε mydataapidev με πραγματικά credentials (χειροκίνητο βήμα)
+5. **myDATA sandbox δοκιμή** — end-to-end υποβολή σε mydataapidev με πραγματικά credentials (χειροκίνητο βήμα· runbook: `docs/MYDATA_SANDBOX_TEST.md`)
 
 ---
 
