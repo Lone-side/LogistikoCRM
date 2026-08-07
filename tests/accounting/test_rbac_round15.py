@@ -148,11 +148,12 @@ class TheFileAuthTest(TestCase):
         resp = c.get('/media/' + self.rel_path)
         self.assertEqual(resp.status_code, 404)
 
-    def test_generic_token_does_not_bypass(self):
+    def test_token_of_other_department_user_does_not_bypass(self):
+        # Το token ταυτοποιεί χρήστη· η πολιτική τρέχει κανονικά γι' αυτόν.
         from common.utils.media_tokens import make_media_token
         c = SecureClient()
         resp = c.get('/media/' + self.rel_path,
-                     {'mt': make_media_token(self.rel_path)})
+                     {'mt': make_media_token(self.rel_path, self.other_dept)})
         self.assertEqual(resp.status_code, 404)
 
 

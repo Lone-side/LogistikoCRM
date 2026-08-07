@@ -250,16 +250,19 @@ class ProtectedMediaAuthTest(Round14Base):
         with self.assertRaises(Http404):
             self._serve(self.foreign_doc.file.name, user=assistant)
 
-    def test_generic_media_token_does_not_bypass_assignment(self):
-        token = make_media_token(self.foreign_doc.file.name)
-        # Ανώνυμος με έγκυρο path-token → 403 (τα client docs θέλουν χρήστη)
-        with self.assertRaises(DjangoPermissionDenied):
-            self._serve(self.foreign_doc.file.name, token=token)
-        # Authenticated αλλά εκτός ανάθεσης, με token → 404
+    def test_media_token_does_not_bypass_assignment(self):
+        # Το token ταυτοποιεί χρήστη· ΔΕΝ παραχωρεί πρόσβαση. Token
+        # δεμένο σε χρήστη εκτός ανάθεσης → 404 ακόμη και χωρίς session.
         user = make_perm_user('media_tok', ['view_clientdocument'],
                               [self.client_profile])
+        token = make_media_token(self.foreign_doc.file.name, user)
+        with self.assertRaises(Http404):
+            self._serve(self.foreign_doc.file.name, token=token)
         with self.assertRaises(Http404):
             self._serve(self.foreign_doc.file.name, user=user, token=token)
+        # Άκυρο token χωρίς session → κανένας χρήστης → 403
+        with self.assertRaises(DjangoPermissionDenied):
+            self._serve(self.foreign_doc.file.name, token='garbage')
 
     def test_session_without_model_perm_denied(self):
         user = make_perm_user('media_noperm', [], [self.client_profile])
@@ -294,8 +297,9 @@ class ProtectedMediaAuthTest(Round14Base):
         plain = User.objects.create_user('media_plain', password='x')
         with self.assertRaises(Http404):
             self._serve(the_file.file.name, user=plain)
-        # Ο γενικός token επίσης δεν παρακάμπτει (fail closed)
-        token = make_media_token(the_file.file.name)
+        # Το token επίσης δεν παρακάμπτει (fail closed): ταυτοποιεί τον
+        # χρήστη και η CRM object-level πολιτική τρέχει κανονικά γι' αυτόν.
+        token = make_media_token(the_file.file.name, plain)
         with self.assertRaises(Http404):
             self._serve(the_file.file.name, token=token)
 

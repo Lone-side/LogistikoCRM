@@ -1,4 +1,10 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import {
+  clearTokens,
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+} from '../utils/tokenStorage';
 
 // Σε production build (πίσω από nginx) το API είναι same-origin στο /accounting.
 // Σε development ο Vite dev server (5173) μιλά απευθείας στο Django (8000).
@@ -17,7 +23,10 @@ export const apiClient = axios.create({
 // Request interceptor to add JWT token
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('accessToken');
+    // ΚΑΙ ΤΑ ΔΥΟ storages: με «να με θυμάσαι» κλειστό το token ζει στο
+    // sessionStorage — παλιότερα διαβαζόταν μόνο το localStorage και οι
+    // κλήσεις έφευγαν χωρίς Authorization header.
+    const token = getAccessToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -39,7 +48,7 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
+        const refreshToken = getRefreshToken();
         if (refreshToken) {
           const response = await axios.post(`${API_BASE_URL}/api/auth/refresh/`, {
             refresh: refreshToken,
@@ -48,7 +57,7 @@ apiClient.interceptors.response.use(
           });
 
           const { access } = response.data;
-          localStorage.setItem('accessToken', access);
+          setAccessToken(access);
 
           // Retry the original request with new token
           if (originalRequest.headers) {
@@ -58,8 +67,7 @@ apiClient.interceptors.response.use(
         }
       } catch (refreshError) {
         // Refresh failed, clear tokens and redirect to login
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        clearTokens();
         window.location.href = '/login';
         return Promise.reject(refreshError);
       }
@@ -660,7 +668,7 @@ export const backupApi = {
 
   // Download backup - returns blob URL
   getDownloadUrl: (id: number): string => {
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     return `${API_BASE_URL}/api/settings/backup/${id}/download/?token=${token}`;
   },
 

@@ -22,8 +22,8 @@ from accounting.models import ClientProfile
 from common.models import TheFile
 from common.utils.media_tokens import (
     make_media_token,
+    resolve_media_token,
     signed_media_url,
-    verify_media_token,
 )
 
 TEMP_MEDIA = tempfile.mkdtemp(prefix='test_media_')
@@ -84,9 +84,48 @@ class ProtectedMediaViewTest(TestCase):
         resp = self.client.get(self._url())
         self.assertEqual(resp.status_code, 404)
 
-    def test_generic_token_does_not_serve_client_doc(self):
-        # Ο γενικός signed token ΔΕΝ παρακάμπτει πλέον το client scoping
-        token = make_media_token(self.rel_path)
+    def test_token_of_unauthorized_user_does_not_serve_client_doc(self):
+        # Το token ΔΕΝ είναι bearer: ταυτοποιεί χρήστη και το authorization
+        # τρέχει κανονικά. Χρήστης χωρίς view_clientdocument → 404.
+        noperm = self._user('tok_noperm', [])
+        token = make_media_token(self.rel_path, noperm)
+        resp = self.client.get(self._url(), {'mt': token})
+        self.assertEqual(resp.status_code, 404)
+
+    @override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+    def test_token_of_unassigned_user_does_not_serve_client_doc(self):
+        # Σωστό permission αλλά ΧΩΡΙΣ ανάθεση στον πελάτη → 404.
+        # Απαιτεί ENFORCE_CLIENT_ASSIGNMENT: αλλιώς το client scoping
+        # είναι εξ ορισμού ανενεργό και κάθε χρήστης βλέπει τα πάντα.
+        outsider = self._user('tok_outsider', ['view_clientdocument'],
+                              assign=False)
+        token = make_media_token(self.rel_path, outsider)
+        resp = self.client.get(self._url(), {'mt': token})
+        self.assertEqual(resp.status_code, 404)
+
+    def test_garbage_token_anonymous_denied(self):
+        # Άκυρο/userless token → κανένας effective χρήστης → 403
+        resp = self.client.get(self._url(), {'mt': 'garbage'})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_authorized_user_token_serves_without_session(self):
+        # ΤΟ ΚΡΙΣΙΜΟ: JWT-only client (χωρίς Django session) ανοίγει
+        # preview/νέα καρτέλα μέσω του signed URL του API.
+        user = self._user('tok_ok', ['view_clientdocument'])
+        token = make_media_token(self.rel_path, user)
+        resp = self.client.get(self._url(), {'mt': token})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_token_is_bound_to_its_path(self):
+        user = self._user('tok_path', ['view_clientdocument'])
+        token = make_media_token('clients/other/file.pdf', user)
+        resp = self.client.get(self._url(), {'mt': token})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_token_of_deactivated_user_denied(self):
+        user = self._user('tok_inactive', ['view_clientdocument'])
+        token = make_media_token(self.rel_path, user)
+        User.objects.filter(pk=user.pk).update(is_active=False)
         resp = self.client.get(self._url(), {'mt': token})
         self.assertEqual(resp.status_code, 403)
 
@@ -151,8 +190,11 @@ class CrmFileMediaTest(TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_crm_file_token_denied(self):
-        resp = self.client.get(self._url(),
-                               {'mt': make_media_token(self.rel_path)})
+        # Token ταυτοποιεί χρήστη· η CRM object-level πολιτική τρέχει
+        # κανονικά και fail-closed χωρίς role flags → 404.
+        plain = User.objects.create_user('crm_tok', 'crm@t.com', 'pass12345')
+        resp = self.client.get(
+            self._url(), {'mt': make_media_token(self.rel_path, plain)})
         self.assertEqual(resp.status_code, 404)
 
     def test_crm_file_anonymous_denied(self):
@@ -167,22 +209,50 @@ class CrmFileMediaTest(TestCase):
 
 
 class MediaTokenTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user('tok', 'tok@t.com', 'pass12345')
+
     def test_roundtrip(self):
-        token = make_media_token('a/b/γ.pdf')
-        self.assertTrue(verify_media_token(token, 'a/b/γ.pdf'))
-        self.assertFalse(verify_media_token(token, 'a/b/other.pdf'))
-        self.assertFalse(verify_media_token('garbage', 'a/b/γ.pdf'))
+        token = make_media_token('a/b/γ.pdf', self.user)
+        self.assertEqual(
+            resolve_media_token(token, 'a/b/γ.pdf'), self.user.pk)
+        self.assertIsNone(resolve_media_token(token, 'a/b/other.pdf'))
+        self.assertIsNone(resolve_media_token('garbage', 'a/b/γ.pdf'))
+        self.assertIsNone(resolve_media_token('', 'a/b/γ.pdf'))
+
+    def test_userless_token_is_rejected(self):
+        # Token παλιάς μορφής (μόνο path) δεν ταυτοποιεί χρήστη → fail closed
+        from django.core import signing
+        from common.utils.media_tokens import MEDIA_TOKEN_SALT
+        legacy = signing.dumps({'p': 'a/b/γ.pdf'}, salt=MEDIA_TOKEN_SALT)
+        self.assertIsNone(resolve_media_token(legacy, 'a/b/γ.pdf'))
+
+    def test_make_token_requires_user(self):
+        with self.assertRaises(ValueError):
+            make_media_token('a/b/γ.pdf', None)
 
     def test_signed_media_url_contains_token(self):
         class FakeField:
             name = 'clients/x/file.pdf'
             url = '/media/clients/x/file.pdf'
 
-        url = signed_media_url(FakeField())
+        url = signed_media_url(FakeField(), user=self.user)
         self.assertIn('/media/clients/x/file.pdf?mt=', url)
         token = url.split('mt=')[1]
         from urllib.parse import unquote
-        self.assertTrue(verify_media_token(unquote(token), 'clients/x/file.pdf'))
+        self.assertEqual(
+            resolve_media_token(unquote(token), 'clients/x/file.pdf'),
+            self.user.pk)
+
+    def test_signed_media_url_without_user_has_no_token(self):
+        # Fail closed: χωρίς χρήστη δεν παράγεται token που θα δούλευε
+        # για οποιονδήποτε — το URL θα απαιτήσει session.
+        class FakeField:
+            name = 'clients/x/file.pdf'
+            url = '/media/clients/x/file.pdf'
+
+        self.assertEqual(signed_media_url(FakeField()),
+                         '/media/clients/x/file.pdf')
 
     def test_signed_media_url_none(self):
         self.assertIsNone(signed_media_url(None))

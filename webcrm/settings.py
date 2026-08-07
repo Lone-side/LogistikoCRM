@@ -1,5 +1,6 @@
 ﻿import sys
 import os
+import warnings
 from pathlib import Path
 from datetime import datetime as dt
 from django.utils.translation import gettext_lazy as _
@@ -646,8 +647,14 @@ AUTO_CLIENT_OBLIGATION_PROFILE = None  # Βάλε το όνομα του default
 
 
 # ==================== CELERY CONFIG ====================
-CELERY_BROKER_URL = 'redis://localhost:6379'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379'
+# Ο broker/backend διαβάζεται από το περιβάλλον ώστε σε Docker/production
+# να δείχνει στο redis service. Προτεραιότητα:
+#   CELERY_BROKER_URL -> REDIS_URL -> localhost (development default)
+# ΠΡΟΣΟΧΗ: hardcoded 'redis://localhost:6379' σημαίνει ότι σε container ο
+# worker δεν βρίσκει ποτέ τον broker (timeouts, tasks δεν εκτελούνται).
+_REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', _REDIS_URL)
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', _REDIS_URL)
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -722,11 +729,32 @@ VOIP_ALLOW_LOCALHOST = os.environ.get(
 # 📦 CACHING CONFIGURATION
 # ==============================================================================
 # Redis cache for improved performance (uses same Redis as Celery)
-REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', 'redis://localhost:6379/1')
+#
+# Η επιλογή backend γίνεται από το ΠΕΡΙΒΑΛΛΟΝ, ΟΧΙ από την παρουσία του
+# πακέτου: παλιότερα ένα σκέτο `import django_redis` αρκούσε για να στραφεί
+# το cache (και τα sessions) σε Redis — ακόμη και σε μηχάνημα χωρίς Redis,
+# όπου κάθε cache/session λειτουργία απλώς αποτύγχανε.
+# Τώρα: Redis μόνο όταν έχει οριστεί ρητά REDIS_CACHE_URL (Docker/production).
+# Αλλιώς database cache, που δουλεύει παντού (dev, CI, χωρίς Redis).
+REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', '')
 
-# Try to use Redis, fallback to database cache
-try:
-    import django_redis  # noqa: F401
+# Στα tests ΠΟΤΕ Redis: ο TestCase κάνει rollback τη βάση αλλά ΟΧΙ το Redis,
+# οπότε cache/session/throttle counters θα διέρρεαν μεταξύ tests και θα
+# έκαναν order-dependent flaky ό,τι βασίζεται σε cache (π.χ. DRF throttling).
+_use_redis_cache = bool(REDIS_CACHE_URL) and not TESTING
+if _use_redis_cache:
+    try:
+        import django_redis  # noqa: F401
+    except ImportError:
+        _use_redis_cache = False
+        warnings.warn(
+            'REDIS_CACHE_URL έχει οριστεί αλλά το django-redis δεν είναι '
+            'εγκατεστημένο — fallback σε database cache. Εγκατέστησε το '
+            'django-redis (βλ. requirements.txt).',
+            RuntimeWarning,
+        )
+
+if _use_redis_cache:
     CACHES = {
         'default': {
             'BACKEND': 'django_redis.cache.RedisCache',
@@ -743,8 +771,9 @@ try:
     # Use Redis for sessions too (faster)
     SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
     SESSION_CACHE_ALIAS = 'default'
-except ImportError:
-    # Fallback to database cache if django-redis not installed
+else:
+    # Database cache: δουλεύει χωρίς Redis. Απαιτεί `manage.py
+    # createcachetable` — εκτελείται στο startup του production compose.
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.db.DatabaseCache',

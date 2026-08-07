@@ -12,6 +12,11 @@
 
 x-django-env: &django-env
   DEBUG: "False"
+  # Το manage.py φορτώνει webcrm.settings_local, που χωρίς DJANGO_ENV
+  # πέφτει στο development branch (DEBUG=True, ALLOWED_HOSTS=*, χωρίς
+  # secure cookies/HSTS) και παρακάμπτει τα production fail-closed guards.
+  # Το wsgi.py/celery.py φορτώνουν webcrm.settings και δεν επηρεάζονται.
+  DJANGO_ENV: production
   SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
   DB_ENGINE: django.db.backends.postgresql
   DB_NAME: ${DB_NAME:-logistikocrm}
@@ -88,6 +93,7 @@ services:
         condition: service_healthy
     command: >
       sh -c "python manage.py migrate --noinput &&
+             python manage.py createcachetable &&
              gunicorn webcrm.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/health/\")'"]
