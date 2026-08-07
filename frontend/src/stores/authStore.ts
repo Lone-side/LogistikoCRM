@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthTokens } from '../types';
 import { authApi } from '../api/client';
+import {
+  clearTokens,
+  setAccessToken,
+  setTokens as persistTokens,
+} from '../utils/tokenStorage';
 
 interface AuthState {
   user: User | null;
@@ -21,8 +26,8 @@ interface AuthState {
   checkAuth: () => Promise<boolean>;
 }
 
-// Helper function to get storage based on rememberMe setting
-const getStorage = (rememberMe: boolean) => rememberMe ? localStorage : sessionStorage;
+// Η αποθήκευση των tokens γίνεται αποκλειστικά μέσω του tokenStorage
+// helper, ώστε γράψιμο και ανάγνωση (axios interceptor) να συμφωνούν.
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -40,21 +45,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await authApi.login(username, password);
 
-          // Store tokens in appropriate storage
-          const storage = getStorage(rememberMe);
-          storage.setItem('accessToken', response.access);
-          storage.setItem('refreshToken', response.refresh);
-          storage.setItem('rememberMe', String(rememberMe));
-
-          // Also ensure localStorage is used by persist middleware if rememberMe
-          if (rememberMe) {
-            localStorage.setItem('accessToken', response.access);
-            localStorage.setItem('refreshToken', response.refresh);
-          } else {
-            // Clear localStorage if not remembering
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-          }
+          // rememberMe -> localStorage, αλλιώς sessionStorage. Ο helper
+          // καθαρίζει το άλλο storage ώστε να μη μείνει stale token.
+          persistTokens(response.access, response.refresh, rememberMe);
 
           set({
             accessToken: response.access,
@@ -79,13 +72,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
-        // Clear both storages
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('rememberMe');
-        sessionStorage.removeItem('accessToken');
-        sessionStorage.removeItem('refreshToken');
-        sessionStorage.removeItem('rememberMe');
+        clearTokens();
         set({
           user: null,
           accessToken: null,
@@ -101,8 +88,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setTokens: (tokens: AuthTokens) => {
-        localStorage.setItem('accessToken', tokens.access);
-        localStorage.setItem('refreshToken', tokens.refresh);
+        persistTokens(tokens.access, tokens.refresh, get().rememberMe);
         set({
           accessToken: tokens.access,
           refreshToken: tokens.refresh,
@@ -142,7 +128,7 @@ export const useAuthStore = create<AuthState>()(
           if (refreshToken) {
             try {
               const newTokens = await authApi.refreshToken(refreshToken);
-              localStorage.setItem('accessToken', newTokens.access);
+              setAccessToken(newTokens.access);
 
               // Also fetch user info after refresh
               try {

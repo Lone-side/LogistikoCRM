@@ -27,17 +27,19 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404, HttpResponse
 
-def can_access_thefile(request, the_file):
+def can_access_thefile(request, the_file, user=None):
     """
     Object-level access policy για CRM συνημμένα (common.TheFile), βάσει
     του πραγματικού content_object (owner/department/co_owner) μέσω της
     canonical CRM πολιτικής `clarify_permission`.
 
     Fail closed: μη authenticated χρήστης, dangling GenericForeignKey, ή
-    content_object που δεν υποστηρίζει την πολιτική → False. Ο γενικός
-    `?mt=` token ΔΕΝ δίνει πρόσβαση σε CRM attachment.
+    content_object που δεν υποστηρίζει την πολιτική → False. Ο `?mt=`
+    token ΔΕΝ παραχωρεί πρόσβαση — απλώς ταυτοποιεί τον χρήστη, και η
+    πολιτική εκτελείται κανονικά για αυτόν.
     """
-    user = getattr(request, 'user', None)
+    if user is None:
+        user = getattr(request, 'user', None)
     if not (user and user.is_authenticated and user.is_active):
         return False
     if user.is_superuser:
@@ -51,11 +53,72 @@ def can_access_thefile(request, the_file):
         return False
     try:
         from crm.utils.clarify_permission import clarify_permission
-        return bool(clarify_permission(request, obj))
+        return bool(clarify_permission(_RequestForUser(request, user), obj))
     except AttributeError:
         # content_object χωρίς owner/department ή request χωρίς role flags
         # (π.χ. χωρίς το middleware) → fail closed
         return False
+
+
+class _RequestForUser:
+    """
+    Ελαφρύ shim ώστε το `clarify_permission` να κρίνει τον ΠΡΑΓΜΑΤΙΚΟ
+    χρήστη του αιτήματος, ακόμη κι όταν αυτός προκύπτει από ?mt= token
+    και όχι από session (οπότε το `request.user` είναι anonymous).
+
+    Τα role flags (is_chief/is_superoperator/is_operator/department_id)
+    τα θέτει το UserMiddleware μόνο σε session requests. Για token-based
+    χρήστη δεν υπάρχουν, οπότε δίνονται **False/None** — δηλαδή fail
+    closed: τα privileged shortcuts δεν ενεργοποιούνται ποτέ μέσω token,
+    και μένει μόνο ο έλεγχος owner/co_owner.
+    """
+
+    __slots__ = ('_request', 'user')
+
+    def __init__(self, request, user):
+        self._request = request
+        self.user = _UserWithDefaultRoleFlags(user)
+
+    def __getattr__(self, item):
+        return getattr(self._request, item)
+
+
+class _UserWithDefaultRoleFlags:
+    """Proxy χρήστη με ασφαλή defaults για τα role flags του middleware."""
+
+    _DEFAULTS = {
+        'is_chief': False,
+        'is_superoperator': False,
+        'is_operator': False,
+        'is_manager': False,
+        'is_accountant': False,
+        'is_task_operator': False,
+        'is_department_head': False,
+        'department_id': None,
+    }
+
+    __slots__ = ('_user',)
+
+    def __init__(self, user):
+        object.__setattr__(self, '_user', user)
+
+    def __getattr__(self, item):
+        user = object.__getattribute__(self, '_user')
+        try:
+            return getattr(user, item)
+        except AttributeError:
+            if item in _UserWithDefaultRoleFlags._DEFAULTS:
+                return _UserWithDefaultRoleFlags._DEFAULTS[item]
+            raise
+
+    def __eq__(self, other):
+        user = object.__getattribute__(self, '_user')
+        if isinstance(other, _UserWithDefaultRoleFlags):
+            other = object.__getattribute__(other, '_user')
+        return user == other
+
+    def __hash__(self):
+        return hash(object.__getattribute__(self, '_user'))
 
 
 def _resolve_media_path(path):
@@ -80,6 +143,31 @@ def _canonical_storage_name(path, full_path):
     return full_path.relative_to(media_root).as_posix()
 
 
+def _effective_user(request, storage_name):
+    """
+    Ο χρήστης για λογαριασμό του οποίου γίνεται το αίτημα.
+
+    Προτεραιότητα στο session (`request.user`). Αν δεν υπάρχει session —
+    η τυπική περίπτωση του React frontend, όπου το JWT ζει σε storage και
+    ΔΕΝ στέλνεται σε <img src>/<a href>/window.open — χρησιμοποιείται ο
+    χρήστης του `?mt=` token, εφόσον το token είναι έγκυρο ΓΙΑ ΑΥΤΟ το
+    path και ο χρήστης είναι ακόμη ενεργός.
+
+    Το token ΔΕΝ παραχωρεί πρόσβαση: το authorization τρέχει κανονικά
+    για τον χρήστη που επιστρέφεται.
+    """
+    user = getattr(request, 'user', None)
+    if user is not None and user.is_authenticated and user.is_active:
+        return user
+    token = request.GET.get('mt') if hasattr(request, 'GET') else None
+    if token:
+        from common.utils.media_tokens import token_user
+        resolved = token_user(token, storage_name)
+        if resolved is not None:
+            return resolved
+    return user
+
+
 def _authorize(request, storage_name):
     """
     Document-aware authorization. Επιστρέφει σιωπηλά αν επιτρέπεται,
@@ -91,7 +179,7 @@ def _authorize(request, storage_name):
         accessible_documents, accessible_obligations,
     )
 
-    user = getattr(request, 'user', None)
+    user = _effective_user(request, storage_name)
     authenticated = bool(user and user.is_authenticated and user.is_active)
 
     doc = ClientDocument.objects.filter(file=storage_name).only('id').first()
@@ -123,10 +211,11 @@ def _authorize(request, storage_name):
     )
     if crm_file is not None:
         # CRM συνημμένα: object-level authorization βάσει του πραγματικού
-        # content_object. Ο γενικός ?mt= token ΔΕΝ παρακάμπτει πλέον την
-        # πολιτική. 404 (όχι 403) για μη-πρόσβαση ώστε να μην αποκαλύπτεται
-        # η ύπαρξη του αρχείου.
-        if not can_access_thefile(request, crm_file):
+        # content_object. Το ?mt= token ΔΕΝ παρακάμπτει την πολιτική —
+        # ταυτοποιεί χρήστη και η πολιτική τρέχει κανονικά γι' αυτόν.
+        # 404 (όχι 403) για μη-πρόσβαση ώστε να μην αποκαλύπτεται η
+        # ύπαρξη του αρχείου.
+        if not can_access_thefile(request, crm_file, user=user):
             raise Http404
         return
 
