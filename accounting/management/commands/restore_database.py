@@ -25,6 +25,11 @@ from accounting.management.commands.backup_database import (
     BACKUP_PREFIX, DB_SUFFIXES, MEDIA_PREFIX, MEDIA_SUFFIX, default_backup_dir,
 )
 
+# Πρόθεμα των αντιγράφων ασφαλείας που παίρνονται ΠΡΙΝ από κάθε επαναφορά.
+# Σκόπιμα διαφορετικό από το BACKUP_PREFIX ώστε ένα safety dump να μη
+# γίνεται ποτέ υποψήφιο για --latest ή για τον καθαρισμό του backup_database.
+SAFETY_PREFIX = 'pre_restore_'
+
 
 class Command(BaseCommand):
     help = 'Επαναφορά βάσης δεδομένων και media από backup.'
@@ -94,14 +99,18 @@ class Command(BaseCommand):
         if not options['skip_media']:
             media_file = backup_dir / f'{MEDIA_PREFIX}{timestamp}{MEDIA_SUFFIX}'
             if media_file.exists():
+                # Αποτυχία media = αποτυχία εντολής. Προηγουμένως έβγαινε
+                # warning και exit 0: το cron/ο operator έβλεπε «επιτυχία»
+                # ενώ τα έγγραφα πελατών δεν είχαν επανέλθει.
                 try:
                     self._restore_media(media_file)
                 except Exception as exc:  # noqa: BLE001
-                    self.stderr.write(self.style.WARNING(
-                        f'⚠️ Η επαναφορά των media απέτυχε: {exc}'
-                    ))
-                else:
-                    self.stdout.write(self.style.SUCCESS('✅ Τα media επαναφέρθηκαν'))
+                    raise CommandError(
+                        f'❌ Η επαναφορά των media απέτυχε: {exc}\n'
+                        f'Η ΒΑΣΗ έχει ήδη επαναφερθεί από το {db_file.name} — '
+                        f'βάση και media είναι πλέον ασύγχρονα.'
+                    ) from exc
+                self.stdout.write(self.style.SUCCESS('✅ Τα media επαναφέρθηκαν'))
             else:
                 self.stdout.write(
                     f'ℹ️ Δεν υπάρχει media backup για το {timestamp} — παραλείπεται.'
@@ -191,6 +200,59 @@ class Command(BaseCommand):
 
         shutil.copy2(db_file, db_path)
 
+    def _pg_conn_args(self, db):
+        """Κοινά ορίσματα σύνδεσης για pg_dump/pg_restore."""
+        args = []
+        if db.get('HOST'):
+            args.append(f"--host={db['HOST']}")
+        if db.get('PORT'):
+            args.append(f"--port={db['PORT']}")
+        if db.get('USER'):
+            args.append(f"--username={db['USER']}")
+        return args
+
+    def _pg_env(self, db):
+        env = os.environ.copy()
+        if db.get('PASSWORD'):
+            env['PGPASSWORD'] = db['PASSWORD']
+        return env
+
+    def _safety_dump_postgres(self, db, db_file):
+        """
+        ΠΡΑΓΜΑΤΙΚΟ pg_dump της τρέχουσας βάσης πριν την επαναφορά.
+
+        Χωρίς αυτό, ένα αποτυχημένο `pg_restore --clean` αφήνει τη βάση
+        άδεια ΚΑΙ χωρίς επιστροφή: τα drop έχουν ήδη εκτελεστεί. Αν το
+        dump αποτύχει, η επαναφορά ΔΕΝ ξεκινά καθόλου (abort) — καλύτερα
+        να μη γίνει restore παρά να γίνει χωρίς δίχτυ.
+        """
+        pg_dump = shutil.which('pg_dump')
+        if not pg_dump:
+            raise CommandError(
+                'Δεν βρέθηκε το pg_dump — δεν μπορεί να ληφθεί αντίγραφο '
+                'ασφαλείας της τρέχουσας βάσης. Η επαναφορά ματαιώνεται.'
+            )
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safety = db_file.parent / f'{SAFETY_PREFIX}{stamp}.pgdump'
+        cmd = [pg_dump, '--format=custom', f'--file={safety}']
+        cmd += self._pg_conn_args(db)
+        cmd.append(db['NAME'])
+
+        result = subprocess.run(
+            cmd, env=self._pg_env(db), capture_output=True, text=True,
+            timeout=1800,
+        )
+        if result.returncode != 0:
+            safety.unlink(missing_ok=True)
+            raise CommandError(
+                'Το αντίγραφο ασφαλείας της τρέχουσας βάσης απέτυχε — η '
+                f'επαναφορά ΜΑΤΑΙΩΘΗΚΕ, η βάση δεν άλλαξε.\n{result.stderr.strip()}'
+            )
+        self.stdout.write(
+            f'📋 Αντίγραφο ασφαλείας τρέχουσας βάσης: {safety}'
+        )
+        return safety
+
     def _restore_postgres(self, db, db_file):
         pg_restore = shutil.which('pg_restore')
         if not pg_restore:
@@ -199,28 +261,40 @@ class Command(BaseCommand):
             )
         connections.close_all()
 
-        cmd = [pg_restore, '--clean', '--if-exists', '--format=custom',
-               f"--dbname={db['NAME']}"]
-        if db.get('HOST'):
-            cmd.append(f"--host={db['HOST']}")
-        if db.get('PORT'):
-            cmd.append(f"--port={db['PORT']}")
-        if db.get('USER'):
-            cmd.append(f"--username={db['USER']}")
+        # 1) Δίχτυ ασφαλείας ΠΡΙΝ αγγίξουμε οτιδήποτε.
+        safety = self._safety_dump_postgres(db, db_file)
+
+        # 2) --single-transaction: ή περνούν όλα, ή τίποτα. Χωρίς αυτό ένα
+        #    σφάλμα στη μέση αφήνει τη βάση μισοεπαναφερμένη. Συνεπάγεται
+        #    --exit-on-error, οπότε δεν «προσπερνά» σιωπηλά σφάλματα.
+        cmd = [pg_restore, '--clean', '--if-exists', '--single-transaction',
+               '--format=custom', f"--dbname={db['NAME']}"]
+        cmd += self._pg_conn_args(db)
         cmd.append(str(db_file))
 
-        env = os.environ.copy()
-        if db.get('PASSWORD'):
-            env['PGPASSWORD'] = db['PASSWORD']
-
         result = subprocess.run(
-            cmd, env=env, capture_output=True, text=True, timeout=3600
+            cmd, env=self._pg_env(db), capture_output=True, text=True,
+            timeout=3600,
         )
         if result.returncode != 0:
-            raise CommandError(f'Το pg_restore απέτυχε: {result.stderr.strip()}')
+            raise CommandError(
+                f'Το pg_restore απέτυχε — λόγω --single-transaction η βάση '
+                f'έμεινε στην προηγούμενη κατάστασή της (rollback).\n'
+                f'Αντίγραφο ασφαλείας: {safety}\n{result.stderr.strip()}'
+            )
+        return safety
 
     def _restore_media(self, media_file):
+        """
+        Επαναφορά media με rollback.
+
+        Τα τρέχοντα media μετακινούνται στην άκρη πριν την αποσυμπίεση. Αν
+        το tar αποτύχει, επαναφέρονται στη θέση τους — αλλιώς μια αποτυχία
+        θα άφηνε το γραφείο ΧΩΡΙΣ τα έγγραφα πελατών, ούτε τα παλιά ούτε
+        τα νέα.
+        """
         media_root = Path(settings.MEDIA_ROOT)
+        safety = None
 
         if media_root.exists():
             stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -230,8 +304,36 @@ class Command(BaseCommand):
 
         media_root.parent.mkdir(parents=True, exist_ok=True)
         cmd = ['tar', '-xzf', str(media_file), '-C', str(media_root.parent)]
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=3600
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=3600
+            )
+            failure = (
+                result.stderr.strip() if result.returncode != 0 else None
+            )
+        except Exception as exc:  # noqa: BLE001 — και το timeout θέλει rollback
+            failure = str(exc)
+
+        if failure is None:
+            return
+
+        # --- rollback ---
+        rolled_back = False
+        if safety is not None:
+            try:
+                if media_root.exists():
+                    shutil.rmtree(media_root, ignore_errors=True)
+                shutil.move(str(safety), str(media_root))
+                rolled_back = True
+            except Exception as rollback_exc:  # noqa: BLE001
+                raise RuntimeError(
+                    f'Η αποσυμπίεση tar απέτυχε ({failure}) ΚΑΙ το rollback '
+                    f'των media απέτυχε ({rollback_exc}). Τα προηγούμενα '
+                    f'media βρίσκονται στο {safety} — χειροκίνητη επαναφορά.'
+                ) from rollback_exc
+
+        suffix = (
+            ' Τα προηγούμενα media επαναφέρθηκαν στη θέση τους.'
+            if rolled_back else ''
         )
-        if result.returncode != 0:
-            raise RuntimeError(f'Η αποσυμπίεση tar απέτυχε: {result.stderr.strip()}')
+        raise RuntimeError(f'Η αποσυμπίεση tar απέτυχε: {failure}.{suffix}')

@@ -12,14 +12,20 @@ Tests για το ζεύγος backup_database / restore_database.
 MEDIA_ROOT μέσω override_settings, ώστε να μην αγγίζουν την πραγματική
 βάση των tests (που στο CI είναι PostgreSQL).
 """
+import os
 import shutil
 import sqlite3
+import subprocess
 import tempfile
+import unittest
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
+from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 from django.test import SimpleTestCase, override_settings
 
 
@@ -189,3 +195,236 @@ class BackupRestoreContractTests(SimpleTestCase):
 
         self.assertFalse(old_db.exists(), 'το παλιό backup βάσης έμεινε')
         self.assertFalse(old_media.exists(), 'το media tarball έμεινε ορφανό')
+
+    # ---------------- media: αποτυχία = αποτυχία, με rollback ------------ #
+
+    def test_media_failure_is_a_command_error_not_silent_success(self):
+        """
+        Κατεστραμμένο media tarball πρέπει να ΑΠΟΤΥΓΧΑΝΕΙ την εντολή.
+
+        Παλαιότερα έβγαινε warning και exit 0: το cron και ο operator
+        έβλεπαν «επιτυχία» ενώ τα έγγραφα πελατών δεν είχαν επανέλθει.
+        """
+        self._backup()
+        media_tar = next(self.backup_dir.glob('crm_media_*.tar.gz'))
+        media_tar.write_bytes(b'not a gzip tarball')
+
+        with self.assertRaises(CommandError) as ctx:
+            self._restore('--latest')
+        self.assertIn('media', str(ctx.exception).lower())
+
+    def test_media_rolled_back_when_extraction_fails(self):
+        """
+        Σε αποτυχία tar, τα προηγούμενα media επιστρέφουν στη θέση τους.
+
+        Χωρίς rollback το γραφείο θα έμενε ΧΩΡΙΣ έγγραφα: ούτε τα παλιά
+        (μετακινημένα στην άκρη) ούτε τα νέα (δεν αποσυμπιέστηκαν).
+        """
+        self._backup()
+        doc = self.media / 'clients' / 'τιμολόγιο.txt'
+        self.assertTrue(doc.exists())
+
+        media_tar = next(self.backup_dir.glob('crm_media_*.tar.gz'))
+        media_tar.write_bytes(b'not a gzip tarball')
+
+        with self.assertRaises(CommandError):
+            self._restore('--latest')
+
+        self.assertTrue(
+            doc.exists(),
+            'ΑΠΩΛΕΙΑ ΔΕΔΟΜΕΝΩΝ: τα media δεν επέστρεψαν μετά την αποτυχία')
+        self.assertEqual(doc.read_text(encoding='utf-8'), 'ΦΠΑ Ιανουαρίου')
+
+
+@unittest.skipUnless(
+    connection.vendor == 'postgresql',
+    'Απαιτεί PostgreSQL (pg_dump/pg_restore) — παραλείπεται σε SQLite.',
+)
+class PostgresRestoreSafetyTests(SimpleTestCase):
+    """
+    ΠΡΑΓΜΑΤΙΚΟ round-trip σε PostgreSQL, σε **αναλώσιμη** βάση.
+
+    Δεν αγγίζει ποτέ την test database: φτιάχνει δική της βάση
+    `restore_rt_<pid>`, δουλεύει εκεί και τη διαγράφει στο τέλος.
+
+    Καλύπτει τα τρία σημεία που κάνουν μια επαναφορά ασφαλή ή επικίνδυνη:
+      1. πραγματικό safety pg_dump ΠΡΙΝ την επαναφορά,
+      2. abort αν το safety dump δεν μπορεί να ληφθεί,
+      3. --single-transaction: αποτυχία = καμία αλλαγή, όχι μισή βάση.
+    """
+
+    databases = set()
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.db_name = f'restore_rt_{os.getpid()}'
+        cls.base = dict(settings.DATABASES['default'])
+        cls._admin_sql(f'DROP DATABASE IF EXISTS {cls.db_name}')
+        cls._admin_sql(f'CREATE DATABASE {cls.db_name}')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._admin_sql(f'DROP DATABASE IF EXISTS {cls.db_name}')
+        super().tearDownClass()
+
+    @classmethod
+    def _admin_sql(cls, sql):
+        import psycopg2
+        conn = psycopg2.connect(
+            dbname='postgres',
+            user=cls.base.get('USER') or None,
+            password=cls.base.get('PASSWORD') or None,
+            host=cls.base.get('HOST') or None,
+            port=cls.base.get('PORT') or None,
+        )
+        conn.autocommit = True
+        try:
+            conn.cursor().execute(sql)
+        finally:
+            conn.close()
+
+    def _db_settings(self):
+        cfg = dict(self.base)
+        cfg['NAME'] = self.db_name
+        return {'default': cfg}
+
+    def _sql(self, sql, fetch=False):
+        import psycopg2
+        conn = psycopg2.connect(
+            dbname=self.db_name,
+            user=self.base.get('USER') or None,
+            password=self.base.get('PASSWORD') or None,
+            host=self.base.get('HOST') or None,
+            port=self.base.get('PORT') or None,
+        )
+        conn.autocommit = True
+        try:
+            cur = conn.cursor()
+            cur.execute(sql)
+            return cur.fetchall() if fetch else None
+        finally:
+            conn.close()
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix='pgrt_'))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.backup_dir = self.tmp / 'backups'
+        self._sql('DROP TABLE IF EXISTS pelates')
+        self._sql('CREATE TABLE pelates (afm TEXT, onoma TEXT)')
+        self._sql("INSERT INTO pelates VALUES ('094014201', 'ΑΡΧΙΚΟΣ ΑΕ')")
+
+    def _rows(self):
+        return sorted(r[0] for r in self._sql('SELECT onoma FROM pelates', True))
+
+    def _run(self, command, *args):
+        with override_settings(DATABASES=self._db_settings()):
+            return call_command(
+                command, *args, stdout=StringIO(), stderr=StringIO())
+
+    def test_real_round_trip_reverts_changes(self):
+        self._run('backup_database', '--output-dir', str(self.backup_dir),
+                  '--skip-media')
+        self.assertTrue(list(self.backup_dir.glob('crm_db_*.pgdump')))
+
+        self._sql("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ ΤΟ BACKUP')")
+        self.assertEqual(len(self._rows()), 2)
+
+        self._run('restore_database', '--latest', '--yes', '--skip-media',
+                  '--backup-dir', str(self.backup_dir))
+
+        self.assertEqual(self._rows(), ['ΑΡΧΙΚΟΣ ΑΕ'])
+
+    def test_safety_dump_is_taken_before_restore(self):
+        """Πραγματικό pg_dump της τρέχουσας βάσης, όχι απλή δήλωση."""
+        self._run('backup_database', '--output-dir', str(self.backup_dir),
+                  '--skip-media')
+        self._run('restore_database', '--latest', '--yes', '--skip-media',
+                  '--backup-dir', str(self.backup_dir))
+
+        safety = list(self.backup_dir.glob('pre_restore_*.pgdump'))
+        self.assertEqual(len(safety), 1, 'δεν δημιουργήθηκε safety dump')
+        self.assertGreater(
+            safety[0].stat().st_size, 0, 'το safety dump είναι κενό')
+
+    def test_aborts_when_safety_dump_cannot_be_taken(self):
+        """Χωρίς pg_dump δεν ξεκινά καθόλου restore — καλύτερα τίποτα."""
+        self._run('backup_database', '--output-dir', str(self.backup_dir),
+                  '--skip-media')
+        before = self._rows()
+
+        real_which = shutil.which
+
+        def fake_which(name, *a, **kw):
+            return None if name == 'pg_dump' else real_which(name, *a, **kw)
+
+        with mock.patch(
+            'accounting.management.commands.restore_database.shutil.which',
+            side_effect=fake_which,
+        ):
+            with self.assertRaises(CommandError) as ctx:
+                self._run('restore_database', '--latest', '--yes',
+                          '--skip-media', '--backup-dir', str(self.backup_dir))
+
+        self.assertIn('pg_dump', str(ctx.exception))
+        self.assertEqual(self._rows(), before, 'η βάση άλλαξε παρά το abort')
+
+    def test_restore_uses_single_transaction(self):
+        """
+        Το pg_restore ΠΡΕΠΕΙ να τρέχει με --single-transaction.
+
+        Χωρίς αυτό, σφάλμα στη μέση αφήνει τη βάση μισοεπαναφερμένη: το
+        --clean έχει ήδη κάνει DROP και τα δεδομένα δεν έχουν μπει.
+
+        Ο έλεγχος γίνεται στο ίδιο το command line και όχι μέσω
+        κατεστραμμένου dump: ένα άκυρο αρχείο απορρίπτεται ήδη στο parsing
+        του header, δηλαδή ΠΡΙΝ εκτελεστεί οτιδήποτε — οπότε δεν ξεχωρίζει
+        αν το flag υπάρχει ή όχι.
+        """
+        self._run('backup_database', '--output-dir', str(self.backup_dir),
+                  '--skip-media')
+
+        real_run = subprocess.run
+        seen = []
+
+        def capture(cmd, *a, **kw):
+            if cmd and 'pg_restore' in str(cmd[0]):
+                seen.append(cmd)
+            return real_run(cmd, *a, **kw)
+
+        with mock.patch(
+            'accounting.management.commands.restore_database.subprocess.run',
+            side_effect=capture,
+        ):
+            self._run('restore_database', '--latest', '--yes', '--skip-media',
+                      '--backup-dir', str(self.backup_dir))
+
+        self.assertTrue(seen, 'δεν κλήθηκε καθόλου το pg_restore')
+        self.assertIn(
+            '--single-transaction', seen[0],
+            'το pg_restore τρέχει ΧΩΡΙΣ --single-transaction: μια αποτυχία '
+            'στη μέση θα άφηνε τη βάση μισοεπαναφερμένη.')
+
+    def test_corrupt_dump_leaves_database_untouched(self):
+        """
+        Κατεστραμμένο dump: αποτυχία με σαφές μήνυμα, χωρίς απώλεια.
+
+        Σημείωση εγκυρότητας: αυτό περνά και χωρίς --single-transaction
+        (το άκυρο αρχείο κόβεται στο parsing). Το flag ελέγχεται χωριστά
+        στο test_restore_uses_single_transaction.
+        """
+        self._sql("INSERT INTO pelates VALUES ('998765432', 'ΑΚΕΡΑΙΑ Β')")
+        before = self._rows()
+
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        (self.backup_dir / 'crm_db_29991231_235959.pgdump').write_bytes(
+            b'PGDMP corrupted payload, not a real custom-format dump')
+
+        with self.assertRaises(CommandError) as ctx:
+            self._run('restore_database', '--latest', '--yes', '--skip-media',
+                      '--backup-dir', str(self.backup_dir))
+
+        self.assertIn('pg_restore', str(ctx.exception))
+        self.assertEqual(
+            self._rows(), before,
+            'ΑΠΩΛΕΙΑ ΔΕΔΟΜΕΝΩΝ: η βάση άλλαξε παρά την αποτυχία του restore')
