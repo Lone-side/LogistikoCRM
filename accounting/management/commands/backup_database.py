@@ -26,6 +26,10 @@ MEDIA_PREFIX = 'crm_media_'
 DB_SUFFIXES = ('.backup', '.pgdump')
 MEDIA_SUFFIX = '.tar.gz'
 
+# Ημιτελή backups (η βάση πάρθηκε, τα media όχι). Σκόπιμα ΔΕΝ ταιριάζουν με
+# το BACKUP_PREFIX ώστε να μην επιλέγονται ποτέ από --latest/--list.
+PARTIAL_PREFIX = 'partial_crm_db_'
+
 
 def default_backup_dir():
     """Ο προεπιλεγμένος φάκελος backup (κοινός με το restore_database)."""
@@ -78,22 +82,46 @@ class Command(BaseCommand):
             f'✅ Backup βάσης ολοκληρώθηκε: {backup_path}'
         ))
 
-        # Media: η αποτυχία ΔΕΝ ακυρώνει το backup της βάσης, αλλά πρέπει να
-        # φαίνεται καθαρά — τα έγγραφα πελατών είναι εξίσου κρίσιμα.
+        # Media: αποτυχία = αποτυχία ΟΛΟΥ του backup.
+        #
+        # Παλαιότερα έβγαινε warning και exit 0, αφήνοντας πίσω ένα κανονικά
+        # ονομασμένο crm_db_* που έμοιαζε πλήρες. Το restore --latest θα το
+        # επέλεγε και το γραφείο θα ανακάλυπτε την απουσία των εγγράφων τη
+        # μέρα που θα τα χρειαζόταν. Πλέον το ημιτελές backup μετονομάζεται
+        # σε partial_* ώστε να ΜΗΝ είναι υποψήφιο, και η εντολή αποτυγχάνει.
         if not options['skip_media']:
             try:
                 media_path = self._backup_media(backup_dir, timestamp)
-            except Exception as exc:  # noqa: BLE001 — θέλουμε ορατό warning
-                self.stderr.write(self.style.WARNING(
-                    f'⚠️ Το backup των media απέτυχε: {exc}'
-                ))
-            else:
-                if media_path:
-                    self.stdout.write(self.style.SUCCESS(
-                        f'✅ Backup media ολοκληρώθηκε: {media_path}'
-                    ))
+            except Exception as exc:  # noqa: BLE001
+                partial = self._demote_to_partial(backup_path)
+                raise CommandError(
+                    f'❌ Το backup των media απέτυχε: {exc}\n'
+                    f'Το backup της βάσης ΔΕΝ είναι πλήρες και μετονομάστηκε '
+                    f'σε {partial.name} ώστε να μην επιλεγεί από --latest.'
+                ) from exc
+            self.stdout.write(self.style.SUCCESS(
+                f'✅ Backup media ολοκληρώθηκε: {media_path}'
+            ))
 
         self._cleanup(backup_dir, options['keep_days'])
+
+    def _demote_to_partial(self, backup_path):
+        """
+        Υποβιβάζει ένα ημιτελές backup ώστε να μη μοιάζει πλήρες.
+
+        Το `PARTIAL_PREFIX` δεν ταιριάζει με το `BACKUP_PREFIX`, οπότε το
+        αρχείο δεν εμφανίζεται στο `--list`, δεν επιλέγεται από `--latest`
+        και δεν μετράει στον καθαρισμό των 30 τελευταίων.
+        """
+        partial = backup_path.with_name(
+            f'{PARTIAL_PREFIX}{backup_path.name[len(BACKUP_PREFIX):]}'
+        )
+        try:
+            backup_path.rename(partial)
+        except OSError:
+            backup_path.unlink(missing_ok=True)
+            return backup_path
+        return partial
 
     def _backup_sqlite(self, db, backup_dir, timestamp):
         db_path = Path(db['NAME'])
@@ -136,10 +164,14 @@ class Command(BaseCommand):
         """Συμπίεση του MEDIA_ROOT σε tar.gz δίπλα στο backup της βάσης."""
         media_root = Path(settings.MEDIA_ROOT)
         if not media_root.exists():
-            self.stdout.write(
-                f'ℹ️ Δεν υπάρχει φάκελος media ({media_root}) — παραλείπεται.'
+            # ΟΧΙ σιωπηλή παράλειψη: αν ο χρήστης δεν ζήτησε --skip-media,
+            # η απουσία του MEDIA_ROOT σημαίνει ότι το backup δεν μπορεί να
+            # είναι πλήρες. Λάθος ρύθμιση MEDIA_ROOT δεν πρέπει να περνά ως
+            # «επιτυχία χωρίς media».
+            raise RuntimeError(
+                f'Δεν υπάρχει φάκελος media ({media_root}). Αν το backup '
+                f'προορίζεται να είναι μόνο βάσης, δώσε ρητά --skip-media.'
             )
-            return None
 
         backup_path = backup_dir / f'{MEDIA_PREFIX}{timestamp}{MEDIA_SUFFIX}'
         cmd = [

@@ -12,10 +12,12 @@ Tests για το ζεύγος backup_database / restore_database.
 MEDIA_ROOT μέσω override_settings, ώστε να μην αγγίζουν την πραγματική
 βάση των tests (που στο CI είναι PostgreSQL).
 """
+import io
 import os
 import shutil
 import sqlite3
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from io import StringIO
@@ -196,44 +198,216 @@ class BackupRestoreContractTests(SimpleTestCase):
         self.assertFalse(old_db.exists(), 'το παλιό backup βάσης έμεινε')
         self.assertFalse(old_media.exists(), 'το media tarball έμεινε ορφανό')
 
-    # ---------------- media: αποτυχία = αποτυχία, με rollback ------------ #
+    # ------------- backup: media failure = failure, όχι μισό backup ------ #
 
-    def test_media_failure_is_a_command_error_not_silent_success(self):
-        """
-        Κατεστραμμένο media tarball πρέπει να ΑΠΟΤΥΓΧΑΝΕΙ την εντολή.
+    def test_backup_fails_when_media_archiving_fails(self):
+        """Αποτυχία tar στο backup → CommandError, όχι warning + exit 0."""
+        with mock.patch(
+            'accounting.management.commands.backup_database.subprocess.run',
+            return_value=_FakeProc(1, 'tar: δεν μπόρεσε να γράψει'),
+        ):
+            with self.assertRaises(CommandError) as ctx:
+                self._backup()
+        self.assertIn('media', str(ctx.exception).lower())
 
-        Παλαιότερα έβγαινε warning και exit 0: το cron και ο operator
-        έβλεπαν «επιτυχία» ενώ τα έγγραφα πελατών δεν είχαν επανέλθει.
+    def test_partial_backup_is_demoted_and_not_selectable(self):
         """
+        Ημιτελές backup δεν πρέπει να μοιάζει πλήρες.
+
+        Αν έμενε ως crm_db_*, το --latest θα το επέλεγε και το γραφείο θα
+        ανακάλυπτε την απουσία των εγγράφων τη μέρα που θα τα χρειαζόταν.
+        """
+        with mock.patch(
+            'accounting.management.commands.backup_database.subprocess.run',
+            return_value=_FakeProc(1, 'tar failed'),
+        ):
+            with self.assertRaises(CommandError):
+                self._backup()
+
+        self.assertEqual(
+            list(self.backup_dir.glob('crm_db_*')), [],
+            'ημιτελές backup έμεινε με κανονικό όνομα crm_db_*')
+        self.assertTrue(
+            list(self.backup_dir.glob('partial_crm_db_*')),
+            'το ημιτελές backup δεν μετονομάστηκε σε partial_*')
+
+        # Και δεν επιλέγεται από --latest
+        with override_settings(DATABASES=_sqlite_settings(self.db_path)):
+            with self.assertRaises(CommandError) as ctx:
+                call_command('restore_database', '--latest', '--yes',
+                             '--backup-dir', str(self.backup_dir),
+                             stdout=StringIO())
+        self.assertIn('Δεν υπάρχουν backups', str(ctx.exception))
+
+    def test_backup_fails_when_media_root_missing(self):
+        """Χαμένο MEDIA_ROOT χωρίς --skip-media = αποτυχία, όχι σιωπή."""
+        shutil.rmtree(self.media)
+        with self.assertRaises(CommandError) as ctx:
+            self._backup()
+        self.assertIn('skip-media', str(ctx.exception))
+
+    def test_backup_media_root_missing_ok_with_skip_media(self):
+        """Με ρητό --skip-media το database-only backup επιτρέπεται."""
+        shutil.rmtree(self.media)
+        self._backup('--skip-media')
+        self.assertTrue(list(self.backup_dir.glob('crm_db_*.backup')))
+        self.assertEqual(list(self.backup_dir.glob('crm_media_*')), [])
+
+    # ------------- restore: media πρώτα, βάση ανέπαφη σε αποτυχία -------- #
+
+    def test_missing_media_tar_leaves_database_untouched(self):
+        """Λείπει το tarball → CommandError ΠΡΙΝ αλλάξει η βάση."""
         self._backup()
-        media_tar = next(self.backup_dir.glob('crm_media_*.tar.gz'))
-        media_tar.write_bytes(b'not a gzip tarball')
+        next(self.backup_dir.glob('crm_media_*.tar.gz')).unlink()
+
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ')")
+        conn.commit()
+        conn.close()
+        before = sorted(r[0] for r in self._rows())
 
         with self.assertRaises(CommandError) as ctx:
             self._restore('--latest')
-        self.assertIn('media', str(ctx.exception).lower())
+        self.assertIn('skip-media', str(ctx.exception))
+        self.assertEqual(
+            sorted(r[0] for r in self._rows()), before,
+            'η βάση άλλαξε παρότι έλειπε το media backup')
 
-    def test_media_rolled_back_when_extraction_fails(self):
-        """
-        Σε αποτυχία tar, τα προηγούμενα media επιστρέφουν στη θέση τους.
-
-        Χωρίς rollback το γραφείο θα έμενε ΧΩΡΙΣ έγγραφα: ούτε τα παλιά
-        (μετακινημένα στην άκρη) ούτε τα νέα (δεν αποσυμπιέστηκαν).
-        """
+    def test_corrupt_media_tar_leaves_database_and_media_untouched(self):
         self._backup()
-        doc = self.media / 'clients' / 'τιμολόγιο.txt'
-        self.assertTrue(doc.exists())
+        next(self.backup_dir.glob('crm_media_*.tar.gz')).write_bytes(b'not gzip')
 
-        media_tar = next(self.backup_dir.glob('crm_media_*.tar.gz'))
-        media_tar.write_bytes(b'not a gzip tarball')
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ')")
+        conn.commit()
+        conn.close()
+        before = sorted(r[0] for r in self._rows())
+        doc = self.media / 'clients' / 'τιμολόγιο.txt'
 
         with self.assertRaises(CommandError):
             self._restore('--latest')
 
-        self.assertTrue(
-            doc.exists(),
-            'ΑΠΩΛΕΙΑ ΔΕΔΟΜΕΝΩΝ: τα media δεν επέστρεψαν μετά την αποτυχία')
+        self.assertEqual(sorted(r[0] for r in self._rows()), before,
+                         'η βάση άλλαξε από κατεστραμμένο media archive')
+        self.assertTrue(doc.exists(), 'τα media χάθηκαν')
         self.assertEqual(doc.read_text(encoding='utf-8'), 'ΦΠΑ Ιανουαρίου')
+
+    def test_unsafe_archive_is_rejected_before_touching_anything(self):
+        """
+        Archive με absolute path / «..» / symlink προς τα έξω απορρίπτεται.
+
+        Ένα backup μπορεί να έρχεται από άλλο μηχάνημα ή να έχει πειραχθεί:
+        χωρίς έλεγχο, η αποσυμπίεση γράφει οπουδήποτε στον server.
+        """
+        self._backup('--skip-media')
+        db_file = next(self.backup_dir.glob('crm_db_*.backup'))
+        timestamp = db_file.name[len('crm_db_'):-len('.backup')]
+        media_tar = self.backup_dir / f'crm_media_{timestamp}.tar.gz'
+
+        outside = self.tmp / 'ΕΞΩ.txt'
+        outside.write_text('αρχικό', encoding='utf-8')
+        payload = self.tmp / 'payload.txt'
+        payload.write_text('κακόβουλο', encoding='utf-8')
+
+        data = payload.read_bytes()
+
+        def write_archive(arcname):
+            # ΟΧΙ tar.add(): κανονικοποιεί το αρχικό «/». Ένας επιτιθέμενος
+            # γράφει το header απευθείας, οπότε έτσι το γράφουμε κι εμείς.
+            with tarfile.open(media_tar, 'w:gz') as tar:
+                info = tarfile.TarInfo(arcname)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+
+        for arcname in ('/etc/κακό.txt', 'media/../../ΕΞΩ.txt'):
+            with self.subTest(arcname=arcname):
+                write_archive(arcname)
+                with self.assertRaises(CommandError) as ctx:
+                    self._restore('--latest')
+                msg = str(ctx.exception)
+                self.assertIn('ασφαλ', msg.lower() + msg)
+                self.assertEqual(outside.read_text(encoding='utf-8'), 'αρχικό',
+                                 'γράφτηκε αρχείο ΕΚΤΟΣ MEDIA_ROOT')
+
+        # symlink που δείχνει εκτός MEDIA_ROOT
+        with tarfile.open(media_tar, 'w:gz') as tar:
+            info = tarfile.TarInfo('media/evil-link')
+            info.type = tarfile.SYMTYPE
+            info.linkname = '/etc/passwd'
+            tar.addfile(info)
+        with self.assertRaises(CommandError):
+            self._restore('--latest')
+
+    def test_skip_media_allows_database_only_restore(self):
+        """Ρητό --skip-media: επαναφορά μόνο βάσης, media αμετάβλητα."""
+        self._backup('--skip-media')
+        doc = self.media / 'clients' / 'τιμολόγιο.txt'
+        doc.write_text('ΑΛΛΑΓΜΕΝΟ', encoding='utf-8')
+
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ')")
+        conn.commit()
+        conn.close()
+
+        self._restore('--latest', '--skip-media')
+
+        self.assertEqual([r[0] for r in self._rows()], ['ΑΡΧΙΚΟΣ ΑΕ'])
+        self.assertEqual(doc.read_text(encoding='utf-8'), 'ΑΛΛΑΓΜΕΝΟ',
+                         'το --skip-media άγγιξε τα media')
+
+    # ------------- συνέπεια: αποτυχία μετά το DB restore ---------------- #
+
+    def test_media_swap_failure_rolls_back_database_and_media(self):
+        """
+        Το κρίσιμο σενάριο συνέπειας.
+
+        Η βάση έχει ήδη επανέλθει και μετά αποτυγχάνει το swap των media.
+        Χωρίς rollback, βάση και έγγραφα θα έμεναν σε διαφορετικές χρονικές
+        στιγμές — σιωπηλά.
+        """
+        self._backup()
+        doc = self.media / 'clients' / 'τιμολόγιο.txt'
+
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO pelates VALUES ('998765432', 'ΜΕΤΑ ΤΟ BACKUP')")
+        conn.commit()
+        conn.close()
+        db_before = sorted(r[0] for r in self._rows())
+        doc.write_text('ΤΡΕΧΟΝ ΠΕΡΙΕΧΟΜΕΝΟ', encoding='utf-8')
+
+        real_move = shutil.move
+
+        def move_that_fails_on_final_swap(src, dst, *a, **kw):
+            # Αποτυγχάνει ΜΟΝΟ η μετακίνηση του staged φακέλου στη θέση του
+            # MEDIA_ROOT. Το rollback (previous -> MEDIA_ROOT) πρέπει να
+            # μπορεί να δουλέψει, αλλιώς το test δεν ελέγχει το rollback.
+            if '.restore_staging_' in str(src):
+                raise OSError('προσομοιωμένη αποτυχία swap')
+            return real_move(src, dst, *a, **kw)
+
+        with mock.patch(
+            'accounting.management.commands.restore_database.shutil.move',
+            side_effect=move_that_fails_on_final_swap,
+        ):
+            with self.assertRaises(CommandError) as ctx:
+                self._restore('--latest')
+
+        message = str(ctx.exception)
+        self.assertIn('rollback', message.lower())
+        self.assertEqual(
+            sorted(r[0] for r in self._rows()), db_before,
+            'η ΒΑΣΗ δεν επανήλθε μετά την αποτυχία του media swap')
+        self.assertTrue(doc.exists(), 'τα media δεν επανήλθαν')
+        self.assertEqual(doc.read_text(encoding='utf-8'), 'ΤΡΕΧΟΝ ΠΕΡΙΕΧΟΜΕΝΟ')
+
+
+class _FakeProc:
+    """Ελάχιστο stand-in για CompletedProcess."""
+
+    def __init__(self, returncode, stderr=''):
+        self.returncode = returncode
+        self.stderr = stderr
+        self.stdout = ''
 
 
 @unittest.skipUnless(
