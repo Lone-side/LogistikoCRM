@@ -407,26 +407,37 @@ class BackupRestoreContractTests(SimpleTestCase):
         """
         Τα partial_* δεν περνούν από τον κανονικό καθαρισμό (σκόπιμα), οπότε
         χωρίς δικό τους όριο μια μόνιμη αποτυχία των media γεμίζει τον δίσκο.
+
+        Τα αρχεία φτιάχνονται απευθείας, με ρητά διαφορετικά timestamps και
+        mtimes: αν στηριζόμασταν σε διαδοχικά backups, όλα θα έπεφταν στο
+        ίδιο δευτερόλεπτο και θα πατούσαν το ένα το άλλο — το test θα
+        περνούσε χωρίς να έχει ελέγξει τίποτα.
         """
         from accounting.management.commands.backup_database import (
-            MAX_PARTIAL_BACKUPS,
+            Command as BackupCommand, MAX_PARTIAL_BACKUPS, PARTIAL_PREFIX,
         )
 
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        created = []
         for i in range(MAX_PARTIAL_BACKUPS + 3):
-            with mock.patch(
-                'accounting.management.commands.backup_database.subprocess.run',
-                return_value=_FakeProc(1, 'tar failed'),
-            ):
-                with self.assertRaises(CommandError):
-                    self._backup()
-            # Διαφορετικό mtime ανά αρχείο ώστε η σειρά «νεότερα» να ορίζεται.
-            for p in self.backup_dir.glob('partial_crm_db_*'):
-                os.utime(p, (1_000_000 + i, 1_000_000 + i))
+            path = self.backup_dir / f'{PARTIAL_PREFIX}20260101_1200{i:02d}.pgdump'
+            path.write_bytes(b'partial dump')
+            os.utime(path, (1_700_000_000 + i * 60, 1_700_000_000 + i * 60))
+            created.append(path)
 
-        partials = list(self.backup_dir.glob('partial_crm_db_*'))
-        self.assertLessEqual(
-            len(partials), MAX_PARTIAL_BACKUPS,
-            f'συσσωρεύτηκαν {len(partials)} ημιτελή backups')
+        cmd = BackupCommand()
+        cmd.stdout = StringIO()
+        cmd._prune_partials(self.backup_dir)
+
+        remaining = sorted(p.name for p in
+                           self.backup_dir.glob(f'{PARTIAL_PREFIX}*'))
+        self.assertEqual(
+            len(remaining), MAX_PARTIAL_BACKUPS,
+            f'έμειναν {len(remaining)} ημιτελή backups αντί για '
+            f'{MAX_PARTIAL_BACKUPS}: {remaining}')
+        self.assertEqual(
+            remaining, sorted(p.name for p in created[-MAX_PARTIAL_BACKUPS:]),
+            'δεν κρατήθηκαν τα MAX_PARTIAL_BACKUPS νεότερα')
 
     # ------------- ατομική επαναφορά SQLite ----------------------------- #
 
@@ -507,6 +518,55 @@ class BackupRestoreContractTests(SimpleTestCase):
             'το rollback άφησε πίσω media ενώ πριν δεν υπήρχαν')
         self.assertEqual(sorted(r[0] for r in self._rows()), db_before,
                          'η βάση δεν επανήλθε')
+
+    def test_state_recorded_before_stdout_write_after_move(self):
+        """
+        Το state πρέπει να γράφεται ΑΜΕΣΩΣ μετά τη μετακίνηση των παλιών
+        media, πριν από οποιαδήποτε άλλη ενέργεια που μπορεί να αποτύχει.
+
+        Αν το stdout.write σκάσει (κλειστό stream, σπασμένο pipe) ενώ τα
+        παλιά media έχουν ήδη μετακινηθεί, το rollback πρέπει να ξέρει πού
+        βρίσκονται. Αλλιώς μένουν σε φάκελο `media_before_restore_*` που
+        κανείς δεν ψάχνει, με τη βάση γυρισμένη πίσω.
+        """
+        from accounting.management.commands.restore_database import (
+            Command as RestoreCommand,
+        )
+
+        staging = self.tmp / 'staged_media'
+        (staging / 'clients').mkdir(parents=True)
+        (staging / 'clients' / 'νέο.txt').write_text('ΝΕΟ', encoding='utf-8')
+
+        class ExplodingStdout:
+            def write(self, *a, **kw):
+                raise OSError('σπασμένο pipe')
+
+        cmd = RestoreCommand()
+        cmd.stdout = ExplodingStdout()
+        state = {}
+
+        with override_settings(MEDIA_ROOT=str(self.media)):
+            with self.assertRaises(OSError):
+                cmd._swap_media(staging, state)
+
+            previous = state.get('previous')
+            self.assertIsNotNone(
+                previous,
+                'το state δεν καταγράφηκε πριν το stdout.write — το rollback '
+                'δεν μπορεί να βρει τα παλιά media')
+            self.assertTrue(Path(previous).exists(),
+                            f'η καταγεγραμμένη διαδρομή δεν υπάρχει: {previous}')
+
+            # Και είναι όντως αρκετό για πλήρες rollback.
+            cmd.stdout = StringIO()
+            with override_settings(DATABASES=_sqlite_settings(self.db_path)):
+                with self.assertRaises(CommandError):
+                    cmd._rollback_all(('sqlite', None), previous,
+                                      OSError('σπασμένο pipe'))
+
+        doc = self.media / 'clients' / 'τιμολόγιο.txt'
+        self.assertTrue(doc.exists(), 'τα παλιά media δεν επανήλθαν')
+        self.assertEqual(doc.read_text(encoding='utf-8'), 'ΦΠΑ Ιανουαρίου')
 
     def test_rollback_distinguishes_no_previous_media_from_no_swap(self):
         """

@@ -510,14 +510,22 @@ class Command(BaseCommand):
         rollback να ξέρει την πραγματική κατάσταση ακόμη κι αν σκάσουμε στη μέση.
         """
         media_root = Path(settings.MEDIA_ROOT)
-        previous = NO_PREVIOUS_MEDIA
         if media_root.exists():
             stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             previous = (
                 media_root.parent / f'{media_root.name}_before_restore_{stamp}')
             shutil.move(str(media_root), str(previous))
+            # ΑΜΕΣΩΣ μετά το move, πριν από οτιδήποτε άλλο: από αυτό το
+            # σημείο και μετά τα παλιά media ΔΕΝ είναι στη θέση τους. Αν
+            # σκάσει το επόμενο stdout.write (κλειστό stream, σπασμένο pipe),
+            # το rollback πρέπει να ξέρει πού βρίσκονται.
+            state['previous'] = previous
             self.stdout.write(f'📋 Τα τρέχοντα media φυλάχθηκαν στο: {previous}')
-        state['previous'] = previous
+        else:
+            # Γράφεται ΠΡΙΝ το move των staged media: μόλις μπουν στη θέση
+            # τους, το rollback πρέπει να ξέρει ότι πρέπει να τα αφαιρέσει.
+            previous = NO_PREVIOUS_MEDIA
+            state['previous'] = previous
         try:
             shutil.move(str(staged_media), str(media_root))
         except Exception:
