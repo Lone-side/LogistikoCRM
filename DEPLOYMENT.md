@@ -35,13 +35,16 @@ nano .env
 >
 > Το `manage.py` φορτώνει `webcrm.settings_local`, και εκείνο διαλέγει
 > development ή production branch **αποκλειστικά από το `DJANGO_ENV`**.
-> Στο development branch επιβάλλει `DEBUG = True` γράφοντας πάνω από ό,τι
-> έχεις ορίσει στο `DEBUG`. Δηλαδή:
+> Το `DEBUG` δεν το υποκαθιστά — χωρίς `DJANGO_ENV` η εντολή αποτυγχάνει
+> κλειστά αντί να μαντέψει περιβάλλον:
 >
 > ```bash
-> DEBUG=False python manage.py migrate        # ❌ τρέχει με DEBUG=True
+> DEBUG=False python manage.py migrate        # ❌ ImproperlyConfigured
 > DJANGO_ENV=production python manage.py migrate   # ✅
 > ```
+>
+> (Ιστορικά, πριν το fail-closed, το πρώτο έτρεχε σιωπηλά σε development
+> mode με `DEBUG=True` — αυτή η παγίδα δεν υπάρχει πλέον.)
 >
 > Το `settings_local` δέχεται **μόνο** `production` ή `development`,
 > απαιτεί το ρητό `DEBUG` να **συμφωνεί** με αυτό, και αποτυγχάνει
@@ -265,7 +268,7 @@ print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
 2. Κώδικας σε `/var/www/LogistikoCRM`, venv, `pip install -r requirements.txt gunicorn`
 3. Frontend: `cd frontend && npm ci && npm run build` (θέλει Node 20) — σέρβιρε το `frontend/dist` από το nginx
 4. `.env` όπως παραπάνω + `DJANGO_ENV=production`, `DB_ENGINE=django.db.backends.postgresql`, `DB_HOST=localhost`, `MEDIA_ACCEL_REDIRECT=True`
-   - ⚠️ Το `DJANGO_ENV=production` είναι **υποχρεωτικό εδώ**. Χωρίς αυτό κάθε `manage.py` εντολή τρέχει σε development mode με `DEBUG=True`, ακόμη κι αν το `.env` λέει `DEBUG=False` — βλ. τη σημείωση στην ενότητα Α.
+   - ⚠️ Το `DJANGO_ENV=production` είναι **υποχρεωτικό εδώ**. Χωρίς αυτό κάθε `manage.py` εντολή αποτυγχάνει κλειστά με `ImproperlyConfigured` — το `DEBUG=False` από μόνο του δεν αρκεί και δεν το υποκαθιστά. Βλ. τη σημείωση στην ενότητα Α.
    - Οι systemd units (βήμα 7) πρέπει επίσης να το εξάγουν, π.χ. μέσω `EnvironmentFile=/var/www/LogistikoCRM/.env`, ώστε να το βλέπουν gunicorn, worker και beat.
 5. `export DJANGO_ENV=production` και μετά `python manage.py migrate && python manage.py createcachetable && python manage.py setupdata && python manage.py collectstatic --noinput`
    - Επαλήθευση πριν προχωρήσεις: `python manage.py shell -c "from django.conf import settings; print(settings.DEBUG)"` πρέπει να τυπώνει `False`.

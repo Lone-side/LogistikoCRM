@@ -156,9 +156,13 @@ class ProductionComposeTest(SimpleTestCase):
 
     def test_django_env_is_production(self):
         """
-        Χωρίς DJANGO_ENV το manage.py (settings_local) πέφτει στο
-        development branch: DEBUG=True, ALLOWED_HOSTS=['*'], χωρίς
-        secure cookies/HSTS — και παρακάμπτει τα prod fail-closed guards.
+        Το production compose πρέπει να δηλώνει ρητά DJANGO_ENV=production.
+
+        Χωρίς αυτό, τα manage.py βήματα του compose (migrate,
+        createcachetable) αποτυγχάνουν πλέον κλειστά με
+        ImproperlyConfigured — το settings_local δεν μαντεύει περιβάλλον.
+        (Ιστορικά, πριν το fail-closed, η απουσία σήμαινε σιωπηλά
+        development: DEBUG=True, ALLOWED_HOSTS=['*'], δημόσια /media/.)
         """
         self.assertEqual(str(self.env.get('DJANGO_ENV', '')).lower(),
                          'production')
@@ -328,10 +332,12 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
         """
         Ο test runner δεν πρέπει να απαιτεί env setup.
 
-        Δεν είναι θεωρητικό: το CI `test` job ορίζει DEBUG=False ΧΩΡΙΣ
-        DJANGO_ENV. Αν το fail-closed δεν εξαιρούσε τον test runner, θα
-        έσπαγε ολόκληρο το CI. (Το `security-smoke` job ορίζει ρητά
-        production, οπότε η production διαδρομή παραμένει καλυμμένη.)
+        Η εξαίρεση κρατά το τοπικό `python manage.py test` λειτουργικό
+        χωρίς κανένα env setup. Το CI `test` job δεν βασίζεται σε αυτήν:
+        δηλώνει ρητά DJANGO_ENV=development και DEBUG=True, επειδή τρέχει
+        και `manage.py migrate` (non-test command, εκτός εξαίρεσης). Το
+        `security-smoke` job δηλώνει ρητά production, οπότε η production
+        διαδρομή παραμένει καλυμμένη.
 
         Το ότι τρέχει αυτό το ίδιο το test μέσα από `manage.py test` είναι
         η ζωντανή απόδειξη· εδώ κλειδώνεται και ρητά.
@@ -468,7 +474,8 @@ class ProductionEnvTemplateTest(SimpleTestCase):
         self.assertEqual(
             values, ['production'],
             'Το .env.production.example πρέπει να ορίζει DJANGO_ENV=production· '
-            'χωρίς αυτό κάθε manage.py εντολή τρέχει με DEBUG=True.')
+            'χωρίς αυτό οι production manage.py εντολές αποτυγχάνουν κλειστά — '
+            'το production template πρέπει να δηλώνει ρητά DJANGO_ENV=production.')
 
     def test_django_env_is_documented_as_mandatory(self):
         """Να μη μείνει γυμνή γραμμή χωρίς την εξήγηση της παγίδας."""
