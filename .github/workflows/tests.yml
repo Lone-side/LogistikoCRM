@@ -37,6 +37,11 @@ jobs:
 
     env:
       DEBUG: 'False'
+      # Ρητή δήλωση περιβάλλοντος: το settings_local αποτυγχάνει κλειστά
+      # χωρίς DJANGO_ENV. Η εξαίρεση του test runner καλύπτει το
+      # `manage.py test`, ΟΧΙ το `manage.py migrate` του βήματος πιο κάτω.
+      # Συμπεριφορικά ταυτόσημο με πριν — το job έτρεχε ήδη ως development.
+      DJANGO_ENV: 'development'
       SECRET_KEY: 'test-secret-key-for-ci-only'
       FRITZ_API_TOKEN: 'test-fritz-token-for-ci-only'
       # CI-only Fernet key (το production hard-fail απαιτεί έγκυρο κλειδί

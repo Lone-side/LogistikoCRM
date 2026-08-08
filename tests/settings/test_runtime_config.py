@@ -337,6 +337,42 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
         self.assertTrue(mod.SECURE_SSL_REDIRECT)
 
 
+class CIWorkflowEnvironmentTest(SimpleTestCase):
+    """
+    Κάθε CI job που τρέχει `manage.py` πρέπει να δηλώνει DJANGO_ENV.
+
+    Δεν είναι υποθετικό: όταν μπήκε το fail-closed, το `test` job έσκασε
+    στο βήμα «Run migrations» — η εξαίρεση του test runner καλύπτει το
+    `manage.py test`, όχι το `manage.py migrate` που τρέχει πριν από αυτό.
+    Το test κλειδώνει τη διόρθωση ώστε να μην επανεμφανιστεί σιωπηλά.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.workflow = yaml.safe_load(
+            (BASE_DIR / '.github' / 'workflows' / 'tests.yml').read_text(
+                encoding='utf-8'))
+
+    def test_jobs_running_manage_py_declare_django_env(self):
+        for name, job in self.workflow['jobs'].items():
+            steps = job.get('steps') or []
+            runs_manage_py = any(
+                'manage.py' in str(step.get('run', ''))
+                for step in steps
+            )
+            if not runs_manage_py:
+                continue
+            with self.subTest(job=name):
+                declared = str(
+                    (job.get('env') or {}).get('DJANGO_ENV', '')).lower()
+                self.assertIn(
+                    declared, ('production', 'development'),
+                    f'Το job «{name}» τρέχει manage.py χωρίς έγκυρο '
+                    f'DJANGO_ENV — το settings_local θα αποτύχει κλειστά '
+                    f'σε κάθε non-test command (π.χ. migrate).')
+
+
 class ProductionEnvTemplateTest(SimpleTestCase):
     """
     Το .env.production.example είναι το σημείο εκκίνησης κάθε deployment —
