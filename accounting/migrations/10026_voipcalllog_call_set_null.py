@@ -53,6 +53,27 @@ def _validate(apps, schema_editor):
             'χωρίς call_reference — abort πριν το SET_NULL (rollback).')
 
 
+def _flush_deferred_constraints(apps, schema_editor):
+    """
+    Εύρημα του migration rehearsal σε PostgreSQL 14 με πραγματικά window
+    rows: το catch-up backfill ενημερώνει FK στήλη (client_id) της οποίας
+    το constraint είναι DEFERRABLE INITIALLY DEFERRED, οπότε μένουν
+    pending constraint triggers μέχρι το COMMIT. Το AlterField (DDL) στο
+    ΙΔΙΟ transaction αποτυγχάνει τότε με:
+
+        cannot ALTER TABLE "accounting_voipcalllog"
+        because it has pending trigger events
+
+    Σε άδεια βάση το catch-up δεν αγγίζει τίποτα και το πρόβλημα δεν
+    εμφανίζεται — γι' αυτό το CI (φρέσκια βάση) περνούσε. Το SET
+    CONSTRAINTS ALL IMMEDIATE εκτελεί τους εκκρεμείς ελέγχους ΕΔΩ (μια
+    παραβίαση FK κάνει rollback όλη τη migration, όπως πρέπει) ώστε το
+    AlterField να τρέξει καθαρά, πάντα μέσα στην ίδια atomic transaction.
+    """
+    if schema_editor.connection.vendor == 'postgresql':
+        schema_editor.execute('SET CONSTRAINTS ALL IMMEDIATE')
+
+
 class Migration(migrations.Migration):
 
     # Ρητά atomic: το catch-up + validation + AlterField πρέπει να είναι
@@ -66,6 +87,8 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(_catch_up_backfill, migrations.RunPython.noop),
         migrations.RunPython(_validate, migrations.RunPython.noop),
+        migrations.RunPython(
+            _flush_deferred_constraints, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="voipcalllog",
             name="call",

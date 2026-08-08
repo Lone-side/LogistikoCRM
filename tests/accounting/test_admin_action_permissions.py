@@ -1519,6 +1519,41 @@ class VoIPCallLogMigrationWindowTest(TestCase):
         with self.assertRaises(CommandError):
             call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
 
+    def test_audit_accepts_unassigned_call_with_null_snapshot(self):
+        """
+        Εύρημα του migration rehearsal σε PostgreSQL 14: unassigned κλήση
+        (client=None — π.χ. από τον Fritz monitor) με σωστά-NULL snapshot
+        client σημειωνόταν ως client-mismatch, επειδή σε SQL το
+        `NULL = NULL` δεν είναι TRUE και το exclude κρατούσε τη γραμμή.
+        Το deploy gate (--fail-on-findings) θα κοκκίνιζε μόνιμα σε κάθε
+        εγκατάσταση με unassigned κλήσεις. NULL == NULL είναι ταύτιση.
+        """
+        from django.core.management import call_command
+        from accounting.models import VoIPCallLog
+
+        call = VoIPCall.objects.create(
+            call_id='UNASSIGNED-1', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=None)
+        VoIPCallLog.objects.create(call=call, action='started')
+
+        # Δεν πρέπει να σηκώσει CommandError — καμία ασυνέπεια.
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+        # Ο πραγματικός mismatch (snapshot NULL ενώ η κλήση ΕΧΕΙ πελάτη)
+        # εξακολουθεί να πιάνεται.
+        from django.core.management.base import CommandError
+        owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='AUDIT-OWNER')
+        owned = VoIPCall.objects.create(
+            call_id='OWNED-1', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=owner)
+        log = VoIPCallLog.objects.create(call=owned, action='started')
+        VoIPCallLog.objects.filter(pk=log.pk).update(client=None)
+        with self.assertRaises(CommandError):
+            call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
 
 class DeletionCounterAccuracyTest(_OwnedMixin, TestCase):
     """Finding 4: τα εμφανιζόμενα counts δεν φουσκώνουν από related rows."""

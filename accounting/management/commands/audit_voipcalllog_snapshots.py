@@ -57,10 +57,17 @@ class Command(BaseCommand):
         if orphan:
             findings.append(('orphan-without-attribution', orphan))
 
-        # 3. client mismatch όσο υπάρχει η κλήση
+        # 3. client mismatch όσο υπάρχει η κλήση.
+        #
+        # ΠΡΟΣΟΧΗ στα NULLs: το `client_id = call.client_id` σε SQL δίνει
+        # NULL (όχι TRUE) όταν και τα δύο είναι NULL, οπότε το exclude από
+        # μόνο του θα σημείωνε ως mismatch κάθε unassigned κλήση (π.χ.
+        # από τον Fritz monitor) με σωστά-NULL snapshot — μόνιμο ψευδές
+        # finding στο deploy gate. NULL == NULL εδώ είναι ταύτιση.
         mismatch = list(
             VoIPCallLog.objects.filter(call__isnull=False)
             .exclude(client_id=F('call__client_id'))
+            .exclude(client_id__isnull=True, call__client_id__isnull=True)
             .values_list('id', flat=True)[:limit + 1])
         if mismatch:
             findings.append(('client-mismatch', mismatch))
