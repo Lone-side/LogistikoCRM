@@ -22,6 +22,7 @@ nano .env
 
 | Μεταβλητή | Τι βάζεις |
 |---|---|
+| `DJANGO_ENV` | `production` — **δεν αντικαθίσταται από το `DEBUG=False`** (βλ. σημείωση παρακάτω) |
 | `SECRET_KEY` | `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
 | `DB_PASSWORD` | Ισχυρός κωδικός PostgreSQL |
 | `SITE_URL` | π.χ. `https://crm.example.gr` (μπαίνει σε emails/links) |
@@ -29,6 +30,72 @@ nano .env
 | `FRITZ_API_TOKEN` | `openssl rand -hex 32` — υποχρεωτικό ακόμη κι αν δεν χρησιμοποιείς Fritz!Box |
 
 > Με `DEBUG=False` το app **αρνείται να ξεκινήσει** αν τα `SECRET_KEY`/`FRITZ_API_TOKEN` έχουν μείνει στα defaults — αυτό είναι σκόπιμο (security hard-fail).
+
+> ### ⚠️ `DJANGO_ENV=production` — γιατί δεν αρκεί το `DEBUG=False`
+>
+> Το `manage.py` φορτώνει `webcrm.settings_local`, και εκείνο διαλέγει
+> development ή production branch **αποκλειστικά από το `DJANGO_ENV`**.
+> Το `DEBUG` δεν το υποκαθιστά — χωρίς `DJANGO_ENV` η εντολή αποτυγχάνει
+> κλειστά αντί να μαντέψει περιβάλλον:
+>
+> ```bash
+> DEBUG=False python manage.py migrate        # ❌ ImproperlyConfigured
+> DJANGO_ENV=production python manage.py migrate   # ✅
+> ```
+>
+> (Ιστορικά, πριν το fail-closed, το πρώτο έτρεχε σιωπηλά σε development
+> mode με `DEBUG=True` — αυτή η παγίδα δεν υπάρχει πλέον.)
+>
+> Το `settings_local` δέχεται **μόνο** `production` ή `development`,
+> απαιτεί το ρητό `DEBUG` να **συμφωνεί** με αυτό, και αποτυγχάνει
+> κλειστά σε οτιδήποτε άλλο:
+>
+> | `DJANGO_ENV` | `DEBUG` (env) | Αποτέλεσμα |
+> |---|---|---|
+> | `production` | απών ή falsey | production· `DEBUG=False`, secure cookies, HSTS |
+> | `production` | ρητά truthy | **`ImproperlyConfigured`** — βλ. σημείωση αντίφασης |
+> | `development` | απών ή truthy | development |
+> | `development` | ρητά falsey | **`ImproperlyConfigured`** |
+> | `  ProDuction  ` | — | production (γίνεται trim + lowercase) |
+> | `prod`, `prodction`, `staging`, κενό | — | **`ImproperlyConfigured`** |
+> | *απών* | `True` (ρητό) | development |
+> | *απών* | `False` ή απών | **`ImproperlyConfigured`** |
+> | *απών* | — (test runner) | development — τα tests τρέχουν χωρίς env setup |
+>
+> **Γιατί η αντίφαση σκάει αντί απλώς να «κερδίζει» το `DJANGO_ENV`:**
+> το `settings_local` εισάγει **πρώτα** το `settings.py`, το οποίο παίρνει
+> τις αποφάσεις ασφαλείας από το `DEBUG` env var τη στιγμή του import. Με
+> `DJANGO_ENV=production` + `DEBUG=True`, το `settings.py` έχει ήδη
+> παραλείψει HSTS, SSL redirect, secure cookies και τα fail-closed guards
+> — και αυτός ο κώδικας δεν ξανατρέχει. Το μετρημένο αποτέλεσμα πριν τον
+> έλεγχο ήταν: τελικό `DEBUG=False` αλλά `SECURE_SSL_REDIRECT=False`,
+> `SESSION_COOKIE_SECURE=False`, `HSTS=0` — production όψη, development
+> θωράκιση. Προσοχή: το `DEBUG` μπορεί να έρθει και από το `.env` μέσω
+> `load_dotenv` — μετράει ως ρητή τιμή.
+>
+> **Ιστορικό — γιατί υπάρχει αυτός ο έλεγχος.** Παλιότερα η προεπιλογή
+> ήταν σιωπηλά `development`, οπότε απών ή λάθος γραμμένο `DJANGO_ENV`
+> έδινε `DEBUG=True`, `ALLOWED_HOSTS=['*']`, χωρίς secure cookies/HSTS —
+> και, το σοβαρότερο, τα `/media/` σερβίρονταν **ελεύθερα** από το
+> `static()` αντί για το authenticated `serve_protected_media`, δηλαδή
+> έγγραφα πελατών χωρίς login. Τα fail-closed guards
+> (`FRITZ_API_TOKEN`, `DATA_ENCRYPTION_KEY_CURRENT`,
+> `ENFORCE_CLIENT_ASSIGNMENT`) **δεν** έπιαναν το πρόβλημα: κρίνονται από
+> το `DEBUG` env var μέσα στο `settings.py`. Η εφαρμογή ξεκινούσε
+> κανονικά και έμοιαζε σωστά ρυθμισμένη — γι' αυτό πλέον σκάει αντί να
+> μαντεύει.
+>
+> Έλεγχος:
+>
+> ```bash
+> DJANGO_ENV=production python manage.py shell -c \
+>   "from django.conf import settings; print(settings.DEBUG)"   # → False
+> ```
+>
+> Το `docker-compose.prod.yml` το ορίζει ήδη, οπότε η προτεινόμενη Docker
+> εγκατάσταση δεν επηρεάζεται. **Αφορά τη χειροκίνητη εγκατάσταση** και
+> κάθε `manage.py` εντολή που τρέχεις με το χέρι στον server (migrate,
+> collectstatic, createcachetable, backup_database, restore_database).
 
 ### 2. Εκκίνηση
 
@@ -77,8 +144,33 @@ SITE_URL=https://crm.example.gr
 ## Backups
 
 - Αυτόματο backup βάσης καθημερινά 02:00 (Celery beat → `backup_database`), στο volume `backups_volume` (`/app/backups`).
-- PostgreSQL: χρησιμοποιείται `pg_dump --format=custom` (αρχεία `.pgdump`). Επαναφορά: `pg_restore -d logistikocrm crm_db_<ts>.pgdump`
+- Μαζί με τη βάση γίνεται backup και των media (`crm_media_<ts>.tar.gz`) — τα έγγραφα πελατών. Παράλειψη με `--skip-media`.
+- PostgreSQL: χρησιμοποιείται `pg_dump --format=custom` (αρχεία `.pgdump`).
 - Χειροκίνητο: `docker compose -f docker-compose.prod.yml exec web python manage.py backup_database`
+- Επαναφορά (βάση + media, με αντίγραφο ασφαλείας του τρέχοντος πριν την αντικατάσταση).
+
+  ⚠️ **Η επαναφορά γίνεται ΜΟΝΟ σε παράθυρο συντήρησης, με το web και τους Celery workers σταματημένους.**
+  Η εντολή αντικαθιστά ολόκληρη τη βάση και ολόκληρο τον φάκελο media. Αν την ώρα της επαναφοράς τρέχει
+  έστω ένα request ή ένα Celery task, τότε: γράφει σε βάση που αντικαθίσταται (οι εγγραφές χάνονται χωρίς
+  ίχνος), κρατά ανοιχτά connections που εμποδίζουν το `pg_restore`, ή διαβάζει media από φάκελο που
+  μετακινείται κάτω από τα πόδια του. Το αποτέλεσμα είναι βάση και αρχεία που δεν συμφωνούν — ακριβώς
+  αυτό που η επαναφορά υποτίθεται ότι διορθώνει.
+
+  ```bash
+  cd /opt/logistikocrm
+  # 1. Δες τι υπάρχει (δεν αλλάζει τίποτα — μπορεί να τρέξει και με το σύστημα ζωντανό)
+  docker compose -f docker-compose.prod.yml exec web python manage.py restore_database --list
+
+  # 2. Σταμάτα ό,τι γράφει: web + workers + beat. Η βάση μένει πάνω.
+  docker compose -f docker-compose.prod.yml stop web celery celery-beat nginx
+
+  # 3. Επαναφορά (χρειάζεται προσωρινά το web container μόνο για την εντολή)
+  docker compose -f docker-compose.prod.yml run --rm web python manage.py restore_database --latest
+
+  # 4. Ξανά πάνω
+  docker compose -f docker-compose.prod.yml up -d
+  ```
+- ⚠️ **Δοκίμασε την επαναφορά σε staging πριν τη χρειαστείς στα αλήθεια** — ένα backup που δεν έχει επαναφερθεί ποτέ δεν είναι backup.
 - ⚠️ Κράτα αντίγραφα των volumes `media_volume` και `backups_volume` και **εκτός** server (rsync/rclone).
 
 ## Ενημέρωση σε νέα έκδοση
@@ -175,8 +267,11 @@ print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
 1. Σύστημα: `sudo apt install -y python3.11 python3-venv postgresql redis-server nginx libpq-dev libmagic1`
 2. Κώδικας σε `/var/www/LogistikoCRM`, venv, `pip install -r requirements.txt gunicorn`
 3. Frontend: `cd frontend && npm ci && npm run build` (θέλει Node 20) — σέρβιρε το `frontend/dist` από το nginx
-4. `.env` όπως παραπάνω + `DB_ENGINE=django.db.backends.postgresql`, `DB_HOST=localhost`, `MEDIA_ACCEL_REDIRECT=True`
-5. `python manage.py migrate && python manage.py createcachetable && python manage.py setupdata && python manage.py collectstatic --noinput`
+4. `.env` όπως παραπάνω + `DJANGO_ENV=production`, `DB_ENGINE=django.db.backends.postgresql`, `DB_HOST=localhost`, `MEDIA_ACCEL_REDIRECT=True`
+   - ⚠️ Το `DJANGO_ENV=production` είναι **υποχρεωτικό εδώ**. Χωρίς αυτό κάθε `manage.py` εντολή αποτυγχάνει κλειστά με `ImproperlyConfigured` — το `DEBUG=False` από μόνο του δεν αρκεί και δεν το υποκαθιστά. Βλ. τη σημείωση στην ενότητα Α.
+   - Οι systemd units (βήμα 7) πρέπει επίσης να το εξάγουν, π.χ. μέσω `EnvironmentFile=/var/www/LogistikoCRM/.env`, ώστε να το βλέπουν gunicorn, worker και beat.
+5. `export DJANGO_ENV=production` και μετά `python manage.py migrate && python manage.py createcachetable && python manage.py setupdata && python manage.py collectstatic --noinput`
+   - Επαλήθευση πριν προχωρήσεις: `python manage.py shell -c "from django.conf import settings; print(settings.DEBUG)"` πρέπει να τυπώνει `False`.
 6. nginx: προσάρμοσε το `nginx/nginx.conf` (άλλαξε το `upstream django` σε `127.0.0.1:8000`, τα alias σε πραγματικά paths, το `/protected-media/` alias στο MEDIA_ROOT)
 7. systemd units για gunicorn, `celery -A webcrm worker` και `celery -A webcrm beat`
 
@@ -185,6 +280,7 @@ print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
 ## Production Checklist
 
 - [ ] `SECRET_KEY` μοναδικό, εκτός git
+- [ ] `DJANGO_ENV=production` στο περιβάλλον **και** στα systemd units — όχι μόνο `DEBUG=False` (το `settings_local` αποφασίζει από το `DJANGO_ENV`)
 - [ ] `DEBUG=False` (default στο prod compose)
 - [ ] `ALLOWED_HOSTS` + `CSRF_TRUSTED_ORIGINS` με το domain
 - [ ] HTTPS ενεργό + `USE_X_FORWARDED_PROTO=True`

@@ -31,7 +31,10 @@ class MyDataCredentials(models.Model):
     SECURITY:
     - user_id και subscription_key αποθηκεύονται encrypted
     - Χρησιμοποιεί Fernet symmetric encryption
-    - Το encryption key προέρχεται από Django SECRET_KEY
+    - Το encryption key είναι ανεξάρτητο από το SECRET_KEY:
+      DATA_ENCRYPTION_KEY_CURRENT (βλ. mydata/encryption.py). Το παλιό
+      κλειδί από SECRET_KEY παραμένει μόνο για αποκρυπτογράφηση legacy
+      δεδομένων.
 
     USAGE:
         # Get credentials

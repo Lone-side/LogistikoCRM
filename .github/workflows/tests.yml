@@ -36,7 +36,15 @@ jobs:
           --health-retries 5
 
     env:
-      DEBUG: 'False'
+      # Ρητή, ΣΥΝΕΠΗΣ δήλωση περιβάλλοντος: το settings_local αποτυγχάνει
+      # κλειστά χωρίς DJANGO_ENV, και επίσης σε αντιφατικό ζεύγος
+      # DJANGO_ENV/DEBUG (η εξαίρεση test runner καλύπτει το `manage.py
+      # test`, ΟΧΙ το `manage.py migrate` του βήματος πιο κάτω).
+      # DEBUG=True ταιριάζει με την πραγματική προηγούμενη τελική
+      # συμπεριφορά: το development branch του settings_local επέβαλλε
+      # έτσι κι αλλιώς DEBUG=True σε αυτό το job.
+      DJANGO_ENV: 'development'
+      DEBUG: 'True'
       SECRET_KEY: 'test-secret-key-for-ci-only'
       FRITZ_API_TOKEN: 'test-fritz-token-for-ci-only'
       # CI-only Fernet key (το production hard-fail απαιτεί έγκυρο κλειδί
