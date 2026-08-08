@@ -206,8 +206,14 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
                  for k in ('webcrm.settings_local', 'webcrm.settings')}
         try:
             with mock.patch.dict(os.environ, env, clear=False):
-                if 'DJANGO_ENV' not in env:
-                    os.environ.pop('DJANGO_ENV', None)
+                # Κλειδιά που το test θέλει ρητά ΑΠΟΝΤΑ αφαιρούνται από το
+                # ambient περιβάλλον. Σημείωση: το load_dotenv() του
+                # settings.py μπορεί να ξαναγεμίσει το DEBUG από τοπικό
+                # .env κατά το import — ίδια συμπεριφορά με το πραγματικό
+                # manage.py, οπότε τα tests μετρούν την αλήθεια.
+                for key in ('DJANGO_ENV', 'DEBUG'):
+                    if key not in env:
+                        os.environ.pop(key, None)
                 return importlib.import_module('webcrm.settings_local')
         finally:
             for key, value in saved.items():
@@ -277,9 +283,46 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
             {**self.PROD_ENV, 'DJANGO_ENV': '  ProDuction  '})
         self.assertFalse(mod.DEBUG)
 
-        mod = self._load_settings_local(
-            {**self.PROD_ENV, 'DJANGO_ENV': 'DEVELOPMENT'})
+        # Χωρίς το DEBUG=False του PROD_ENV — θα ήταν πλέον αντίφαση με
+        # development (βλ. test_development_with_explicit_debug_false...).
+        env = {k: v for k, v in self.PROD_ENV.items() if k != 'DEBUG'}
+        mod = self._load_settings_local({**env, 'DJANGO_ENV': 'DEVELOPMENT'})
         self.assertTrue(mod.DEBUG)
+
+    def test_production_with_explicit_debug_true_fails_closed(self):
+        """
+        Η αντίφαση που έπιασε το ανεξάρτητο review του #191.
+
+        Το settings.py εισάγεται ΠΡΩΤΟ (from .settings import *) και με
+        truthy DEBUG env var παραλείπει ολόκληρο το production security
+        block. Πριν τη διόρθωση, ο συνδυασμός ολοκλήρωνε το import ΧΩΡΙΣ
+        exception και έδινε μετρημένα: DEBUG=False, SECURE_SSL_REDIRECT=
+        False, SESSION_COOKIE_SECURE=False, HSTS=0 — production όψη,
+        development θωράκιση. Πλέον σκάει πριν προλάβει να μοιάσει υγιές.
+        """
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            self._load_settings_local(
+                {**self.PROD_ENV, 'DJANGO_ENV': 'production',
+                 'DEBUG': 'True'})
+        message = str(ctx.exception)
+        self.assertIn('Αντίφαση', message)
+        self.assertIn('production', message)
+
+    def test_development_with_explicit_debug_false_fails_closed(self):
+        """
+        Η αντίστροφη αντίφαση: με falsey DEBUG το settings.py έτρεξε τα
+        production guards για ένα περιβάλλον που δηλώνεται development.
+        Τα PROD_ENV secrets κρατούν τον import του settings.py ζωντανό
+        ώστε να αποδεικνύεται ότι σκάει ο ΔΙΚΟΣ μας έλεγχος, όχι τα
+        guards.
+        """
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            self._load_settings_local(
+                {**self.PROD_ENV, 'DJANGO_ENV': 'development',
+                 'DEBUG': 'False'})
+        message = str(ctx.exception)
+        self.assertIn('Αντίφαση', message)
+        self.assertIn('development', message)
 
     def test_test_runner_works_without_django_env(self):
         """
@@ -371,6 +414,36 @@ class CIWorkflowEnvironmentTest(SimpleTestCase):
                     f'Το job «{name}» τρέχει manage.py χωρίς έγκυρο '
                     f'DJANGO_ENV — το settings_local θα αποτύχει κλειστά '
                     f'σε κάθε non-test command (π.χ. migrate).')
+
+    def test_declared_debug_does_not_contradict_django_env(self):
+        """
+        Το settings_local σκάει σε αντιφατικά DJANGO_ENV/DEBUG — άρα ένα
+        CI job με τέτοιο ζεύγος θα κοκκίνιζε στο πρώτο manage.py βήμα.
+        Ο έλεγχος εδώ το πιάνει στο ίδιο το YAML, με σαφές μήνυμα, πριν
+        φτάσει καν στο CI.
+        """
+        for name, job in self.workflow['jobs'].items():
+            env = job.get('env') or {}
+            declared = str(env.get('DJANGO_ENV', '')).strip().lower()
+            if declared not in ('production', 'development'):
+                continue
+            if 'DEBUG' not in env:
+                continue
+            debug_truthy = str(env['DEBUG']).strip().lower() in (
+                'true', '1', 'yes')
+            with self.subTest(job=name):
+                if declared == 'production':
+                    self.assertFalse(
+                        debug_truthy,
+                        f'Το job «{name}» δηλώνει DJANGO_ENV=production με '
+                        f'truthy DEBUG — το settings.py θα παρέλειπε το '
+                        f'security block και το settings_local θα έσκαγε.')
+                else:
+                    self.assertTrue(
+                        debug_truthy,
+                        f'Το job «{name}» δηλώνει DJANGO_ENV=development με '
+                        f'falsey DEBUG — αντίφαση, το settings_local θα '
+                        f'έσκαγε στο πρώτο manage.py βήμα.')
 
 
 class ProductionEnvTemplateTest(SimpleTestCase):

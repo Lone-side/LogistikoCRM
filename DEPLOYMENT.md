@@ -43,18 +43,32 @@ nano .env
 > DJANGO_ENV=production python manage.py migrate   # ✅
 > ```
 >
-> Το `settings_local` δέχεται **μόνο** `production` ή `development` και
-> αποτυγχάνει κλειστά σε οτιδήποτε άλλο:
+> Το `settings_local` δέχεται **μόνο** `production` ή `development`,
+> απαιτεί το ρητό `DEBUG` να **συμφωνεί** με αυτό, και αποτυγχάνει
+> κλειστά σε οτιδήποτε άλλο:
 >
 > | `DJANGO_ENV` | `DEBUG` (env) | Αποτέλεσμα |
 > |---|---|---|
-> | `production` | οτιδήποτε | production· `DEBUG=False`, secure cookies, HSTS |
-> | `development` | οτιδήποτε | development |
+> | `production` | απών ή falsey | production· `DEBUG=False`, secure cookies, HSTS |
+> | `production` | ρητά truthy | **`ImproperlyConfigured`** — βλ. σημείωση αντίφασης |
+> | `development` | απών ή truthy | development |
+> | `development` | ρητά falsey | **`ImproperlyConfigured`** |
 > | `  ProDuction  ` | — | production (γίνεται trim + lowercase) |
 > | `prod`, `prodction`, `staging`, κενό | — | **`ImproperlyConfigured`** |
 > | *απών* | `True` (ρητό) | development |
 > | *απών* | `False` ή απών | **`ImproperlyConfigured`** |
 > | *απών* | — (test runner) | development — τα tests τρέχουν χωρίς env setup |
+>
+> **Γιατί η αντίφαση σκάει αντί απλώς να «κερδίζει» το `DJANGO_ENV`:**
+> το `settings_local` εισάγει **πρώτα** το `settings.py`, το οποίο παίρνει
+> τις αποφάσεις ασφαλείας από το `DEBUG` env var τη στιγμή του import. Με
+> `DJANGO_ENV=production` + `DEBUG=True`, το `settings.py` έχει ήδη
+> παραλείψει HSTS, SSL redirect, secure cookies και τα fail-closed guards
+> — και αυτός ο κώδικας δεν ξανατρέχει. Το μετρημένο αποτέλεσμα πριν τον
+> έλεγχο ήταν: τελικό `DEBUG=False` αλλά `SECURE_SSL_REDIRECT=False`,
+> `SESSION_COOKIE_SECURE=False`, `HSTS=0` — production όψη, development
+> θωράκιση. Προσοχή: το `DEBUG` μπορεί να έρθει και από το `.env` μέσω
+> `load_dotenv` — μετράει ως ρητή τιμή.
 >
 > **Ιστορικό — γιατί υπάρχει αυτός ο έλεγχος.** Παλιότερα η προεπιλογή
 > ήταν σιωπηλά `development`, οπότε απών ή λάθος γραμμένο `DJANGO_ENV`
