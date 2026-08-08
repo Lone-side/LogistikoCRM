@@ -479,9 +479,17 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         client_change = 'client' in data
         new_client = data.pop('client', None) if client_change else None
         user = self.request.user
+        # Hidden cross-model ενέργεια `create_ticket=true`: ΜΟΝΟ
+        # authenticated χρήστες με add_ticket (το change_voipcall
+        # απαιτείται ήδη από το ίδιο το PATCH). Service callers δεν
+        # μπορούν να την ενεργοποιήσουν.
+        create_ticket = bool(self.request.data.get('create_ticket', False))
+        if create_ticket and not getattr(user, 'is_authenticated', False):
+            create_ticket = False
         with transaction.atomic():
-            # Τα υπόλοιπα πεδία του serializer ολοκληρώνονται atomic με
-            # την αλλαγή πελάτη — αποτυχία της αναιρεί και τα δύο.
+            # Τα υπόλοιπα πεδία του serializer, η αλλαγή πελάτη ΚΑΙ η
+            # δημιουργία ticket ολοκληρώνονται σε ΜΙΑ συναλλαγή —
+            # αποτυχία οποιουδήποτε σκέλους αναιρεί τα πάντα.
             voip_call = serializer.save()
             if client_change:
                 try:
@@ -490,38 +498,51 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
                     raise ValidationError(
                         getattr(e, 'message_dict', None) or e.messages
                     )
-
-        # Check if we should create a ticket (for missed calls)
-        create_ticket = self.request.data.get('create_ticket', False)
-
-        if create_ticket and voip_call.status == 'missed' and not voip_call.ticket_created:
-            try:
-                # Create ticket for missed call
-                ticket = Ticket.objects.create(
-                    client=voip_call.client,
+            if (
+                create_ticket
+                and voip_call.status == 'missed'
+                and not voip_call.ticket_created
+            ):
+                from django.core.exceptions import PermissionDenied
+                from accounting.services.call_assignment import (
+                    create_ticket_for_call,
+                )
+                if not user.has_perm('accounting.add_ticket'):
+                    # Μέσα στο atomic: rollback ΚΑΙ των υπόλοιπων
+                    # PATCH fields — καμία μερική μετάλλαξη
+                    raise PermissionDenied(
+                        'Η δημιουργία ticket απαιτεί δικαίωμα προσθήκης '
+                        'ticket.'
+                    )
+                started = voip_call.started_at
+                ticket = create_ticket_for_call(
+                    voip_call, user=user,
                     title=f"Αναπάντητη κλήση από {voip_call.phone_number}",
-                    description=f"Αναπάντητη κλήση στις {voip_call.started_at.strftime('%d/%m/%Y %H:%M') if voip_call.started_at else 'N/A'}",
-                    priority='medium',
-                    status='open',
-                    call=voip_call
+                    description=(
+                        'Αναπάντητη κλήση στις '
+                        f"{started.strftime('%d/%m/%Y %H:%M') if started else 'N/A'}"
+                    ),
                 )
+                logger.info(
+                    f"Created ticket #{ticket.id} for missed call "
+                    f"{voip_call.call_id}")
 
-                # Update call with ticket info
-                voip_call.ticket_created = True
-                voip_call.ticket_id = str(ticket.id)
-                voip_call.save(update_fields=['ticket_created', 'ticket_id'])
-
-                # Log the action
-                VoIPCallLog.objects.create(
-                    call=voip_call,
-                    action='ticket_created',
-                    description=f'Auto-created ticket #{ticket.id} for missed call'
-                )
-
-                logger.info(f"Created ticket #{ticket.id} for missed call {voip_call.call_id}")
-
-            except Exception as e:
-                logger.error(f"Failed to create ticket for call {voip_call.id}: {e}")
+    def perform_destroy(self, instance):
+        # Διαγραφή κλήσης με linked ticket = μετάλλαξη Ticket
+        # (SET_NULL) → μέσω κεντρικού service: delete_voipcall (ήδη από
+        # ClientModelPermissions) + change_ticket + πρόσβαση και στις
+        # δύο πλευρές, με lock order call → ticket και revalidation.
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import delete_call
+        try:
+            delete_call(instance, user=self.request.user)
+        except DjangoValidationError as e:
+            raise ValidationError(
+                getattr(e, 'message_dict', None) or e.messages
+            )
 
     @action(detail=True, methods=['post'])
     def end_call(self, request, pk=None):

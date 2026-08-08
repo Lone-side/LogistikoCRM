@@ -201,9 +201,27 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         'match_client': ['accounting.change_voipcall'],
         'auto_match': ['accounting.change_voipcall'],
         'auto_match_all': ['accounting.change_voipcall'],
-        # Δημιουργία ticket ΑΠΟ κλήση: διαβάζει την κλήση + γράφει ticket
-        'create_ticket': ['accounting.view_voipcall', 'accounting.add_ticket'],
+        # Δημιουργία ticket ΑΠΟ κλήση: διαβάζει την κλήση, γράφει ticket
+        # ΚΑΙ μεταβάλλει την κλήση (flags) + γράφει log → και change_voipcall
+        'create_ticket': ['accounting.view_voipcall', 'accounting.add_ticket',
+                          'accounting.change_voipcall'],
     }
+
+    def perform_destroy(self, instance):
+        # Διαγραφή κλήσης με linked ticket = μετάλλαξη Ticket (SET_NULL)
+        # → κεντρικό service: + change_ticket, lock order call → ticket,
+        # revalidation, πρόσβαση και στις δύο πλευρές
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import delete_call
+        try:
+            delete_call(instance, user=self.request.user)
+        except DjangoValidationError as e:
+            raise ValidationError(
+                getattr(e, 'message_dict', None) or e.messages
+            )
 
     def _validate_client_id(self, serializer):
         # Το client_id στο payload μόνο για προσβάσιμο πελάτη
@@ -391,34 +409,27 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         description = request.data.get('description', '')
         priority = request.data.get('priority', 'medium')
 
+        # Κεντρικό service: Ticket create + Call flags + Log σε ΜΙΑ atomic
+        # συναλλαγή, με lock στην κλήση και revalidation (ταυτόχρονο διπλό
+        # create → το πολύ ένα ticket). ΔΕΝ καταπίνουμε exceptions: είτε
+        # ολοκληρώνονται όλα, είτε τίποτα (rollback) — ένα απρόσμενο
+        # σφάλμα προπαγανδίζεται αντί για 400 με μερικό state.
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from accounting.services.call_assignment import create_ticket_for_call
         try:
-            ticket = Ticket.objects.create(
-                call=call,
-                client=call.client,
-                title=title,
-                description=description,
-                priority=priority,
-                status='open'
+            ticket = create_ticket_for_call(
+                call, user=request.user, title=title,
+                description=description, priority=priority,
             )
-
-            call.ticket_created = True
-            call.ticket_id = str(ticket.id)
-            call.save()
-
-            # Log the action
-            VoIPCallLog.objects.create(
-                call=call,
-                action='ticket_created',
-                description=f'Ticket #{ticket.id} created: {title}'
-            )
-
-            return Response(TicketSerializer(ticket).data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            logger.error(f"Error creating ticket: {e}", exc_info=True)
+        except DjangoValidationError as e:
             return Response(
-                {'error': 'Σφάλμα κατά τη δημιουργία ticket'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': '; '.join(e.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        return Response(TicketSerializer(ticket).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'])
     def auto_match_all(self, request):
@@ -697,6 +708,24 @@ class TicketViewSet(viewsets.ModelViewSet):
             except DjangoValidationError as e:
                 raise ValidationError(
                     getattr(e, 'message_dict', None) or e.messages)
+
+    def perform_destroy(self, instance):
+        # Διαγραφή ticket με linked call = μετάλλαξη VoIPCall (το
+        # pre_delete signal μηδενίζει ticket_created/ticket_id) →
+        # κεντρικό service: + change_voipcall, lock order call → ticket,
+        # TOCTOU revalidation, πρόσβαση και στις δύο πλευρές· αποτυχία
+        # του signal κάνει rollback ολόκληρη τη διαγραφή.
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import delete_ticket
+        try:
+            delete_ticket(instance, user=self.request.user)
+        except DjangoValidationError as e:
+            raise ValidationError(
+                getattr(e, 'message_dict', None) or e.messages
+            )
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):

@@ -1071,3 +1071,159 @@ class CallTicketLockOrderTest(TransactionTestCase):
         self.assertTrue(
             VoIPCall.objects.filter(pk=self.call.pk).exists(),
             'η κλήση δεν έπρεπε να διαγραφεί από αυτό το path')
+
+
+class CallDeleteTOCTOUTest(TransactionTestCase):
+    """
+    NIGHT SHIFT test 15 — TOCTOU στη διαγραφή κλήσης: η σχέση
+    call-ticket αλλάζει ΜΕΤΑΞΥ του lookup του view και της μετάλλαξης.
+
+    Ο χρήστης έχει delete_voipcall αλλά ΟΧΙ change_ticket. Στο lookup η
+    κλήση δεν έχει ticket· όσο ο attacker κρατά το call lock, συνδέει
+    ticket. Το delete_call() επανελέγχει στο LOCKED state (όχι στο stale
+    instance) → fail closed με PermissionDenied, η κλήση και το ticket
+    επιβιώνουν. Χωρίς revalidation, η διαγραφή θα άφηνε το νέο ticket
+    με call=None χωρίς change_ticket δικαίωμα.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL (REQUIRE_POSTGRES_TESTS=1).')
+        from accounting.models import VoIPCall
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='TOCTOU DEL ΑΕ')
+        self.call = VoIPCall.objects.create(
+            call_id='TDEL-1', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.owner)
+        user = User.objects.create_user('tdel_user', password='x',
+                                        is_staff=True)
+        for codename in ('view_voipcall', 'delete_voipcall'):
+            user.user_permissions.add(Permission.objects.get(
+                codename=codename, content_type__app_label='accounting'))
+        self.user = User.objects.get(pk=user.pk)
+
+    def test_relation_change_between_lookup_and_delete_fails_closed(self):
+        import time
+        from django.core.exceptions import PermissionDenied
+        from django.db import transaction
+        from accounting.models import Ticket, VoIPCall
+        from accounting.services.call_assignment import delete_call
+
+        barrier = threading.Barrier(2, timeout=15)
+        errors = {}
+        outcome = {}
+
+        def attacker():
+            try:
+                with transaction.atomic():
+                    VoIPCall.objects.select_for_update().get(pk=self.call.pk)
+                    barrier.wait()
+                    time.sleep(0.8)  # ο deleter μπλοκάρει στο call lock
+                    Ticket.objects.create(
+                        client=self.owner, call_id=self.call.pk,
+                        title='linked mid-flight', description='-',
+                        status='open')
+            except Exception as exc:  # pragma: no cover
+                errors['attacker'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        def deleter():
+            try:
+                # Lookup ΠΡΙΝ τη σύνδεση: χωρίς ticket
+                stale = VoIPCall.objects.get(pk=self.call.pk)
+                assert not Ticket.objects.filter(call=stale).exists()
+                barrier.wait()
+                try:
+                    delete_call(stale, user=self.user)
+                    outcome['result'] = 'deleted'
+                except PermissionDenied:
+                    outcome['result'] = 'denied'
+            except Exception as exc:  # pragma: no cover
+                errors['deleter'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=attacker),
+                   threading.Thread(target=deleter)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+
+        self.assertFalse(errors, f'threads απέτυχαν: {errors}')
+        self.assertEqual(
+            outcome.get('result'), 'denied',
+            'η διαγραφή ΔΕΝ έκανε fail closed μετά την αλλαγή της σχέσης')
+        from accounting.models import Ticket, VoIPCall
+        self.assertTrue(VoIPCall.objects.filter(pk=self.call.pk).exists())
+        ticket = Ticket.objects.get(call_id=self.call.pk)
+        self.assertEqual(ticket.call_id, self.call.pk)
+
+
+class ConcurrentCreateTicketTest(TransactionTestCase):
+    """
+    NIGHT SHIFT test 16 — ταυτόχρονο διπλό create-ticket στην ίδια
+    κλήση: το create_ticket_for_call() κλειδώνει την κλήση και
+    επανελέγχει την ύπαρξη ticket, οπότε ο δεύτερος παίρνει καθαρό
+    ValidationError — ποτέ δύο tickets, ποτέ 500/μερικά flags.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL (REQUIRE_POSTGRES_TESTS=1).')
+        from accounting.models import VoIPCall
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='DOUBLE CT ΑΕ')
+        self.call = VoIPCall.objects.create(
+            call_id='DCT-1', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.owner)
+
+    def test_concurrent_double_create_ticket_yields_exactly_one(self):
+        from accounting.models import Ticket, VoIPCall
+        from accounting.services.call_assignment import create_ticket_for_call
+
+        barrier = threading.Barrier(2, timeout=15)
+        results = {}
+
+        def worker(name):
+            try:
+                call = VoIPCall.objects.get(pk=self.call.pk)
+                barrier.wait()
+                try:
+                    ticket = create_ticket_for_call(call)
+                    results[name] = ('created', ticket.pk)
+                except ValidationError:
+                    results[name] = ('rejected', None)
+            except Exception as exc:
+                results[name] = ('error', f'{type(exc).__name__}: {exc}')
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=worker, args=(n,))
+                   for n in ('t1', 't2')]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+
+        outcomes = sorted(v[0] for v in results.values())
+        self.assertEqual(outcomes, ['created', 'rejected'],
+                         f'μη αναμενόμενα αποτελέσματα: {results}')
+        tickets = Ticket.objects.filter(call_id=self.call.pk)
+        self.assertEqual(tickets.count(), 1)
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertTrue(call.ticket_created)
+        self.assertEqual(call.ticket_id, str(tickets.first().pk))

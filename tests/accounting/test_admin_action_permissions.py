@@ -2164,3 +2164,296 @@ class VoIPCallLegacyApiPolicyTest(TestCase):
             f'{self.URL}{call2.pk}/end_call/', data=json.dumps(payload),
             content_type='application/json', secure=True)
         self.assertEqual(resp.status_code, 200, resp.content)
+
+
+class VoIPCrossModelDeleteApiTest(TestCase):
+    """
+    NIGHT SHIFT blocker A/B: DELETE μέσω API με cross-model side effects.
+
+    - DELETE VoIPCall με linked ticket → Ticket.call→NULL (SET_NULL):
+      απαιτεί delete_voipcall ΚΑΙ change_ticket (όπως το Admin), και στα
+      δύο endpoints (legacy voip-calls + v2 calls).
+    - DELETE Ticket με linked call → το pre_delete signal μηδενίζει
+      ticket_created/ticket_id της κλήσης: απαιτεί delete_ticket ΚΑΙ
+      change_voipcall.
+    """
+
+    LEGACY = '/accounting/api/v1/voip-calls/'
+    V2 = '/accounting/api/v1/calls/'
+    TICKETS = '/accounting/api/v1/tickets/'
+
+    def setUp(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.b = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        self.call = VoIPCall.objects.create(
+            call_id='XDEL-1', phone_number='2108000001',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.a)
+        self.log = VoIPCallLog.objects.create(call=self.call, action='started')
+        self.ticket = Ticket.objects.create(
+            client=self.a, call=self.call, title='τ', description='-',
+            status='open')
+
+    def _delete(self, user, url):
+        self.client.force_login(user)
+        return self.client.delete(url, secure=True)
+
+    def _assert_untouched(self):
+        from accounting.models import VoIPCall
+        self.assertTrue(VoIPCall.objects.filter(pk=self.call.pk).exists())
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.call_id, self.call.pk)
+
+    # 1. Legacy DELETE: delete_voipcall χωρίς change_ticket + linked ticket
+    def test_1_legacy_call_delete_without_change_ticket_403(self):
+        user = make_staff('xdel1', 'view_voipcall', 'delete_voipcall')
+        resp = self._delete(user, f'{self.LEGACY}{self.call.pk}/')
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self._assert_untouched()
+
+    # 2. V2 DELETE: ίδια περίπτωση
+    def test_2_v2_call_delete_without_change_ticket_403(self):
+        user = make_staff('xdel2', 'view_voipcall', 'delete_voipcall')
+        resp = self._delete(user, f'{self.V2}{self.call.pk}/')
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self._assert_untouched()
+
+    # 3. Κλήση ΧΩΡΙΣ ticket: αρκεί το delete_voipcall
+    def test_3_call_without_ticket_deletes_with_delete_perm_only(self):
+        from accounting.models import VoIPCall
+
+        user = make_staff('xdel3', 'view_voipcall', 'delete_voipcall')
+        for i, url in enumerate((self.LEGACY, self.V2)):
+            lone = VoIPCall.objects.create(
+                call_id=f'XDEL-LONE-{i}', phone_number='2108000002',
+                direction='incoming', status='missed',
+                started_at=timezone.now(), client=self.a)
+            resp = self._delete(user, f'{url}{lone.pk}/')
+            self.assertEqual(resp.status_code, 204,
+                             f'{url}: {resp.status_code}')
+            self.assertFalse(VoIPCall.objects.filter(pk=lone.pk).exists())
+
+    # 4. Εξουσιοδοτημένη διαγραφή: ticket επιβιώνει με call=None, logs ακέραια
+    def test_4_authorized_call_delete_ticket_and_logs_survive(self):
+        from accounting.models import VoIPCall
+
+        user = make_staff('xdel4', 'view_voipcall', 'delete_voipcall',
+                          'change_ticket')
+        resp = self._delete(user, f'{self.V2}{self.call.pk}/')
+        self.assertEqual(resp.status_code, 204, resp.content)
+        self.assertFalse(VoIPCall.objects.filter(pk=self.call.pk).exists())
+        self.ticket.refresh_from_db()
+        self.assertIsNone(self.ticket.call_id)
+        self.log.refresh_from_db()
+        self.assertIsNone(self.log.call_id)
+        self.assertEqual(self.log.client_id, self.a.pk)
+        self.assertEqual(self.log.call_reference, 'XDEL-1')
+        from django.core.management import call_command
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+    # 5. Cross-client/inaccessible πλευρά → fail closed, τίποτα δεν αλλάζει
+    def test_5_inaccessible_ticket_side_fails_closed(self):
+        from django.test import override_settings
+
+        # Ιστορικό state: κλήση unassigned, ticket δεμένο στον Β (τον
+        # οποίο ο χρήστης ΔΕΝ βλέπει) — η κλήση είναι ορατή στον χρήστη
+        self.call.client = None
+        self.call.save(update_fields=['client'])
+        Ticket.objects.filter(pk=self.ticket.pk).update(client=self.b)
+        user = make_staff('xdel5', 'view_voipcall', 'delete_voipcall',
+                          'change_ticket')
+        self.a.assigned_users.add(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self._delete(user, f'{self.V2}{self.call.pk}/')
+        self.assertIn(resp.status_code, (403, 404), resp.content)
+        self._assert_untouched()
+
+    # 6. Ticket DELETE: delete_ticket χωρίς change_voipcall + linked call
+    def test_6_ticket_delete_without_change_voipcall_403(self):
+        self.call.ticket_created = True
+        self.call.ticket_id = str(self.ticket.pk)
+        self.call.save(update_fields=['ticket_created', 'ticket_id'])
+        user = make_staff('xdel6', 'view_ticket', 'delete_ticket')
+        resp = self._delete(user, f'{self.TICKETS}{self.ticket.pk}/')
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertTrue(Ticket.objects.filter(pk=self.ticket.pk).exists())
+        self.call.refresh_from_db()
+        self.assertTrue(self.call.ticket_created)
+
+    # 7. Ticket ΧΩΡΙΣ call: αρκεί το delete_ticket
+    def test_7_ticket_without_call_deletes_with_delete_perm_only(self):
+        lone = Ticket.objects.create(
+            client=self.a, title='μόνο του', description='-', status='open')
+        user = make_staff('xdel7', 'view_ticket', 'delete_ticket')
+        resp = self._delete(user, f'{self.TICKETS}{lone.pk}/')
+        self.assertEqual(resp.status_code, 204, resp.content)
+        self.assertFalse(Ticket.objects.filter(pk=lone.pk).exists())
+
+    # 8. Εξουσιοδοτημένη ticket διαγραφή: call επιβιώνει με σωστά flags
+    def test_8_authorized_ticket_delete_resets_call_flags(self):
+        from accounting.models import VoIPCall
+
+        self.call.ticket_created = True
+        self.call.ticket_id = str(self.ticket.pk)
+        self.call.save(update_fields=['ticket_created', 'ticket_id'])
+        user = make_staff('xdel8', 'view_ticket', 'delete_ticket',
+                          'change_voipcall')
+        resp = self._delete(user, f'{self.TICKETS}{self.ticket.pk}/')
+        self.assertEqual(resp.status_code, 204, resp.content)
+        self.assertFalse(Ticket.objects.filter(pk=self.ticket.pk).exists())
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertFalse(call.ticket_created)
+        self.assertIsNone(call.ticket_id)
+
+    # 9. Αποτυχία του pre-delete update της κλήσης → πλήρες rollback
+    def test_9_signal_failure_rolls_back_ticket_delete(self):
+        from unittest import mock
+        from django.db import DatabaseError
+        from accounting.models import VoIPCall
+
+        user = make_staff('xdel9', 'view_ticket', 'delete_ticket',
+                          'change_voipcall')
+        self.client.force_login(user)
+
+        orig_save = VoIPCall.save
+
+        def failing_save(instance, *args, **kwargs):
+            if kwargs.get('update_fields') == ['ticket_created', 'ticket_id']:
+                raise DatabaseError('signal update failed')
+            return orig_save(instance, *args, **kwargs)
+
+        with mock.patch.object(VoIPCall, 'save', failing_save):
+            with self.assertRaises(DatabaseError):
+                self.client.delete(
+                    f'{self.TICKETS}{self.ticket.pk}/', secure=True)
+
+        self.assertTrue(Ticket.objects.filter(pk=self.ticket.pk).exists(),
+                        'η διαγραφή του ticket ΔΕΝ έγινε rollback')
+        self.ticket.refresh_from_db()
+        self.assertEqual(self.ticket.call_id, self.call.pk)
+
+
+class VoIPCreateTicketAtomicityTest(TestCase):
+    """NIGHT SHIFT blocker C/D: create_ticket ως atomic cross-model unit."""
+
+    V2 = '/accounting/api/v1/calls/'
+    LEGACY = '/accounting/api/v1/voip-calls/'
+
+    def setUp(self):
+        from accounting.models import VoIPCall
+
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.call = VoIPCall.objects.create(
+            call_id='CT-1', phone_number='2109000001',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.a, notes='αρχικό')
+
+    # 10. V2 create_ticket χωρίς change_voipcall → 403, τίποτα δεν γράφεται
+    def test_10_v2_create_ticket_without_change_voipcall_403(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        user = make_staff('ct10', 'view_voipcall', 'add_ticket')
+        self.client.force_login(user)
+        resp = self.client.post(
+            f'{self.V2}{self.call.pk}/create_ticket/', secure=True)
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists())
+        self.assertFalse(VoIPCallLog.objects.filter(
+            call=self.call, action='ticket_created').exists())
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertFalse(call.ticket_created)
+
+    # 11. Εξουσιοδοτημένο create_ticket → όλα μαζί
+    def test_11_authorized_v2_create_ticket_completes_atomically(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        user = make_staff('ct11', 'view_voipcall', 'add_ticket',
+                          'change_voipcall')
+        self.client.force_login(user)
+        resp = self.client.post(
+            f'{self.V2}{self.call.pk}/create_ticket/', secure=True)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        ticket = Ticket.objects.get(call=self.call)
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertTrue(call.ticket_created)
+        self.assertEqual(call.ticket_id, str(ticket.pk))
+        log = VoIPCallLog.objects.get(call=self.call, action='ticket_created')
+        self.assertEqual(log.client_id, self.a.pk)
+
+    # 12. Mocked αποτυχία (Call save ή Log create) → κανένα orphan/partial
+    def test_12_partial_failure_rolls_back_everything(self):
+        from unittest import mock
+        from django.db import DatabaseError
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        user = make_staff('ct12', 'view_voipcall', 'add_ticket',
+                          'change_voipcall')
+        self.client.force_login(user)
+
+        with mock.patch.object(
+                VoIPCallLog.objects, 'create',
+                side_effect=DatabaseError('log create failed')):
+            with self.assertRaises(DatabaseError):
+                self.client.post(
+                    f'{self.V2}{self.call.pk}/create_ticket/', secure=True)
+
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists(),
+                         'orphan ticket μετά από αποτυχία')
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertFalse(call.ticket_created)
+        self.assertIsNone(call.ticket_id)
+
+    # 13. Legacy PATCH create_ticket=true χωρίς add_ticket → 403 + rollback
+    def test_13_legacy_patch_create_ticket_without_add_ticket_403(self):
+        import json
+        from accounting.models import VoIPCall
+
+        user = make_staff('ct13', 'view_voipcall', 'change_voipcall')
+        self.client.force_login(user)
+        resp = self.client.patch(
+            f'{self.LEGACY}{self.call.pk}/',
+            data=json.dumps({'create_ticket': True, 'notes': 'ΑΛΛΑΓΗ'}),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists())
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertEqual(call.notes, 'αρχικό',
+                         'τα PATCH fields ΔΕΝ έγιναν rollback')
+        self.assertFalse(call.ticket_created)
+
+    # 13β. Legacy PATCH create_ticket=true ΜΕ add_ticket → όλα atomic
+    def test_13b_legacy_patch_create_ticket_authorized(self):
+        import json
+        from accounting.models import VoIPCall
+
+        user = make_staff('ct13b', 'view_voipcall', 'change_voipcall',
+                          'add_ticket')
+        self.client.force_login(user)
+        resp = self.client.patch(
+            f'{self.LEGACY}{self.call.pk}/',
+            data=json.dumps({'create_ticket': True, 'notes': 'ΝΕΟ'}),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        ticket = Ticket.objects.get(call=self.call)
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertEqual(call.notes, 'ΝΕΟ')
+        self.assertTrue(call.ticket_created)
+        self.assertEqual(call.ticket_id, str(ticket.pk))
+
+    # 14. Service caller με create_ticket=true → καμία δημιουργία/mutation
+    def test_14_service_caller_cannot_trigger_create_ticket(self):
+        import json
+
+        # Unauthenticated localhost (service clause)
+        resp = self.client.patch(
+            f'{self.LEGACY}{self.call.pk}/',
+            data=json.dumps({'create_ticket': True, 'status': 'missed'}),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists(),
+                         'service caller δημιούργησε ticket')

@@ -231,8 +231,10 @@ class SinglePermissionActionTest(HardeningBase):
 
     def test_create_ticket_with_both_perms_ok(self):
         call = self._make_call()
+        # Το create_ticket μεταβάλλει και την κλήση (flags + log) —
+        # απαιτεί πλέον ΚΑΙ change_voipcall
         user = self._user_with_perms(
-            'both_perms', 'add_ticket', 'view_voipcall',
+            'both_perms', 'add_ticket', 'view_voipcall', 'change_voipcall',
         )
         resp = self.api(user).post(
             f'/accounting/api/v1/calls/{call.id}/create_ticket/', {},

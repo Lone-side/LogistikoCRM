@@ -149,3 +149,152 @@ def sync_ticket_call_client(ticket, *, user=None):
         from accounting.models import VoIPCallLog
         VoIPCallLog.objects.filter(call=locked_call).update(
             client=locked_ticket.client_id)
+
+
+def delete_call(call, *, user=None):
+    """
+    Atomic διαγραφή κλήσης με σεβασμό του cross-model invariant.
+
+    Η διαγραφή κλήσης με linked ticket κάνει `Ticket.call → NULL`
+    (SET_NULL) — δηλαδή μεταβάλλει Ticket, άρα απαιτεί ΚΑΙ
+    `accounting.change_ticket` (όπως ήδη επιβάλλει το Admin). Κλήση
+    χωρίς ticket: αρκεί το `delete_voipcall` (ελέγχεται στο view layer).
+
+    Ενιαία global σειρά κλειδώματος VoIPCall → Ticket, με revalidation
+    στο locked state (όχι στο stale instance του caller): αν ticket
+    συνδέθηκε ΜΕΤΑ το lookup του view, fail closed. Τα VoIPCallLog
+    επιβιώνουν με τα snapshots τους (SET_NULL στο call FK).
+    """
+    from django.core.exceptions import PermissionDenied
+    from accounting.models import Ticket, VoIPCall
+
+    with transaction.atomic():
+        locked_call = VoIPCall.objects.select_for_update().filter(
+            pk=call.pk
+        ).first()
+        if locked_call is None:
+            return  # ήδη διαγραμμένη — τίποτα να κάνουμε
+        locked_ticket = Ticket.objects.select_for_update().filter(
+            call=locked_call
+        ).first()
+        if locked_ticket is not None:
+            if user is not None and not user.has_perm(
+                'accounting.change_ticket'
+            ):
+                raise PermissionDenied(
+                    'Η διαγραφή της κλήσης αποσυνδέει το ticket της — '
+                    'απαιτείται δικαίωμα αλλαγής ticket.'
+                )
+            if user is not None and locked_ticket.client_id:
+                from accounting.services.access import user_can_access_client
+                if not user_can_access_client(user, locked_ticket.client):
+                    raise PermissionDenied(
+                        'Το συνδεδεμένο ticket ανήκει σε μη προσβάσιμο '
+                        'πελάτη.'
+                    )
+        locked_call.delete()
+
+
+def delete_ticket(ticket, *, user=None):
+    """
+    Atomic διαγραφή ticket με σεβασμό του cross-model invariant.
+
+    Το pre_delete signal μεταβάλλει το linked VoIPCall
+    (`ticket_created=False`, `ticket_id=None`) — άρα ticket με κλήση
+    απαιτεί ΚΑΙ `accounting.change_voipcall`. Ticket χωρίς κλήση: αρκεί
+    το `delete_ticket` (view layer).
+
+    Σειρά κλειδώματος VoIPCall → Ticket με revalidation· αποτυχία του
+    signal ή οποιουδήποτε update κάνει rollback ολόκληρη τη διαγραφή.
+    """
+    from django.core.exceptions import PermissionDenied
+    from accounting.models import Ticket, VoIPCall
+
+    with transaction.atomic():
+        # Global σειρά: πρώτα η κλήση (από το άφρακτο instance), μετά το
+        # ticket, και revalidation της σχέσης στο locked state.
+        locked_call = None
+        if ticket.call_id:
+            locked_call = VoIPCall.objects.select_for_update().filter(
+                pk=ticket.call_id
+            ).first()
+        locked_ticket = Ticket.objects.select_for_update().filter(
+            pk=ticket.pk
+        ).first()
+        if locked_ticket is None:
+            return
+        if locked_ticket.call_id and (
+            locked_call is None or locked_ticket.call_id != locked_call.pk
+        ):
+            # Η σχέση άλλαξε μεταξύ lookup και lock — fail closed
+            raise ValidationError({
+                'call': 'Η σύνδεση κλήσης-ticket άλλαξε κατά τη διάρκεια '
+                        'της ενέργειας — δοκιμάστε ξανά.'
+            })
+        if locked_ticket.call_id:
+            if user is not None and not user.has_perm(
+                'accounting.change_voipcall'
+            ):
+                raise PermissionDenied(
+                    'Η διαγραφή του ticket ενημερώνει τη συνδεδεμένη '
+                    'κλήση — απαιτείται δικαίωμα αλλαγής κλήσης.'
+                )
+            if user is not None and locked_call.client_id:
+                from accounting.services.access import user_can_access_client
+                if not user_can_access_client(user, locked_call.client):
+                    raise PermissionDenied(
+                        'Η συνδεδεμένη κλήση ανήκει σε μη προσβάσιμο '
+                        'πελάτη.'
+                    )
+        # Το pre_delete signal τρέχει εδώ, μέσα στο atomic — αποτυχία
+        # του update της κλήσης κάνει rollback και τη διαγραφή.
+        locked_ticket.delete()
+
+
+def create_ticket_for_call(call, *, user=None, title=None, description='',
+                           priority='medium'):
+    """
+    Atomic δημιουργία Ticket από κλήση: Ticket create + Call flags
+    (`ticket_created`, `ticket_id`) + VoIPCallLog σε ΜΙΑ συναλλαγή.
+
+    Απαιτεί `add_ticket` ΚΑΙ `change_voipcall` όταν δίνεται user (η
+    ενέργεια μεταβάλλει και την κλήση). Κλειδώνει την κλήση και
+    επανελέγχει ότι δεν υπάρχει ήδη ticket — ταυτόχρονο διπλό
+    create σειριοποιείται και ο δεύτερος παίρνει ValidationError,
+    ποτέ δύο tickets ή μερικά flags.
+    """
+    from django.core.exceptions import PermissionDenied
+    from accounting.models import Ticket, VoIPCall, VoIPCallLog
+
+    if user is not None and not user.has_perms(
+        ('accounting.add_ticket', 'accounting.change_voipcall')
+    ):
+        raise PermissionDenied(
+            'Η δημιουργία ticket από κλήση απαιτεί δικαιώματα προσθήκης '
+            'ticket και αλλαγής κλήσης.'
+        )
+    with transaction.atomic():
+        locked_call = VoIPCall.objects.select_for_update().get(pk=call.pk)
+        if Ticket.objects.filter(call=locked_call).exists():
+            raise ValidationError({
+                'call': 'Υπάρχει ήδη ticket για αυτή την κλήση.'
+            })
+        ticket = Ticket.objects.create(
+            call=locked_call,
+            client=locked_call.client,
+            title=title or f'Κλήση από {locked_call.phone_number}',
+            description=description,
+            priority=priority,
+            status='open',
+        )
+        locked_call.ticket_created = True
+        locked_call.ticket_id = str(ticket.id)
+        locked_call.save(update_fields=['ticket_created', 'ticket_id'])
+        VoIPCallLog.objects.create(
+            call=locked_call,
+            action='ticket_created',
+            description=f'Ticket #{ticket.id} created: {ticket.title}',
+        )
+    call.ticket_created = True
+    call.ticket_id = str(ticket.id)
+    return ticket
