@@ -182,25 +182,104 @@ class ProductionComposeTest(SimpleTestCase):
 class SettingsLocalEnvironmentTest(SimpleTestCase):
     """Το settings_local πρέπει να τιμά το DJANGO_ENV=production."""
 
-    def test_production_branch_disables_debug(self):
+    #: Ελάχιστο valid production περιβάλλον — ικανοποιεί τα fail-closed
+    #: guards του settings.py ώστε να ελέγχεται η ΣΥΜΠΕΡΙΦΟΡΑ, όχι το
+    #: hard-fail.
+    PROD_ENV = {
+        'SECRET_KEY': 'x' * 60,
+        'DEBUG': 'False',
+        'ALLOWED_HOSTS': 'example.gr',
+        'FRITZ_API_TOKEN': 'y' * 40,
+        'DATA_ENCRYPTION_KEY_CURRENT':
+            'jhgAUo9ScsDy8CjlAM8XO5cFANKz_Nb2i01amVUla0c=',
+        'ENFORCE_CLIENT_ASSIGNMENT': 'True',
+    }
+
+    def _load_settings_local(self, env):
+        """
+        Φορτώνει καθαρά το webcrm.settings_local — δηλαδή ΑΚΡΙΒΩΣ το
+        settings module που χρησιμοποιεί το manage.py — με το δοσμένο
+        environment, χωρίς να πειράξει τα settings της διεργασίας.
+        """
         saved = {k: sys.modules.pop(k, None)
                  for k in ('webcrm.settings_local', 'webcrm.settings')}
         try:
-            with mock.patch.dict(os.environ, {
-                'DJANGO_ENV': 'production',
-                'SECRET_KEY': 'x' * 60,
-                'DEBUG': 'False',
-                'ALLOWED_HOSTS': 'example.gr',
-                'FRITZ_API_TOKEN': 'y' * 40,
-                'DATA_ENCRYPTION_KEY_CURRENT':
-                    'jhgAUo9ScsDy8CjlAM8XO5cFANKz_Nb2i01amVUla0c=',
-                'ENFORCE_CLIENT_ASSIGNMENT': 'True',
-            }, clear=False):
-                mod = importlib.import_module('webcrm.settings_local')
-                self.assertFalse(mod.DEBUG)
-                self.assertNotIn('*', mod.ALLOWED_HOSTS)
+            with mock.patch.dict(os.environ, env, clear=False):
+                if 'DJANGO_ENV' not in env:
+                    os.environ.pop('DJANGO_ENV', None)
+                return importlib.import_module('webcrm.settings_local')
         finally:
             for key, value in saved.items():
                 sys.modules.pop(key, None)
                 if value is not None:
                     sys.modules[key] = value
+
+    def test_production_branch_disables_debug(self):
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': 'production'})
+        self.assertFalse(mod.DEBUG)
+        self.assertNotIn('*', mod.ALLOWED_HOSTS)
+
+    def test_debug_false_alone_does_not_enable_production(self):
+        """
+        Η παγίδα της χειροκίνητης εγκατάστασης (βλ. DEPLOYMENT.md).
+
+        Το manage.py φορτώνει `webcrm.settings_local`, που διαλέγει branch
+        ΜΟΝΟ από το DJANGO_ENV. Με `DEBUG=False` αλλά χωρίς
+        `DJANGO_ENV=production` μπαίνει στο development branch και γράφει
+        `DEBUG = True` από πάνω — οπότε τα /media/ σερβίρονται ελεύθερα
+        από το `static()` αντί για το authenticated view.
+
+        Το test κατοχυρώνει τη σημερινή συμπεριφορά ώστε η τεκμηρίωση να
+        μην αποκλίνει σιωπηλά από τον κώδικα.
+        """
+        mod = self._load_settings_local({**self.PROD_ENV})
+
+        self.assertTrue(
+            mod.DEBUG,
+            'Η συμπεριφορά άλλαξε: το DEBUG=False αρκεί πλέον χωρίς '
+            'DJANGO_ENV. Ενημέρωσε DEPLOYMENT.md / PRODUCTION_CHECKLIST.md '
+            'και .env.production.example.')
+        self.assertIn('*', mod.ALLOWED_HOSTS)
+        self.assertFalse(mod.SESSION_COOKIE_SECURE)
+
+    def test_production_env_yields_secure_transport_settings(self):
+        """Το DJANGO_ENV=production δίνει secure cookies και HSTS."""
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': 'production'})
+        self.assertTrue(mod.SESSION_COOKIE_SECURE)
+        self.assertTrue(mod.CSRF_COOKIE_SECURE)
+        self.assertTrue(mod.SECURE_SSL_REDIRECT)
+
+
+class ProductionEnvTemplateTest(SimpleTestCase):
+    """
+    Το .env.production.example είναι το σημείο εκκίνησης κάθε deployment —
+    ό,τι λείπει από εκεί λείπει και από την εγκατάσταση.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.text = (BASE_DIR / '.env.production.example').read_text(
+            encoding='utf-8')
+
+    def _values(self, key):
+        return [line.split('=', 1)[1].strip()
+                for line in self.text.splitlines()
+                if line.strip().startswith(f'{key}=')]
+
+    def test_django_env_is_present_and_production(self):
+        values = self._values('DJANGO_ENV')
+        self.assertEqual(
+            values, ['production'],
+            'Το .env.production.example πρέπει να ορίζει DJANGO_ENV=production· '
+            'χωρίς αυτό κάθε manage.py εντολή τρέχει με DEBUG=True.')
+
+    def test_django_env_is_documented_as_mandatory(self):
+        """Να μη μείνει γυμνή γραμμή χωρίς την εξήγηση της παγίδας."""
+        deployment = (BASE_DIR / 'DEPLOYMENT.md').read_text(encoding='utf-8')
+        self.assertIn('DJANGO_ENV', deployment)
+        checklist = (BASE_DIR / 'PRODUCTION_CHECKLIST.md').read_text(
+            encoding='utf-8')
+        self.assertIn('DJANGO_ENV', checklist)
