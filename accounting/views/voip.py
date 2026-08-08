@@ -163,9 +163,11 @@ def fritz_webhook(request):
             # Auto-match client by phone
             client = _match_client_by_phone_standalone(call.phone_number)
             if client:
-                call.client = client
-                call.client_email = client.email
-                call.save()
+                # Μέσω κεντρικού service — atomic με ticket sync/log resync
+                from accounting.services.call_assignment import (
+                    change_call_client,
+                )
+                change_call_client(call, client)
                 logger.info(f"VoIP: Matched call {call.call_id} to client {client.eponimia}")
 
             # Create log entry
@@ -390,10 +392,11 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         voip_call = serializer.save()
         client = self._match_client_by_phone(voip_call.phone_number)
 
-        if client:
-            voip_call.client = client
-            voip_call.client_email = client.email
-            voip_call.save()
+        if client and voip_call.client_id != client.pk:
+            # Auto-match σε ΥΠΑΡΧΟΥΣΑ πλέον κλήση: μέσω κεντρικού service
+            # (atomic ticket sync + log resync — snapshot contract)
+            from accounting.services.call_assignment import change_call_client
+            change_call_client(voip_call, client)
             logger.info(f"Matched call to client: {client.eponimia}")
 
         # Log call creation
@@ -417,7 +420,36 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         """Update call and create ticket if requested"""
-        voip_call = serializer.save()
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from django.db import transaction
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import change_call_client
+
+        # Αλλαγή πελάτη ΜΟΝΟ μέσω του κεντρικού service: το γυμνό
+        # serializer.save() παρέκαμπτε το atomic Ticket sync και το
+        # VoIPCallLog resync (invariant κλήσης-ticket + snapshot contract).
+        data = serializer.validated_data
+        client_change = 'client' in data
+        new_client = data.pop('client', None) if client_change else None
+        user = self.request.user
+        if client_change and not getattr(user, 'is_authenticated', False):
+            # Service callers (Fritz monitor / localhost): δεν αντιστοιχίζουν
+            # πελάτη — ίδιο gate με το /api/v1/calls/ (api_voip.py)
+            client_change = False
+            new_client = None
+        with transaction.atomic():
+            # Τα υπόλοιπα πεδία του serializer ολοκληρώνονται atomic με
+            # την αλλαγή πελάτη — αποτυχία της αναιρεί και τα δύο.
+            voip_call = serializer.save()
+            if client_change:
+                try:
+                    change_call_client(voip_call, new_client, user=user)
+                except DjangoValidationError as e:
+                    raise ValidationError(
+                        getattr(e, 'message_dict', None) or e.messages
+                    )
 
         # Check if we should create a ticket (for missed calls)
         create_ticket = self.request.data.get('create_ticket', False)

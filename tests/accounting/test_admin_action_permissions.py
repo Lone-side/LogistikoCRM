@@ -1753,3 +1753,222 @@ class VoIPCallLogClientResyncTest(TestCase):
         self.assertIsNone(self.call.client_id,
                           'η αλλαγή πελάτη ΔΕΝ έγινε rollback')
         self.assertIsNone(self.started_log.client_id)
+
+
+class VoIPCallApiClientChangeTest(TestCase):
+    """
+    Blocker ανεξάρτητου review στο `07d4d6a`: το legacy REST endpoint
+    `/accounting/api/v1/voip-calls/` (VoIPCallSerializer με writable
+    `client` + γυμνό serializer.save() στο perform_update) παρέκαμπτε το
+    change_call_client() — άρα και το atomic Ticket sync και το
+    VoIPCallLog resync. PATCH client=Β άφηνε call=Β, ticket=Α, logs=Α
+    και το audit gate κοκκίνιζε.
+    """
+
+    URL = '/accounting/api/v1/voip-calls/'
+
+    def setUp(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.b = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        self.call = VoIPCall.objects.create(
+            call_id='API-CC-1', phone_number='2101112223',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=None)
+        self.started_log = VoIPCallLog.objects.create(
+            call=self.call, action='started')
+        self.assertIsNone(self.started_log.client_id)
+        self.superuser = User.objects.create_superuser(
+            'api_cc_root', 'r@x.gr', 'x')
+
+    def _audit_clean(self):
+        from django.core.management import call_command
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+    def _patch(self, payload):
+        import json
+        return self.client.patch(
+            f'{self.URL}{self.call.pk}/', data=json.dumps(payload),
+            content_type='application/json', secure=True)
+
+    def test_patch_unassigned_to_client_resyncs_old_and_new_logs(self):
+        from accounting.models import VoIPCallLog
+
+        self.client.force_login(self.superuser)
+        resp = self._patch({'client': self.a.pk})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        self.started_log.refresh_from_db()
+        self.assertEqual(self.started_log.client_id, self.a.pk,
+                         'το προϋπάρχον log δεν ακολούθησε τον πελάτη')
+        new_log = VoIPCallLog.objects.create(call=self.call, action='ended')
+        self.assertEqual(new_log.client_id, self.a.pk)
+        self._audit_clean()
+
+    def test_patch_reassign_moves_call_ticket_and_all_logs(self):
+        from accounting.models import Ticket, VoIPCallLog
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.a)
+        ticket = Ticket.objects.create(
+            client=self.a, call=self.call, title='τ', description='-',
+            status='open')
+        VoIPCallLog.objects.create(call=self.call, action='answered')
+
+        self.client.force_login(self.superuser)
+        resp = self._patch({'client': self.b.pk})
+        self.assertEqual(resp.status_code, 200, resp.content)
+
+        self.call.refresh_from_db()
+        ticket.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.b.pk)
+        self.assertEqual(ticket.client_id, self.b.pk)
+        for log in VoIPCallLog.objects.filter(call=self.call):
+            self.assertEqual(log.client_id, self.b.pk)
+        self._audit_clean()
+
+    def test_patch_without_change_ticket_perm_is_400_and_rolls_back(self):
+        from accounting.models import Ticket, VoIPCallLog
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.a)
+        ticket = Ticket.objects.create(
+            client=self.a, call=self.call, title='τ', description='-',
+            status='open')
+
+        # Staff (IsAdminUser) χωρίς accounting.change_ticket
+        staff = make_staff('api_cc_staff')
+        self.client.force_login(staff)
+        resp = self._patch({'client': self.b.pk, 'notes': 'ΑΛΛΑΓΗ'})
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+        self.call.refresh_from_db()
+        ticket.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.a.pk)
+        self.assertEqual(ticket.client_id, self.a.pk)
+        # Πλήρες rollback: ΚΑΙ τα υπόλοιπα πεδία του serializer
+        self.assertNotEqual(self.call.notes, 'ΑΛΛΑΓΗ')
+        for log in VoIPCallLog.objects.filter(call=self.call):
+            self.assertEqual(log.client_id, self.a.pk)
+        self._audit_clean()
+
+    def test_patch_unassign_with_assigned_ticket_is_400_and_rolls_back(self):
+        from accounting.models import Ticket
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.a)
+        ticket = Ticket.objects.create(
+            client=self.a, call=self.call, title='τ', description='-',
+            status='open')
+
+        self.client.force_login(self.superuser)
+        resp = self._patch({'client': None, 'notes': 'ΑΛΛΑΓΗ'})
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+        self.call.refresh_from_db()
+        ticket.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.a.pk)
+        self.assertEqual(ticket.client_id, self.a.pk)
+        self.assertNotEqual(self.call.notes, 'ΑΛΛΑΓΗ')
+        self._audit_clean()
+
+    def test_patch_rollback_when_log_resync_fails(self):
+        """Αποτυχία resync → ούτε η κλήση ούτε άλλα πεδία αλλάζουν."""
+        from unittest import mock
+        from django.db import DatabaseError
+        from accounting.models import VoIPCallLog
+
+        real_filter = VoIPCallLog.objects.filter
+
+        def failing_filter(*args, **kwargs):
+            qs = real_filter(*args, **kwargs)
+            if kwargs.get('call') is not None:
+                broken = mock.MagicMock(wraps=qs)
+                broken.update.side_effect = DatabaseError('resync failed')
+                return broken
+            return qs
+
+        self.client.force_login(self.superuser)
+        with mock.patch.object(
+                type(VoIPCallLog.objects), 'filter',
+                side_effect=failing_filter):
+            with self.assertRaises(DatabaseError):
+                self._patch({'client': self.a.pk, 'notes': 'ΑΛΛΑΓΗ'})
+
+        self.call.refresh_from_db()
+        self.started_log.refresh_from_db()
+        self.assertIsNone(self.call.client_id)
+        self.assertNotEqual(self.call.notes, 'ΑΛΛΑΓΗ')
+        self.assertIsNone(self.started_log.client_id)
+
+    def test_service_caller_cannot_change_client_via_patch(self):
+        """Fritz monitor/localhost: το client αγνοείται — ίδιο gate με
+        το /api/v1/calls/ (api_voip)."""
+        resp = self._patch({'client': self.a.pk, 'status': 'completed'})
+        # Localhost service caller (test client είναι 127.0.0.1)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.call.refresh_from_db()
+        self.assertIsNone(self.call.client_id,
+                          'service caller αντιστοίχισε πελάτη')
+        self.assertEqual(self.call.status, 'completed')
+
+    def test_api_create_with_automatch_respects_contract(self):
+        """Δημιουργία + auto-match ΠΡΙΝ το πρώτο log: το 'started' log
+        παίρνει ήδη τον matched πελάτη — καμία παραβίαση του contract."""
+        import json
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        self.a.kinito_tilefono = '6941234567'
+        self.a.save(update_fields=['kinito_tilefono'])
+        self.client.force_login(self.superuser)
+        resp = self.client.post(
+            self.URL, data=json.dumps({
+                'call_id': 'API-CC-NEW', 'phone_number': '6941234567',
+                'direction': 'incoming', 'status': 'active',
+                'started_at': timezone.now().isoformat(),
+            }), content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 201, resp.content)
+
+        call = VoIPCall.objects.get(call_id='API-CC-NEW')
+        self.assertEqual(call.client_id, self.a.pk)
+        log = VoIPCallLog.objects.get(call=call, action='started')
+        self.assertEqual(log.client_id, self.a.pk)
+        self._audit_clean()
+
+
+class VoIPCallLogExplicitClientContractTest(TestCase):
+    """Model contract lock: δημιουργία log με ενεργό call και ρητά δοσμένο
+    ΔΙΑΦΟΡΕΤΙΚΟ client δεν μπορεί να δημιουργήσει mismatch — το snapshot
+    αντικαθίσταται πάντα από τη fresh locked κλήση."""
+
+    def test_explicit_mismatched_client_is_overridden(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        a = ClientProfile.objects.create(afm='094014201', eponimia='Α')
+        b = ClientProfile.objects.create(afm='998877665', eponimia='Β')
+        call = VoIPCall.objects.create(
+            call_id='CTR-1', phone_number='2100000001',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=a)
+
+        log = VoIPCallLog.objects.create(call=call, action='started',
+                                         client=b)
+        log.refresh_from_db()
+        self.assertEqual(log.client_id, a.pk,
+                         'ρητό mismatched client δημιούργησε παραβίαση')
+        from django.core.management import call_command
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+    def test_explicit_client_without_call_is_kept(self):
+        """Χωρίς ενεργό call (orphan audit row) το ρητό client μένει."""
+        from accounting.models import VoIPCallLog
+
+        a = ClientProfile.objects.create(afm='094014201', eponimia='Α')
+        log = VoIPCallLog.objects.create(
+            call=None, action='started', client=a,
+            call_reference='GONE-1', phone_number='2100000002')
+        log.refresh_from_db()
+        self.assertEqual(log.client_id, a.pk)

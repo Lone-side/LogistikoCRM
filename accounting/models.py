@@ -1552,8 +1552,11 @@ class VoIPCallLog(models.Model):
                          .values('client_id', 'call_id', 'phone_number')
                          .first())
                 if fresh is not None:
-                    if not self.client_id:
-                        self.client_id = fresh['client_id']
+                    # Contract lock: όσο η κλήση υπάρχει, το snapshot client
+                    # καθρεφτίζει ΠΑΝΤΑ την κλήση — ρητά δοσμένο διαφορετικό
+                    # client_id αντικαθίσταται (όχι fail, ώστε κανένα call
+                    # site να μην μπορεί να δημιουργήσει client-mismatch).
+                    self.client_id = fresh['client_id']
                     if not self.call_reference:
                         self.call_reference = str(
                             fresh['call_id'] or self.call_id)
