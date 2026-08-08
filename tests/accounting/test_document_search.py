@@ -8,14 +8,17 @@ PostgreSQL στο CI (SearchVector branch) — ίδια tests, δύο υλοπο
 """
 from datetime import timedelta
 
+from unittest import skipUnless
+
 from django.contrib.auth.models import User
 from tests.utils.helpers import grant_accounting_model_perms
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase
 from django.utils import timezone
 
 from accounting.models import ClientDocument, ClientProfile
-from accounting.services.search import apply_document_search
+from accounting.services.search import _to_greek, apply_document_search
 
 
 def make_document(client, filename, extracted_text='', description=''):
@@ -137,3 +140,121 @@ class CleanupStaleSyncLogsTest(TestCase):
         cleanup_stale_sync_logs(stale_minutes=5)
         log.refresh_from_db()
         self.assertEqual(log.status, 'ERROR')
+
+
+class GreekDeltaSearchTest(TestCase):
+    """
+    Η αναζήτηση όταν το «Δ» δεν είναι «Δ».
+
+    Το pypdf 6.15.0 εξήγαγε το ελληνικό Δ (U+0394) ως ∆ (U+2206, INCREMENT).
+    Η έκδοση είναι πλέον καρφωμένη στο 6.14.2, αλλά **τα ήδη αποθηκευμένα
+    extracted_text δεν ξαναγράφονται**: όποιο έγγραφο επεξεργάστηκε με τη
+    χαλασμένη έκδοση κουβαλά U+2206 για πάντα. Για λογιστικό γραφείο αυτό
+    σημαίνει ότι ΔΗΛΩΣΗ, ΔΟΥ, ΑΔΕΙΑ, ΔΙΑΒΙΒΑΣΗ γίνονται μη ευρέσιμα.
+
+    Τα tests παρακάτω ΔΕΝ υποθέτουν καμία υπάρχουσα normalization — μετρούν
+    τη συμπεριφορά της πραγματικής διαδρομής αναζήτησης
+    (apply_document_search) και για τις δύο γραφές.
+    """
+
+    def setUp(self):
+        self.client_profile = ClientProfile.objects.create(
+            afm='123456783', eponimia='ΕΤΑΙΡΕΙΑ ΔΟΚΙΜΩΝ ΑΕ',
+            eidos_ipoxreou='company',
+        )
+        # Έγγραφο με ΣΩΣΤΟ ελληνικό Δ (U+0394) — pypdf 6.14.2
+        self.doc_correct = make_document(
+            self.client_profile, 'sosto.pdf',
+            extracted_text='ΔΗΛΩΣΗ ΦΠΑ προς ΔΟΥ Αθηνών',
+        )
+        # Έγγραφο με ∆ (U+2206) — ό,τι άφησε πίσω το pypdf 6.15.0
+        self.doc_increment = make_document(
+            self.client_profile, 'xalasmeno.pdf',
+            extracted_text='∆ΗΛΩΣΗ ΦΠΑ προς '
+                           '∆ΟΥ Θεσσαλονίκης',
+        )
+
+    def _search(self, term):
+        return list(apply_document_search(
+            ClientDocument.objects.all(), term, include_client_fields=False))
+
+    def test_fixture_really_contains_increment_sign(self):
+        """Δίχτυ: αν το fixture δεν έχει U+2206, τα υπόλοιπα tests είναι κενά."""
+        self.doc_increment.refresh_from_db()
+        self.assertIn('∆', self.doc_increment.extracted_text)
+        self.assertNotIn('Δ', self.doc_increment.extracted_text)
+        self.doc_correct.refresh_from_db()
+        self.assertIn('Δ', self.doc_correct.extracted_text)
+
+    def test_normal_delta_finds_normal_document(self):
+        """Βάση αναφοράς: το σωστό Δ βρίσκει το σωστό έγγραφο."""
+        self.assertIn(self.doc_correct, self._search('ΔΗΛΩΣΗ'))
+
+    def test_normal_delta_finds_increment_document(self):
+        """Ο χρήστης γράφει Δ (U+0394) — πρέπει να βρει και το ∆ έγγραφο."""
+        self.assertIn(
+            self.doc_increment, self._search('ΔΗΛΩΣΗ'),
+            'έγγραφο με ∆ (U+2206) δεν βρίσκεται όταν ο χρήστης γράφει Δ')
+
+    def test_increment_sign_finds_normal_document(self):
+        """Και το αντίστροφο: επικόλληση ∆ πρέπει να βρίσκει το σωστό Δ."""
+        self.assertIn(
+            self.doc_correct, self._search('∆ΗΛΩΣΗ'),
+            'έγγραφο με σωστό Δ δεν βρίσκεται όταν ο όρος έχει ∆')
+
+    @skipUnless(
+        connection.vendor == 'postgresql',
+        'Το LIKE του SQLite κάνει case-folding μόνο σε ASCII: το «δ» δεν '
+        'ταιριάζει ποτέ με «Δ», ανεξάρτητα από αυτή τη διόρθωση. Η παραγωγή '
+        'τρέχει PostgreSQL, όπου ο έλεγχος γίνεται πλήρης.',
+    )
+    def test_lowercase_delta_finds_both(self):
+        """Πεζό δ: η αναζήτηση είναι case-insensitive και για τις δύο γραφές."""
+        results = self._search('δηλωση')
+        self.assertIn(self.doc_correct, results, 'πεζό δ δεν βρήκε το σωστό Δ')
+        self.assertIn(self.doc_increment, results, 'πεζό δ δεν βρήκε το ∆')
+
+    def test_uppercase_delta_finds_both_on_every_backend(self):
+        """
+        Η ίδια κάλυψη χωρίς εξάρτηση από case-folding, ώστε να ελέγχεται και
+        στο SQLite: κεφαλαίος όρος, κεφαλαία δεδομένα, δύο γραφές του Δ.
+        """
+        results = self._search('ΔΗΛΩΣΗ')
+        self.assertIn(self.doc_correct, results)
+        self.assertIn(self.doc_increment, results)
+
+    def test_delta_inside_word_is_found(self):
+        """ΔΟΥ μέσα σε πρόταση — και στις δύο γραφές."""
+        self.assertIn(self.doc_correct, self._search('ΔΟΥ'))
+        self.assertIn(self.doc_increment, self._search('ΔΟΥ'))
+
+    def test_unrelated_math_symbols_are_not_normalized(self):
+        """
+        Φράχτης εύρους: ΜΟΝΟ το ∆ (U+2206) κανονικοποιείται.
+
+        Τα ∑ (U+2211) και ∏ (U+220F) είναι κανονικά μαθηματικά σύμβολα με
+        δική τους σημασία — αν τα μεταφράζαμε σε Σ/Π, μια αναζήτηση για
+        «Σ x_i» θα επέστρεφε ψευδώς έγγραφο που γράφει «∑ x_i». Το test
+        κλειδώνει ότι δεν συμβαίνει, ώστε να μην ξαναμπούν speculative
+        mappings χωρίς fail-before απόδειξη.
+        """
+        doc_math = make_document(
+            self.client_profile, 'mathimatika.pdf',
+            extracted_text='Τύπος: ∑ x_i και ∏ y_i',
+        )
+
+        # Το σύμβολο μένει ανέπαφο στο επίπεδο της συνάρτησης...
+        self.assertEqual(_to_greek('∑ ∏ µ'), '∑ ∏ µ')
+        # ...και το ∆ εξακολουθεί να μεταφράζεται.
+        self.assertEqual(_to_greek('∆'), 'Δ')
+
+        # Αναζήτηση με ελληνικό γράμμα ΔΕΝ πρέπει να πιάνει το σύμβολο.
+        self.assertNotIn(
+            doc_math, self._search('Σ x_i'),
+            'το ∑ κανονικοποιήθηκε σε Σ — ψευδές αποτέλεσμα αναζήτησης')
+        self.assertNotIn(
+            doc_math, self._search('Π y_i'),
+            'το ∏ κανονικοποιήθηκε σε Π — ψευδές αποτέλεσμα αναζήτησης')
+
+        # Το ίδιο το σύμβολο παραμένει ευρέσιμο ως έχει.
+        self.assertIn(doc_math, self._search('∑ x_i'))
