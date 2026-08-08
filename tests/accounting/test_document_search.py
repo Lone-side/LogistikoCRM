@@ -18,7 +18,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounting.models import ClientDocument, ClientProfile
-from accounting.services.search import apply_document_search
+from accounting.services.search import _to_greek, apply_document_search
 
 
 def make_document(client, filename, extracted_text='', description=''):
@@ -227,3 +227,34 @@ class GreekDeltaSearchTest(TestCase):
         """ΔΟΥ μέσα σε πρόταση — και στις δύο γραφές."""
         self.assertIn(self.doc_correct, self._search('ΔΟΥ'))
         self.assertIn(self.doc_increment, self._search('ΔΟΥ'))
+
+    def test_unrelated_math_symbols_are_not_normalized(self):
+        """
+        Φράχτης εύρους: ΜΟΝΟ το ∆ (U+2206) κανονικοποιείται.
+
+        Τα ∑ (U+2211) και ∏ (U+220F) είναι κανονικά μαθηματικά σύμβολα με
+        δική τους σημασία — αν τα μεταφράζαμε σε Σ/Π, μια αναζήτηση για
+        «ΣΥΝΟΛΟ» θα επέστρεφε ψευδώς έγγραφο που γράφει «∑ x». Το test
+        κλειδώνει ότι δεν συμβαίνει, ώστε να μην ξαναμπούν speculative
+        mappings χωρίς fail-before απόδειξη.
+        """
+        doc_math = make_document(
+            self.client_profile, 'mathimatika.pdf',
+            extracted_text='Τύπος: ∑ x_i και ∏ y_i',
+        )
+
+        # Το σύμβολο μένει ανέπαφο στο επίπεδο της συνάρτησης...
+        self.assertEqual(_to_greek('∑ ∏ µ'), '∑ ∏ µ')
+        # ...και το ∆ εξακολουθεί να μεταφράζεται.
+        self.assertEqual(_to_greek('∆'), 'Δ')
+
+        # Αναζήτηση με ελληνικό γράμμα ΔΕΝ πρέπει να πιάνει το σύμβολο.
+        self.assertNotIn(
+            doc_math, self._search('Σ x_i'),
+            'το ∑ κανονικοποιήθηκε σε Σ — ψευδές αποτέλεσμα αναζήτησης')
+        self.assertNotIn(
+            doc_math, self._search('Π y_i'),
+            'το ∏ κανονικοποιήθηκε σε Π — ψευδές αποτέλεσμα αναζήτησης')
+
+        # Το ίδιο το σύμβολο παραμένει ευρέσιμο ως έχει.
+        self.assertIn(doc_math, self._search('∑ x_i'))

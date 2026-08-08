@@ -15,29 +15,25 @@ from django.db import connection
 from django.db.models import F, Q, TextField, Value
 from django.db.models.functions import Coalesce, Replace
 
-# Χαρακτήρες που «μοιάζουν» με ελληνικά γράμματα αλλά είναι μαθηματικά
-# σύμβολα σε άλλο codepoint. Κάποιες γεννήτριες PDF (και το pypdf 6.15.0,
-# βλ. requirements.txt) εξάγουν το ελληνικό Δ ως ∆ (U+2206, INCREMENT).
+# Το pypdf 6.15.0 (βλ. requirements.txt) εξήγαγε το ελληνικό κεφαλαίο Δ ως
+# ∆ (U+2206 INCREMENT). Η έκδοση είναι πλέον καρφωμένη, αλλά **τα ήδη
+# αποθηκευμένα extracted_text δεν ξαναγράφονται**: ό,τι επεξεργάστηκε η
+# χαλασμένη έκδοση κουβαλά U+2206 για πάντα. Χωρίς κανονικοποίηση, τα
+# ΔΗΛΩΣΗ / ΔΟΥ / ΑΔΕΙΑ γίνονται μη ευρέσιμα σε εκείνα τα έγγραφα.
 #
-# Η έκδοση του pypdf είναι πλέον καρφωμένη, αλλά **τα ήδη αποθηκευμένα
-# extracted_text δεν ξαναγράφονται**: ό,τι επεξεργάστηκε η χαλασμένη
-# έκδοση κουβαλά U+2206 για πάντα. Χωρίς αυτόν τον χάρτη, ΔΗΛΩΣΗ / ΔΟΥ /
-# ΑΔΕΙΑ γίνονται μη ευρέσιμα σε εκείνα τα έγγραφα.
-#
-# Επιβεβαιωμένο στην πράξη: Δ. Τα υπόλοιπα είναι η ίδια ακριβώς κατηγορία
-# σύγχυσης (μαθηματικό σύμβολο vs ελληνικό γράμμα) και κοστίζουν μόνο ένα
-# επιπλέον OR clause.
-_SYMBOL_TO_GREEK = {
-    '∆': 'Δ',  # ∆ INCREMENT        → Δ
-    '∑': 'Σ',  # ∑ N-ARY SUMMATION  → Σ
-    '∏': 'Π',  # ∏ N-ARY PRODUCT    → Π
-    'µ': 'μ',  # µ MICRO SIGN       → μ
-}
+# Αυτό είναι το μοναδικό ζεύγος με fail-before απόδειξη σε πραγματικά
+# εξαγόμενο κείμενο. Σκόπιμα ΔΕΝ προστίθενται άλλα «παρόμοια» (∑→Σ, ∏→Π,
+# µ→μ): είναι κανονικά μαθηματικά σύμβολα με δική τους σημασία, η
+# μετατροπή τους θα παρήγαγε ψευδή αποτελέσματα αναζήτησης, και κάθε
+# ζεύγος κοστίζει ένα ακόμη SQL REPLACE πάνω στη στήλη. Νέο ζεύγος μόνο
+# με fail-before απόδειξη.
+_BROKEN_DELTA = '∆'  # U+2206
+_GREEK_DELTA = 'Δ'   # U+0394
 
 
 def _to_greek(text):
-    """Κανονικοποίηση συμβόλων προς το αντίστοιχο ελληνικό γράμμα."""
-    return ''.join(_SYMBOL_TO_GREEK.get(ch, ch) for ch in text or '')
+    """Κανονικοποίηση του αλλοιωμένου ∆ (U+2206) προς το ελληνικό Δ."""
+    return (text or '').replace(_BROKEN_DELTA, _GREEK_DELTA)
 
 
 def _normalized_field(field_name):
@@ -52,11 +48,12 @@ def _normalized_field(field_name):
     # Ρητό output_field: το Value('') είναι CharField ενώ το extracted_text
     # TextField, και ο Coalesce αρνείται να μαντέψει.
     text = TextField()
-    expression = Coalesce(F(field_name), Value(''), output_field=text)
-    for symbol, greek in _SYMBOL_TO_GREEK.items():
-        expression = Replace(
-            expression, Value(symbol), Value(greek), output_field=text)
-    return expression
+    return Replace(
+        Coalesce(F(field_name), Value(''), output_field=text),
+        Value(_BROKEN_DELTA),
+        Value(_GREEK_DELTA),
+        output_field=text,
+    )
 
 
 def apply_document_search(queryset, term, include_client_fields=True):
