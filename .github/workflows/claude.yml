@@ -49,6 +49,7 @@ jobs:
           fetch-depth: 1
 
       - name: Run Claude Code
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -56,3 +57,29 @@ jobs:
           label_trigger: "claude"
           additional_permissions: |
             actions: read
+
+      - name: Open pull request for labeled issue work
+        if: |
+          github.event_name == 'issues' &&
+          github.event.action == 'labeled' &&
+          github.event.label.name == 'claude' &&
+          steps.claude.outputs.branch_name != ''
+        env:
+          GH_TOKEN: ${{ secrets.AI_PR_TOKEN }}
+          HEAD_BRANCH: ${{ steps.claude.outputs.branch_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          set -euo pipefail
+
+          existing_pr="$(gh pr list --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing_pr" ]; then
+            echo "PR #$existing_pr already exists for $HEAD_BRANCH"
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$HEAD_BRANCH" \
+            --title "$ISSUE_TITLE" \
+            --body "Automated implementation for #${ISSUE_NUMBER}.\n\nCloses #${ISSUE_NUMBER}.\n\nGenerated with Claude Code."
