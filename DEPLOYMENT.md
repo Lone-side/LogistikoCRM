@@ -43,25 +43,30 @@ nano .env
 > DJANGO_ENV=production python manage.py migrate   # ✅
 > ```
 >
-> Επαληθευμένη συμπεριφορά με `DEBUG=False` αλλά **χωρίς** `DJANGO_ENV`:
+> Το `settings_local` δέχεται **μόνο** `production` ή `development` και
+> αποτυγχάνει κλειστά σε οτιδήποτε άλλο:
 >
-> | Ρύθμιση | Τιμή που προκύπτει |
-> |---|---|
-> | `DEBUG` | `True` |
-> | `ALLOWED_HOSTS` | `['*']` |
-> | `SESSION_COOKIE_SECURE` | `False` |
-> | `SECURE_SSL_REDIRECT` | `False` |
-> | `SECURE_HSTS_SECONDS` | `0` |
+> | `DJANGO_ENV` | `DEBUG` (env) | Αποτέλεσμα |
+> |---|---|---|
+> | `production` | οτιδήποτε | production· `DEBUG=False`, secure cookies, HSTS |
+> | `development` | οτιδήποτε | development |
+> | `  ProDuction  ` | — | production (γίνεται trim + lowercase) |
+> | `prod`, `prodction`, `staging`, κενό | — | **`ImproperlyConfigured`** |
+> | *απών* | `True` (ρητό) | development |
+> | *απών* | `False` ή απών | **`ImproperlyConfigured`** |
+> | *απών* | — (test runner) | development — τα tests τρέχουν χωρίς env setup |
 >
-> Με `DEBUG=True` τα `/media/` σερβίρονται **ελεύθερα** από το `static()`
-> αντί για το authenticated `serve_protected_media` — δηλαδή έγγραφα
-> πελατών γίνονται προσβάσιμα χωρίς login.
->
-> Τα fail-closed guards (`FRITZ_API_TOKEN`, `DATA_ENCRYPTION_KEY_CURRENT`,
-> `ENFORCE_CLIENT_ASSIGNMENT`) **δεν** παρακάμπτονται: κρίνονται από το
-> `DEBUG` env var μέσα στο `settings.py`, οπότε εξακολουθούν να μπλοκάρουν
-> την εκκίνηση. Γι' αυτό ακριβώς το πρόβλημα είναι ύπουλο — η εφαρμογή
-> ξεκινά κανονικά και μοιάζει σωστά ρυθμισμένη.
+> **Ιστορικό — γιατί υπάρχει αυτός ο έλεγχος.** Παλιότερα η προεπιλογή
+> ήταν σιωπηλά `development`, οπότε απών ή λάθος γραμμένο `DJANGO_ENV`
+> έδινε `DEBUG=True`, `ALLOWED_HOSTS=['*']`, χωρίς secure cookies/HSTS —
+> και, το σοβαρότερο, τα `/media/` σερβίρονταν **ελεύθερα** από το
+> `static()` αντί για το authenticated `serve_protected_media`, δηλαδή
+> έγγραφα πελατών χωρίς login. Τα fail-closed guards
+> (`FRITZ_API_TOKEN`, `DATA_ENCRYPTION_KEY_CURRENT`,
+> `ENFORCE_CLIENT_ASSIGNMENT`) **δεν** έπιαναν το πρόβλημα: κρίνονται από
+> το `DEBUG` env var μέσα στο `settings.py`. Η εφαρμογή ξεκινούσε
+> κανονικά και έμοιαζε σωστά ρυθμισμένη — γι' αυτό πλέον σκάει αντί να
+> μαντεύει.
 >
 > Έλεγχος:
 >

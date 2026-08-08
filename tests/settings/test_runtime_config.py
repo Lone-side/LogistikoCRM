@@ -28,6 +28,7 @@ from pathlib import Path
 from unittest import mock
 
 import yaml
+from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -220,28 +221,112 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
         self.assertFalse(mod.DEBUG)
         self.assertNotIn('*', mod.ALLOWED_HOSTS)
 
-    def test_debug_false_alone_does_not_enable_production(self):
+    def test_debug_false_without_django_env_fails_closed(self):
         """
-        Η παγίδα της χειροκίνητης εγκατάστασης (βλ. DEPLOYMENT.md).
+        Η παγίδα της χειροκίνητης εγκατάστασης — πλέον fail closed.
 
-        Το manage.py φορτώνει `webcrm.settings_local`, που διαλέγει branch
-        ΜΟΝΟ από το DJANGO_ENV. Με `DEBUG=False` αλλά χωρίς
-        `DJANGO_ENV=production` μπαίνει στο development branch και γράφει
-        `DEBUG = True` από πάνω — οπότε τα /media/ σερβίρονται ελεύθερα
-        από το `static()` αντί για το authenticated view.
+        Παλιότερα αυτός ο συνδυασμός κατέληγε σιωπηλά σε development:
+        DEBUG=True, ALLOWED_HOSTS=['*'] και **δημόσια /media/** (το urls.py
+        διαλέγει `static()` αντί για το authenticated view με βάση το
+        DEBUG). Η εφαρμογή ξεκινούσε κανονικά και έμοιαζε σωστά ρυθμισμένη.
 
-        Το test κατοχυρώνει τη σημερινή συμπεριφορά ώστε η τεκμηρίωση να
-        μην αποκλίνει σιωπηλά από τον κώδικα.
+        Πλέον σκάει αντί να μαντεύει.
         """
-        mod = self._load_settings_local({**self.PROD_ENV})
+        # Προσομοίωση πραγματικού entry point (π.χ. `manage.py migrate`):
+        # αλλιώς ισχύει η εξαίρεση του test runner, αφού αυτό εδώ τρέχει
+        # μέσα από `manage.py test`.
+        with mock.patch.object(sys, 'argv', ['manage.py', 'migrate']):
+            with self.assertRaises(ImproperlyConfigured) as ctx:
+                self._load_settings_local({**self.PROD_ENV})
 
-        self.assertTrue(
-            mod.DEBUG,
-            'Η συμπεριφορά άλλαξε: το DEBUG=False αρκεί πλέον χωρίς '
-            'DJANGO_ENV. Ενημέρωσε DEPLOYMENT.md / PRODUCTION_CHECKLIST.md '
-            'και .env.production.example.')
-        self.assertIn('*', mod.ALLOWED_HOSTS)
-        self.assertFalse(mod.SESSION_COOKIE_SECURE)
+        message = str(ctx.exception)
+        self.assertIn('DJANGO_ENV', message)
+        # Το μήνυμα πρέπει να λέει στον χειριστή τι ακριβώς να ορίσει.
+        self.assertIn('production', message)
+        self.assertIn('development', message)
+
+    def test_missing_django_env_allows_explicit_debug_true(self):
+        """
+        Τοπικό runserver χωρίς πλήρες .env: το ρητό DEBUG=True είναι σαφής
+        δήλωση πρόθεσης και επιτρέπεται.
+        """
+        env = {k: v for k, v in self.PROD_ENV.items() if k != 'DEBUG'}
+        mod = self._load_settings_local({**env, 'DEBUG': 'True'})
+        self.assertTrue(mod.DEBUG)
+
+    def test_unknown_django_env_values_fail_closed(self):
+        """
+        Typo σε production ΔΕΝ γίνεται σιωπηλά development.
+
+        Χωρίς αυτό, ένα `DJANGO_ENV=prodction` σε production server θα
+        έδινε DEBUG=True και δημόσια έγγραφα πελατών.
+        """
+        for value in ('prod', 'prodction', 'Production!', '   ', '',
+                      'dev', 'staging'):
+            with self.subTest(django_env=value):
+                with self.assertRaises(ImproperlyConfigured):
+                    self._load_settings_local(
+                        {**self.PROD_ENV, 'DJANGO_ENV': value})
+
+    def test_valid_values_tolerate_case_and_whitespace(self):
+        """
+        `  ProDuction  ` είναι σαφής πρόθεση, όχι typo — κανονικοποιείται
+        αντί να σκάει, ώστε ένα κενό στο .env να μη ρίχνει την παραγωγή.
+        """
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': '  ProDuction  '})
+        self.assertFalse(mod.DEBUG)
+
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': 'DEVELOPMENT'})
+        self.assertTrue(mod.DEBUG)
+
+    def test_test_runner_works_without_django_env(self):
+        """
+        Ο test runner δεν πρέπει να απαιτεί env setup.
+
+        Δεν είναι θεωρητικό: το CI `test` job ορίζει DEBUG=False ΧΩΡΙΣ
+        DJANGO_ENV. Αν το fail-closed δεν εξαιρούσε τον test runner, θα
+        έσπαγε ολόκληρο το CI. (Το `security-smoke` job ορίζει ρητά
+        production, οπότε η production διαδρομή παραμένει καλυμμένη.)
+
+        Το ότι τρέχει αυτό το ίδιο το test μέσα από `manage.py test` είναι
+        η ζωντανή απόδειξη· εδώ κλειδώνεται και ρητά.
+        """
+        with mock.patch.object(sys, 'argv', ['manage.py', 'test']):
+            mod = self._load_settings_local({**self.PROD_ENV})
+        self.assertTrue(mod.DEBUG)
+
+    def test_production_serves_media_through_authenticated_view(self):
+        """
+        Το πραγματικό στοίχημα: με DJANGO_ENV=production τα /media/ πάνε
+        στο authenticated `serve_protected_media`, όχι στο `static()`.
+
+        Ελέγχεται το URLconf που παράγει το ίδιο το settings module, ώστε
+        να μην αρκεστούμε στο ότι «το DEBUG είναι False».
+        """
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': 'production'})
+        self.assertFalse(mod.DEBUG)
+
+        saved = sys.modules.pop('webcrm.urls', None)
+        try:
+            with mock.patch.dict(os.environ, {'DJANGO_ENV': 'production'},
+                                 clear=False):
+                with mock.patch('django.conf.settings.DEBUG', False):
+                    urls = importlib.import_module('webcrm.urls')
+                    names = {
+                        getattr(p, 'name', None)
+                        for p in urls.urlpatterns
+                    }
+            self.assertIn(
+                'protected_media', names,
+                'Σε production τα /media/ πρέπει να περνούν από το '
+                'authenticated serve_protected_media.')
+        finally:
+            sys.modules.pop('webcrm.urls', None)
+            if saved is not None:
+                sys.modules['webcrm.urls'] = saved
 
     def test_production_env_yields_secure_transport_settings(self):
         """Το DJANGO_ENV=production δίνει secure cookies και HSTS."""

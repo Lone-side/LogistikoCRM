@@ -3,9 +3,68 @@ Local/Production Settings Override
 """
 from .settings import *
 import os
+import sys
 
-# Determine environment
-ENVIRONMENT = os.getenv('DJANGO_ENV', 'development')
+from django.core.exceptions import ImproperlyConfigured
+
+_VALID_ENVIRONMENTS = ('production', 'development')
+
+
+def _resolve_environment():
+    """
+    Επιλέγει development/production **fail closed**.
+
+    Ιστορικό: παλιότερα ήταν `os.getenv('DJANGO_ENV', 'development')`, οπότε
+    απών ή λάθος γραμμένο DJANGO_ENV σήμαινε σιωπηλά development — δηλαδή
+    DEBUG=True, ALLOWED_HOSTS=['*'] και **δημόσια /media/** (το urls.py
+    διαλέγει `static()` αντί για το authenticated `serve_protected_media`
+    με βάση το DEBUG). Το `DEBUG=False` δεν βοηθούσε: το development
+    branch το έγραφε από πάνω.
+
+    Κανόνες:
+
+    - Ρητό `production` / `development` (case-insensitive, με trim): ισχύει.
+    - Ρητό αλλά άγνωστο (`prod`, `prodction`, κενό): ImproperlyConfigured.
+      Ένα typo ΔΕΝ επιτρέπεται να μεταφράζεται σε «development».
+    - Απόν, αλλά τρέχει ο test runner: development. Τα tests πρέπει να
+      δουλεύουν χωρίς env setup, και ήδη τρέχουν έτσι (το CI test job
+      ορίζει DEBUG=False χωρίς DJANGO_ENV). Το security-smoke job ορίζει
+      ρητά production, οπότε η production διαδρομή παραμένει καλυμμένη.
+    - Απόν, με ρητό `DEBUG=True`: development. Σαφής δήλωση πρόθεσης για
+      τοπικό `runserver` χωρίς πλήρες .env.
+    - Οτιδήποτε άλλο (συμπεριλαμβανομένου του `DEBUG=False` σκέτο):
+      ImproperlyConfigured. Ποτέ σιωπηλή μετάπτωση σε development.
+    """
+    raw = os.environ.get('DJANGO_ENV')
+
+    if raw is not None:
+        value = raw.strip().lower()
+        if value in _VALID_ENVIRONMENTS:
+            return value
+        raise ImproperlyConfigured(
+            f'Άγνωστο DJANGO_ENV={raw!r}. Επιτρέπονται μόνο '
+            f'DJANGO_ENV=production ή DJANGO_ENV=development. '
+            f'Ένα typo δεν γίνεται σιωπηλά development — βλ. DEPLOYMENT.md.'
+        )
+
+    # Test runner: `manage.py test` ή pytest.
+    if sys.argv[1:2] == ['test'] or 'pytest' in os.path.basename(sys.argv[0]):
+        return 'development'
+
+    if os.environ.get('DEBUG', '').strip().lower() in ('true', '1', 'yes'):
+        return 'development'
+
+    raise ImproperlyConfigured(
+        'Λείπει το DJANGO_ENV. Όρισε DJANGO_ENV=production σε παραγωγή ή '
+        'DJANGO_ENV=development τοπικά.\n'
+        'Το DEBUG=False ΔΕΝ αρκεί: το settings_local διαλέγει περιβάλλον '
+        'μόνο από το DJANGO_ENV, και παλιότερα η απουσία του κατέληγε '
+        'σιωπηλά σε DEBUG=True με δημόσια /media/. Γι΄ αυτό πλέον '
+        'αποτυγχάνει κλειστά αντί να μαντεύει. Βλ. DEPLOYMENT.md.'
+    )
+
+
+ENVIRONMENT = _resolve_environment()
 
 if ENVIRONMENT == 'production':
     DEBUG = False
