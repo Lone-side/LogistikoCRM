@@ -765,9 +765,26 @@ class AdminDeleteTOCTOUTest(TransactionTestCase):
         from django.urls import reverse
         return reverse('admin:accounting_ticket_delete', args=[ticket_pk])
 
-    def _run_with_attacker(self, ticket_pk, mutate):
-        """attacker: lock ticket, wait barrier, εφάρμοσε mutate(locked), commit.
-        main: μετά το barrier κάνε delete_call POST (μπλοκάρει στο lock)."""
+    def _run_with_attacker(self, ticket_pk, mutate, *, lock='ticket',
+                           save_ticket=True):
+        """attacker: lock (ticket ή call), wait barrier, mutate, commit.
+        main: μετά το barrier κάνε delete_call POST (μπλοκάρει στο lock).
+
+        lock='ticket': ο attacker μεταλλάσσει το ΙΔΙΟ το ticket (repoint/
+        detach) κρατώντας το ticket lock — δεν αγγίζει call row, οπότε
+        δεν διασταυρώνεται με την ενιαία σειρά call→ticket.
+
+        lock='call': ο attacker μεταλλάσσει την ΚΛΗΣΗ, οπότε κρατά το
+        call lock ΠΡΩΤΑ — όπως ο πραγματικός mutator (change_call_client).
+        Η παλιά εκδοχή κρατούσε το ticket lock και έγραφε την κλήση
+        (ticket→call), δηλαδή την αντεστραμμένη σειρά που ο κώδικας
+        πλέον ΔΕΝ χρησιμοποιεί πουθενά — με την ενιαία σειρά του admin
+        (call→ticket) αυτό κατέληγε σε τεχνητό AB/BA deadlock που κανένα
+        πραγματικό path δεν μπορεί πια να προκαλέσει. Το TOCTOU ζητούμενο
+        (auth στο locked state, όχι στο stale obj) εξασκείται ίδια: το
+        get_object διαβάζει stale, το mutate γίνεται πριν αποκτηθούν τα
+        locks του delete, ο έλεγχος βλέπει το τρέχον state.
+        """
         from django.db import transaction
         barrier = threading.Barrier(2)
         errors = []
@@ -777,8 +794,13 @@ class AdminDeleteTOCTOUTest(TransactionTestCase):
         def attacker():
             try:
                 with transaction.atomic():
-                    locked = (self.Ticket.objects.select_for_update()
-                              .get(pk=ticket_pk))
+                    if lock == 'ticket':
+                        locked = (self.Ticket.objects.select_for_update()
+                                  .get(pk=ticket_pk))
+                    else:
+                        ticket_row = self.Ticket.objects.get(pk=ticket_pk)
+                        locked = (self.VoIPCall.objects.select_for_update()
+                                  .get(pk=ticket_row.call_id))
                     barrier.wait()
                     # Κράτα το lock ώστε το admin request να προλάβει να
                     # κάνει get_object (stale read) και ΜΕΤΑ να μπλοκάρει
@@ -787,7 +809,8 @@ class AdminDeleteTOCTOUTest(TransactionTestCase):
                     # path (όχι απλώς attacker-commits-first).
                     time.sleep(0.8)
                     mutate(locked)
-                    locked.save()
+                    if save_ticket and lock == 'ticket':
+                        locked.save()
             except Exception as e:  # noqa: BLE001
                 errors.append(e)
             finally:
@@ -832,12 +855,14 @@ class AdminDeleteTOCTOUTest(TransactionTestCase):
             client=self.mine, call=call_mine, title='t',
             description='-', status='open')
 
-        def steal_call_client(locked):
-            # αλλάζει τον πελάτη της συνδεδεμένης κλήσης σε foreign
-            self.VoIPCall.objects.filter(pk=call_mine.pk).update(
+        def steal_call_client(locked_call):
+            # αλλάζει τον πελάτη της κλήσης σε foreign — πάνω στο locked
+            # call row, όπως ο πραγματικός mutator (change_call_client)
+            self.VoIPCall.objects.filter(pk=locked_call.pk).update(
                 client=self.theirs)
 
-        resp = self._run_with_attacker(ticket.pk, steal_call_client)
+        resp = self._run_with_attacker(
+            ticket.pk, steal_call_client, lock='call')
 
         # authorization πάνω στο locked (foreign πλέον) call → 403
         self.assertEqual(resp.status_code, 403)
