@@ -377,18 +377,59 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return _scope_by_client(super().get_queryset(), self.request.user)
     serializer_class = VoIPCallSerializer
-    # Service callers (monitor/localhost): ΜΟΝΟ create/update/end_call
+    # Χρήστες: auth + model perms (το σκέτο IsAdminUser άφηνε read-only
+    # staff να κάνει PATCH/POST/DELETE — RBAC bypass). Service callers
+    # (monitor/localhost): ΜΟΝΟ create/update/end_call.
     permission_classes = [
-        permissions.IsAdminUser
+        (permissions.IsAuthenticated & ClientModelPermissions)
         | ((IsVoIPMonitor | IsLocalRequest) & ServiceWriteOnly)
     ]
+    # Το custom POST end_call αλλάζει την κλήση — change_voipcall, όχι
+    # το add_voipcall που θα χαρτογραφούσε το POST
+    action_perms = {
+        'end_call': ['accounting.change_voipcall'],
+    }
     filterset_fields = ['direction', 'status', 'client', 'phone_number']
     search_fields = ['phone_number', 'client__eponimia', 'notes']
     ordering_fields = ['started_at', 'duration_seconds']
     ordering = ['-started_at']
 
+    def _gate_client_payload(self, serializer):
+        """Πολιτική payload `client` — καθρέφτης του /api/v1/calls/
+        (api_voip._validate_client_id):
+        - service callers (monitor/localhost) ΔΕΝ αντιστοιχίζουν πελάτη —
+          το `client` αγνοείται (create ΚΑΙ update)· η αντιστοίχιση
+          γίνεται μόνο από auto-match μέσω change_call_client()·
+        - authenticated χρήστες: μόνο προσβάσιμος πελάτης (accessible
+          policy, 404 fail-closed)·
+        - unassign assigned κλήσης: μόνο see-all χρήστες."""
+        data = serializer.validated_data
+        if 'client' not in data:
+            return
+        user = self.request.user
+        if not getattr(user, 'is_authenticated', False):
+            data.pop('client', None)
+            return
+        client = data['client']
+        if client is None:
+            from accounting.mixins import user_sees_all_clients
+            if (
+                serializer.instance is not None
+                and serializer.instance.client_id is not None
+                and not user_sees_all_clients(user)
+            ):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied(
+                    'Η αφαίρεση πελάτη από κλήση επιτρέπεται μόνο σε '
+                    'διαχειριστές.'
+                )
+            return
+        from accounting.services.access import get_accessible_client_or_404
+        get_accessible_client_or_404(user, client.pk, request=self.request)
+
     def perform_create(self, serializer):
         """Create call and auto-match client"""
+        self._gate_client_payload(serializer)
         voip_call = serializer.save()
         client = self._match_client_by_phone(voip_call.phone_number)
 
@@ -430,15 +471,14 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         # Αλλαγή πελάτη ΜΟΝΟ μέσω του κεντρικού service: το γυμνό
         # serializer.save() παρέκαμπτε το atomic Ticket sync και το
         # VoIPCallLog resync (invariant κλήσης-ticket + snapshot contract).
+        # Gate πολιτικής payload: service callers χάνουν το `client`,
+        # authenticated χρήστες περιορίζονται σε προσβάσιμο πελάτη και
+        # το unassign σε see-all — ΠΡΙΝ από κάθε αποθήκευση
+        self._gate_client_payload(serializer)
         data = serializer.validated_data
         client_change = 'client' in data
         new_client = data.pop('client', None) if client_change else None
         user = self.request.user
-        if client_change and not getattr(user, 'is_authenticated', False):
-            # Service callers (Fritz monitor / localhost): δεν αντιστοιχίζουν
-            # πελάτη — ίδιο gate με το /api/v1/calls/ (api_voip.py)
-            client_change = False
-            new_client = None
         with transaction.atomic():
             # Τα υπόλοιπα πεδία του serializer ολοκληρώνονται atomic με
             # την αλλαγή πελάτη — αποτυχία της αναιρεί και τα δύο.

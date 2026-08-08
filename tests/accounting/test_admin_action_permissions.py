@@ -1839,8 +1839,9 @@ class VoIPCallApiClientChangeTest(TestCase):
             client=self.a, call=self.call, title='τ', description='-',
             status='open')
 
-        # Staff (IsAdminUser) χωρίς accounting.change_ticket
-        staff = make_staff('api_cc_staff')
+        # Staff με change_voipcall (περνά το ClientModelPermissions gate)
+        # αλλά ΧΩΡΙΣ accounting.change_ticket → 400 από το service
+        staff = make_staff('api_cc_staff', 'change_voipcall')
         self.client.force_login(staff)
         resp = self._patch({'client': self.b.pk, 'notes': 'ΑΛΛΑΓΗ'})
         self.assertEqual(resp.status_code, 400, resp.content)
@@ -1972,3 +1973,194 @@ class VoIPCallLogExplicitClientContractTest(TestCase):
             call_reference='GONE-1', phone_number='2100000002')
         log.refresh_from_db()
         self.assertEqual(log.client_id, a.pk)
+
+
+class VoIPCallLegacyApiPolicyTest(TestCase):
+    """
+    Blocker ανεξάρτητου review στο `126d1d6`: η πολιτική του legacy
+    `/accounting/api/v1/voip-calls/`.
+
+    1) Σκέτο IsAdminUser = μόνο is_staff → read-only staff (Βοηθός)
+       μπορούσε PATCH/POST/DELETE, παρακάμπτοντας το RBAC του PR.
+    2) Writable `client` + serializer.save() στο perform_create →
+       service caller (API key/localhost) δημιουργούσε κλήση
+       αντιστοιχισμένη σε αυθαίρετο πελάτη.
+    3) Κανένας έλεγχος accessible-client για authenticated χρήστη —
+       scoped staff έδενε unassigned κλήση με ξένο πελάτη (guessed PK)·
+       και το unassign δεν περιοριζόταν σε see-all.
+    """
+
+    URL = '/accounting/api/v1/voip-calls/'
+
+    def setUp(self):
+        from accounting.models import VoIPCall
+
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.b = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        self.call = VoIPCall.objects.create(
+            call_id='POL-1', phone_number='2107000001',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=None, notes='αρχικό')
+
+    def _patch(self, user, payload, pk=None):
+        import json
+        if user is not None:
+            self.client.force_login(user)
+        return self.client.patch(
+            f'{self.URL}{pk or self.call.pk}/', data=json.dumps(payload),
+            content_type='application/json', secure=True)
+
+    def _post(self, payload):
+        import json
+        return self.client.post(
+            self.URL, data=json.dumps(payload),
+            content_type='application/json', secure=True)
+
+    def _audit_clean(self):
+        from django.core.management import call_command
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+    def test_1_readonly_staff_patch_is_403_no_mutation(self):
+        viewer = make_staff('pol_viewer', 'view_voipcall')
+        resp = self._patch(viewer, {'status': 'completed', 'notes': 'Χ'})
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.call.refresh_from_db()
+        self.assertEqual(self.call.status, 'missed')
+        self.assertEqual(self.call.notes, 'αρχικό')
+
+    def test_2_readonly_staff_delete_is_403_call_survives(self):
+        from accounting.models import VoIPCall
+
+        viewer = make_staff('pol_viewer2', 'view_voipcall')
+        self.client.force_login(viewer)
+        resp = self.client.delete(
+            f'{self.URL}{self.call.pk}/', secure=True)
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.assertTrue(VoIPCall.objects.filter(pk=self.call.pk).exists())
+
+    def test_3_service_create_forged_client_unknown_phone_stays_unassigned(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        # Unauthenticated localhost = service clause (ίδιο branch με API key)
+        resp = self._post({
+            'call_id': 'POL-SVC-1', 'phone_number': '2119999999',
+            'direction': 'incoming', 'status': 'active',
+            'started_at': timezone.now().isoformat(),
+            'client': self.a.pk,
+        })
+        self.assertEqual(resp.status_code, 201, resp.content)
+        call = VoIPCall.objects.get(call_id='POL-SVC-1')
+        self.assertIsNone(call.client_id,
+                          'service caller αντιστοίχισε αυθαίρετο πελάτη')
+        log = VoIPCallLog.objects.get(call=call, action='started')
+        self.assertIsNone(log.client_id)
+        self._audit_clean()
+
+    def test_4_service_create_forged_client_matching_phone_goes_to_match(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        self.b.kinito_tilefono = '6949876543'
+        self.b.save(update_fields=['kinito_tilefono'])
+        resp = self._post({
+            'call_id': 'POL-SVC-2', 'phone_number': '6949876543',
+            'direction': 'incoming', 'status': 'active',
+            'started_at': timezone.now().isoformat(),
+            'client': self.a.pk,
+        })
+        self.assertEqual(resp.status_code, 201, resp.content)
+        call = VoIPCall.objects.get(call_id='POL-SVC-2')
+        self.assertEqual(call.client_id, self.b.pk,
+                         'το auto-match δεν επικράτησε του forged client')
+        self.assertFalse(
+            VoIPCallLog.objects.filter(call=call, client=self.a).exists())
+        for log in VoIPCallLog.objects.filter(call=call):
+            self.assertEqual(log.client_id, self.b.pk)
+        self._audit_clean()
+
+    def test_5_scoped_user_cannot_assign_inaccessible_client(self):
+        from django.test import override_settings
+
+        staff = make_staff('pol_scoped', 'view_voipcall',
+                           'change_voipcall', 'change_ticket')
+        self.a.assigned_users.add(staff)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self._patch(staff, {'client': self.b.pk, 'notes': 'Χ'})
+        self.assertEqual(resp.status_code, 404, resp.content)
+        self.call.refresh_from_db()
+        self.assertIsNone(self.call.client_id,
+                          'η κλήση δέθηκε με μη προσβάσιμο πελάτη')
+        self.assertEqual(self.call.notes, 'αρχικό', 'δεν έγινε rollback')
+
+    def test_6_scoped_user_assigns_accessible_client(self):
+        from django.test import override_settings
+        from accounting.models import VoIPCallLog
+
+        VoIPCallLog.objects.create(call=self.call, action='started')
+        staff = make_staff('pol_scoped2', 'view_voipcall',
+                           'change_voipcall', 'change_ticket')
+        self.a.assigned_users.add(staff)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self._patch(staff, {'client': self.a.pk})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.call.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.a.pk)
+        for log in VoIPCallLog.objects.filter(call=self.call):
+            self.assertEqual(log.client_id, self.a.pk)
+        self._audit_clean()
+
+    def test_7_unassign_only_for_see_all(self):
+        from django.test import override_settings
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.a)
+        staff = make_staff('pol_scoped3', 'view_voipcall', 'change_voipcall')
+        self.a.assigned_users.add(staff)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self._patch(staff, {'client': None})
+        self.assertEqual(resp.status_code, 403, resp.content)
+        self.call.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.a.pk)
+        # See-all (superuser): η υπάρχουσα επιτρεπτή πολιτική ισχύει
+        root = User.objects.create_superuser('pol_root', 'r@x.gr', 'x')
+        resp = self._patch(root, {'client': None})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.call.refresh_from_db()
+        self.assertIsNone(self.call.client_id)
+
+    def test_8_end_call_requires_change_voipcall(self):
+        import json
+        from accounting.models import VoIPCall
+
+        payload = {'ended_at': timezone.now().isoformat()}
+        url = f'{self.URL}{self.call.pk}/end_call/'
+        # view-only και add-only: όχι
+        for username, *codenames in (
+            ('pol_end_view', 'view_voipcall'),
+            ('pol_end_add', 'view_voipcall', 'add_voipcall'),
+        ):
+            user = make_staff(username, *codenames)
+            self.client.force_login(user)
+            resp = self.client.post(url, data=json.dumps(payload),
+                                    content_type='application/json',
+                                    secure=True)
+            self.assertEqual(resp.status_code, 403,
+                             f'{username}: {resp.status_code}')
+        # change_voipcall: ναι
+        changer = make_staff('pol_end_change', 'view_voipcall',
+                             'change_voipcall')
+        self.client.force_login(changer)
+        resp = self.client.post(url, data=json.dumps(payload),
+                                content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        # Service caller (unauthenticated localhost): εξακολουθεί να δουλεύει
+        call2 = VoIPCall.objects.create(
+            call_id='POL-END-2', phone_number='2107000002',
+            direction='incoming', status='active',
+            started_at=timezone.now())
+        self.client.logout()
+        resp = self.client.post(
+            f'{self.URL}{call2.pk}/end_call/', data=json.dumps(payload),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 200, resp.content)
