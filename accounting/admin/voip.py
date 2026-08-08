@@ -85,8 +85,16 @@ def _lock_calls_then_tickets(ticket_ids):
     τα locked tickets, tickets = τα locked tickets.
     """
     from django.core.exceptions import PermissionDenied
-    calls = list(VoIPCall.objects.select_for_update()
-                 .filter(ticket__pk__in=ticket_ids))
+    from django.db import connection
+    # ΚΡΙΣΙΜΟ: σε JOIN query το σκέτο FOR UPDATE κλειδώνει rows από ΟΛΟΥΣ
+    # τους πίνακες του FROM — δηλαδή θα έπιανε ΚΑΙ ticket rows μέσα στο
+    # «calls πρώτα» βήμα, ξαναφέρνοντας αταξινόμητο κλείδωμα (αναπαράχθηκε
+    # ως deadlock απέναντι στο change_call_client στο CI). Το FOR UPDATE
+    # OF "accounting_voipcall" (of=('self',)) κλειδώνει ΜΟΝΟ τις κλήσεις.
+    call_lock = VoIPCall.objects.select_for_update()
+    if connection.features.has_select_for_update_of:
+        call_lock = VoIPCall.objects.select_for_update(of=('self',))
+    calls = list(call_lock.filter(ticket__pk__in=ticket_ids))
     tickets = list(Ticket.objects.select_for_update()
                    .filter(pk__in=ticket_ids))
     locked_call_ids = {c.pk for c in calls}
