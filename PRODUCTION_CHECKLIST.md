@@ -106,6 +106,8 @@ python manage.py collectstatic --noinput
 ---
 
 ### 7. **Security Settings** (ΚΡΙΤΙΚΟ)
+- [ ] Set `DJANGO_ENV=production` στο περιβάλλον (και στα systemd units)
+  - Το `manage.py` φορτώνει `webcrm.settings_local`, που διαλέγει branch **μόνο** από το `DJANGO_ENV`. Χωρίς αυτό επιβάλλεται `DEBUG=True` αγνοώντας το `DEBUG=False` — δηλαδή το επόμενο checkbox **δεν** ισχύει από μόνο του.
 - [ ] Set `DEBUG = False` στο production
 - [ ] Set `ALLOWED_HOSTS` με το production domain
 - [ ] Configure `SECRET_KEY` (unique, secure)

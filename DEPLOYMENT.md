@@ -22,6 +22,7 @@ nano .env
 
 | Μεταβλητή | Τι βάζεις |
 |---|---|
+| `DJANGO_ENV` | `production` — **δεν αντικαθίσταται από το `DEBUG=False`** (βλ. σημείωση παρακάτω) |
 | `SECRET_KEY` | `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"` |
 | `DB_PASSWORD` | Ισχυρός κωδικός PostgreSQL |
 | `SITE_URL` | π.χ. `https://crm.example.gr` (μπαίνει σε emails/links) |
@@ -29,6 +30,50 @@ nano .env
 | `FRITZ_API_TOKEN` | `openssl rand -hex 32` — υποχρεωτικό ακόμη κι αν δεν χρησιμοποιείς Fritz!Box |
 
 > Με `DEBUG=False` το app **αρνείται να ξεκινήσει** αν τα `SECRET_KEY`/`FRITZ_API_TOKEN` έχουν μείνει στα defaults — αυτό είναι σκόπιμο (security hard-fail).
+
+> ### ⚠️ `DJANGO_ENV=production` — γιατί δεν αρκεί το `DEBUG=False`
+>
+> Το `manage.py` φορτώνει `webcrm.settings_local`, και εκείνο διαλέγει
+> development ή production branch **αποκλειστικά από το `DJANGO_ENV`**.
+> Στο development branch επιβάλλει `DEBUG = True` γράφοντας πάνω από ό,τι
+> έχεις ορίσει στο `DEBUG`. Δηλαδή:
+>
+> ```bash
+> DEBUG=False python manage.py migrate        # ❌ τρέχει με DEBUG=True
+> DJANGO_ENV=production python manage.py migrate   # ✅
+> ```
+>
+> Επαληθευμένη συμπεριφορά με `DEBUG=False` αλλά **χωρίς** `DJANGO_ENV`:
+>
+> | Ρύθμιση | Τιμή που προκύπτει |
+> |---|---|
+> | `DEBUG` | `True` |
+> | `ALLOWED_HOSTS` | `['*']` |
+> | `SESSION_COOKIE_SECURE` | `False` |
+> | `SECURE_SSL_REDIRECT` | `False` |
+> | `SECURE_HSTS_SECONDS` | `0` |
+>
+> Με `DEBUG=True` τα `/media/` σερβίρονται **ελεύθερα** από το `static()`
+> αντί για το authenticated `serve_protected_media` — δηλαδή έγγραφα
+> πελατών γίνονται προσβάσιμα χωρίς login.
+>
+> Τα fail-closed guards (`FRITZ_API_TOKEN`, `DATA_ENCRYPTION_KEY_CURRENT`,
+> `ENFORCE_CLIENT_ASSIGNMENT`) **δεν** παρακάμπτονται: κρίνονται από το
+> `DEBUG` env var μέσα στο `settings.py`, οπότε εξακολουθούν να μπλοκάρουν
+> την εκκίνηση. Γι' αυτό ακριβώς το πρόβλημα είναι ύπουλο — η εφαρμογή
+> ξεκινά κανονικά και μοιάζει σωστά ρυθμισμένη.
+>
+> Έλεγχος:
+>
+> ```bash
+> DJANGO_ENV=production python manage.py shell -c \
+>   "from django.conf import settings; print(settings.DEBUG)"   # → False
+> ```
+>
+> Το `docker-compose.prod.yml` το ορίζει ήδη, οπότε η προτεινόμενη Docker
+> εγκατάσταση δεν επηρεάζεται. **Αφορά τη χειροκίνητη εγκατάσταση** και
+> κάθε `manage.py` εντολή που τρέχεις με το χέρι στον server (migrate,
+> collectstatic, createcachetable, backup_database, restore_database).
 
 ### 2. Εκκίνηση
 
@@ -200,8 +245,11 @@ print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
 1. Σύστημα: `sudo apt install -y python3.11 python3-venv postgresql redis-server nginx libpq-dev libmagic1`
 2. Κώδικας σε `/var/www/LogistikoCRM`, venv, `pip install -r requirements.txt gunicorn`
 3. Frontend: `cd frontend && npm ci && npm run build` (θέλει Node 20) — σέρβιρε το `frontend/dist` από το nginx
-4. `.env` όπως παραπάνω + `DB_ENGINE=django.db.backends.postgresql`, `DB_HOST=localhost`, `MEDIA_ACCEL_REDIRECT=True`
-5. `python manage.py migrate && python manage.py createcachetable && python manage.py setupdata && python manage.py collectstatic --noinput`
+4. `.env` όπως παραπάνω + `DJANGO_ENV=production`, `DB_ENGINE=django.db.backends.postgresql`, `DB_HOST=localhost`, `MEDIA_ACCEL_REDIRECT=True`
+   - ⚠️ Το `DJANGO_ENV=production` είναι **υποχρεωτικό εδώ**. Χωρίς αυτό κάθε `manage.py` εντολή τρέχει σε development mode με `DEBUG=True`, ακόμη κι αν το `.env` λέει `DEBUG=False` — βλ. τη σημείωση στην ενότητα Α.
+   - Οι systemd units (βήμα 7) πρέπει επίσης να το εξάγουν, π.χ. μέσω `EnvironmentFile=/var/www/LogistikoCRM/.env`, ώστε να το βλέπουν gunicorn, worker και beat.
+5. `export DJANGO_ENV=production` και μετά `python manage.py migrate && python manage.py createcachetable && python manage.py setupdata && python manage.py collectstatic --noinput`
+   - Επαλήθευση πριν προχωρήσεις: `python manage.py shell -c "from django.conf import settings; print(settings.DEBUG)"` πρέπει να τυπώνει `False`.
 6. nginx: προσάρμοσε το `nginx/nginx.conf` (άλλαξε το `upstream django` σε `127.0.0.1:8000`, τα alias σε πραγματικά paths, το `/protected-media/` alias στο MEDIA_ROOT)
 7. systemd units για gunicorn, `celery -A webcrm worker` και `celery -A webcrm beat`
 
@@ -210,6 +258,7 @@ print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
 ## Production Checklist
 
 - [ ] `SECRET_KEY` μοναδικό, εκτός git
+- [ ] `DJANGO_ENV=production` στο περιβάλλον **και** στα systemd units — όχι μόνο `DEBUG=False` (το `settings_local` αποφασίζει από το `DJANGO_ENV`)
 - [ ] `DEBUG=False` (default στο prod compose)
 - [ ] `ALLOWED_HOSTS` + `CSRF_TRUSTED_ORIGINS` με το domain
 - [ ] HTTPS ενεργό + `USE_X_FORWARDED_PROTO=True`
