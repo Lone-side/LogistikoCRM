@@ -288,3 +288,43 @@ print('ανενεργά links:', list(qs.values_list('id', flat=True)))"
 - [ ] Email SMTP ρυθμισμένο (δοκιμή: υπενθυμίσεις προθεσμιών)
 - [ ] Backups εκτός server
 - [ ] `/api/health/detailed/` πράσινο
+
+## VoIPCallLog audit-trail migration (10024 → 10025 → 10026)
+
+Οι migrations `10024_voipcalllog_snapshot_fields`, `10025_voipcalllog_snapshot_backfill`
+και `10026_voipcalllog_call_set_null` προσθέτουν snapshot πεδία (client,
+call_reference, phone_number) στο `VoIPCallLog` και αλλάζουν το FK `call`
+από `CASCADE` σε `SET_NULL`, ώστε το audit trail να επιβιώνει της διαγραφής
+της κλήσης χωρίς να χάνει το attribution.
+
+**Σειρά (fail-closed):** fields → backfill+validation → (final catch-up +
+validation) + SET_NULL. Το `10026` είναι ρητά `atomic=True`: αν το τελικό
+validation βρει log-με-κλήση χωρίς `call_reference`, ολόκληρη η migration
+κάνει rollback πριν αλλάξει το FK.
+
+**Deployment safety — ΔΕΝ είναι εγγυημένα zero-downtime.** Παλιό
+application code / Celery worker / VoIP monitor που γράφει νέο
+`VoIPCallLog` ΤΑΥΤΟΧΡΟΝΑ με τη migration δεν γνωρίζει τα snapshot πεδία,
+οπότε μπορεί να δημιουργήσει snapshot-less row στο μικρό window ανάμεσα
+στο τελικό catch-up και στο `ACCESS EXCLUSIVE` lock του `AlterField`. Το
+row αυτό έχει ακόμη ζωντανή κλήση (το snapshot ανακτάται), αλλά αν η κλήση
+διαγραφεί αργότερα πριν από re-backfill, χάνεται το attribution.
+
+**Συνιστώμενη διαδικασία (maintenance window):**
+1. `pg_dump` backup.
+2. **Πάγωμα writers:** σταμάτημα web (gunicorn), `celery worker`,
+   `celery beat` και του VoIP monitor/webhook — ό,τι δημιουργεί VoIPCallLog.
+3. `python manage.py migrate --noinput`.
+4. **Post-migration audit (fail-closed):**
+   `python manage.py audit_voipcalllog_snapshots --fail-on-findings`
+   (χωρίς PII στο output — μόνο internal IDs). Αν βρει `missing-call-reference`
+   ή `orphan-without-attribution` ή `client-mismatch`, μην εκκινήσεις τους
+   writers — ερεύνησε/re-backfill πρώτα.
+5. Εκκίνηση του **νέου** application code (που γεμίζει snapshots αυτόματα).
+
+**Zero-downtime εναλλακτική (χωρίς πλήρες πάγωμα):** εκτέλεσε τη migration,
+και **αμέσως μετά** ξανατρέξε
+`python manage.py audit_voipcalllog_snapshots --fail-on-findings` + ένα
+re-backfill (η ίδια idempotent λογική) για να πιάσεις τυχόν rows που
+δημιουργήθηκαν στο window. Μην το χαρακτηρίσεις «πάντα ασφαλές» χωρίς αυτό
+το post-migration βήμα.

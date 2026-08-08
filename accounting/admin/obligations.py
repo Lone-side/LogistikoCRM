@@ -556,7 +556,13 @@ class MonthlyObligationAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
     # ACTIONS
     # ============================================
 
-    @admin.action(description='✓ Ολοκλήρωση επιλεγμένων')
+    def has_send_email_permission(self, request):
+        # Η αποστολή email σε πελάτη είναι ξεχωριστή ενέργεια από το
+        # change_monthlyobligation — χρησιμοποιείται το ίδιο dedicated
+        # permission με το API (accounting.send_client_email).
+        return request.user.has_perm('accounting.send_client_email')
+
+    @admin.action(description='✓ Ολοκλήρωση επιλεγμένων', permissions=['change'])
     def mark_as_completed(self, request, queryset):
         updated = queryset.filter(status__in=['pending', 'overdue']).update(
             status='completed',
@@ -565,7 +571,7 @@ class MonthlyObligationAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         )
         self.message_user(request, f'✅ Ολοκληρώθηκαν {updated} υποχρεώσεις!', messages.SUCCESS)
 
-    @admin.action(description='↺ Επαναφορά σε εκκρεμεί')
+    @admin.action(description='↺ Επαναφορά σε εκκρεμεί', permissions=['change'])
     def mark_as_pending(self, request, queryset):
         updated = queryset.update(
             status='pending',
@@ -625,7 +631,8 @@ class MonthlyObligationAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         self.message_user(request, f'✅ Εξήχθησαν {queryset.count()} υποχρεώσεις', messages.SUCCESS)
         return response
 
-    @admin.action(description='📧 Αποστολή email ολοκλήρωσης')
+    @admin.action(description='📧 Αποστολή email ολοκλήρωσης',
+                  permissions=['send_email'])
     def send_completion_email(self, request, queryset):
         """Send completion email for selected obligations"""
         from accounting.services.email_service import EmailService

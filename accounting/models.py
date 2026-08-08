@@ -1497,24 +1497,86 @@ class VoIPCallLog(models.Model):
         ('status_changed', 'Αλλαγή κατάστασης'),
     ]
     
+    # Audit trail: η διαγραφή της κλήσης ΔΕΝ διαγράφει τα logs
+    # (SET_NULL — τα VoIPCallLogAdmin has_delete/change επιστρέφουν False)
     call = models.ForeignKey(
         VoIPCall,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='logs',
         verbose_name='Κλήση'
     )
     
+    # Snapshot της κλήσης — επιβιώνει της διαγραφής της (audit trail):
+    # scoping/εμφάνιση δεν εξαρτώνται από το nullable call FK
+    client = models.ForeignKey(
+        'ClientProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='voip_call_logs',
+        verbose_name='Πελάτης (snapshot)',
+    )
+    call_reference = models.CharField(
+        'Αναφορά Κλήσης (snapshot)', max_length=100, blank=True, default='')
+    phone_number = models.CharField(
+        'Τηλέφωνο (snapshot)', max_length=30, blank=True, default='')
+
     action = models.CharField('Ενέργεια', max_length=50, choices=ACTION_CHOICES)
     description = models.TextField('Περιγραφή', blank=True)
     created_at = models.DateTimeField('Χρονοσήμανση', auto_now_add=True)
-    
+
     class Meta:
         verbose_name = 'Καταγραφή Κλήσης'
         verbose_name_plural = 'Καταγραφές Κλήσεων'
         ordering = ['-created_at']
-    
+
+    def save(self, *args, **kwargs):
+        # Αυτόματο snapshot κατά τη δημιουργία — καλύπτει όλα τα call sites.
+        #
+        # Race-safe: τα snapshots διαβάζονται από τη ΒΑΣΗ με
+        # select_for_update στη γραμμή της κλήσης, ΟΧΙ από το in-memory
+        # `self.call` — ένα stale instance (π.χ. φορτωμένο πριν από
+        # ταυτόχρονο change_call_client) θα έγραφε παλιό client snapshot
+        # ΜΕΤΑ το resync του service, αφήνοντας μόνιμο client-mismatch.
+        # Το FOR UPDATE σειριοποιεί το INSERT με το change_call_client
+        # (που κρατά lock στην ίδια γραμμή): όποιος προλάβει, ο άλλος
+        # βλέπει το αποτέλεσμά του — είτε φρέσκο client_id εδώ, είτε το
+        # νέο log πιάνεται από το bulk resync του service.
+        if self._state.adding and self.call_id is not None:
+            from django.db import transaction
+            with transaction.atomic():
+                fresh = (VoIPCall.objects.select_for_update()
+                         .filter(pk=self.call_id)
+                         .values('client_id', 'call_id', 'phone_number')
+                         .first())
+                if fresh is not None:
+                    # Contract lock: όσο η κλήση υπάρχει, το snapshot client
+                    # καθρεφτίζει ΠΑΝΤΑ την κλήση — ρητά δοσμένο διαφορετικό
+                    # client_id αντικαθίσταται (όχι fail, ώστε κανένα call
+                    # site να μην μπορεί να δημιουργήσει client-mismatch).
+                    self.client_id = fresh['client_id']
+                    if not self.call_reference:
+                        self.call_reference = str(
+                            fresh['call_id'] or self.call_id)
+                    if not self.phone_number:
+                        self.phone_number = fresh['phone_number'] or ''
+                # Το INSERT μένει ΜΕΣΑ στο atomic ώστε να συμβεί όσο
+                # κρατιέται το lock — αλλιώς το παράθυρο ξανανοίγει.
+                super().save(*args, **kwargs)
+            return
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.call.phone_number} - {self.get_action_display()}"
+        phone = self.phone_number or (
+            self.call.phone_number if self.call_id else '')
+        if phone:
+            return f"{phone} - {self.get_action_display()}"
+        if self.call_reference:
+            return (f"Διαγραμμένη κλήση {self.call_reference} - "
+                    f"{self.get_action_display()}")
+        return f"Διαγραμμένη κλήση - {self.get_action_display()}"
 
 
 class Ticket(models.Model):
