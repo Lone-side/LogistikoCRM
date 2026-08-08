@@ -64,6 +64,42 @@ def _require_access(request, objects, *, strict):
                 'ανάθεσής σας και απορρίφθηκε.')
 
 
+def _lock_calls_then_tickets(ticket_ids):
+    """
+    Κλειδώνει το Call–Ticket ζεύγος με την ΕΝΙΑΙΑ global σειρά:
+    ΠΡΩΤΑ VoIPCall, ΜΕΤΑ Ticket.
+
+    Γιατί: τα VoIPCall admin paths (και το change_call_client) κλειδώνουν
+    call → ticket, ενώ τα Ticket paths κλείδωναν ticket → call. Με
+    ταυτόχρονη διαγραφή του ίδιου ζεύγους από τα δύο admin, το ΑΒ/ΒΑ
+    αναπαράχθηκε σε PostgreSQL 14: «deadlock detected». Εδώ οι κλήσεις
+    κλειδώνονται μέσω του reverse join (η ανάγνωση των ticket rows στο
+    join ΔΕΝ τα κλειδώνει), μετά κλειδώνονται τα tickets.
+
+    TOCTOU: αν κάποιο locked ticket απέκτησε στο μεταξύ κλήση που ΔΕΝ
+    κλειδώσαμε, fail closed (PermissionDenied) — καμία μερική μεταβολή,
+    ο χρήστης απλώς ξαναδοκιμάζει. Δεν ξανακλειδώνουμε calls μετά τα
+    tickets: αυτό θα ξανάνοιγε την αντιστροφή.
+
+    Επιστρέφει (calls, tickets): calls = ΜΟΝΟ όσες αναφέρονται ακόμη από
+    τα locked tickets, tickets = τα locked tickets.
+    """
+    from django.core.exceptions import PermissionDenied
+    calls = list(VoIPCall.objects.select_for_update()
+                 .filter(ticket__pk__in=ticket_ids))
+    tickets = list(Ticket.objects.select_for_update()
+                   .filter(pk__in=ticket_ids))
+    locked_call_ids = {c.pk for c in calls}
+    if any(t.call_id and t.call_id not in locked_call_ids
+           for t in tickets):
+        raise PermissionDenied(
+            'Η σύνδεση κλήσης-ticket άλλαξε κατά τη διάρκεια της '
+            'ενέργειας — δοκιμάστε ξανά.')
+    linked_ids = {t.call_id for t in tickets if t.call_id}
+    calls = [c for c in calls if c.pk in linked_ids]
+    return calls, tickets
+
+
 def _log_admin_deletions(request, queryset):
     """Επίσημα admin LogEntry deletion records — ΜΟΝΟ για όσα διαγράφονται.
 
@@ -757,15 +793,12 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
 
     def delete_queryset(self, request, queryset):
         # built-in delete_selected: το pre_delete signal ΜΕΤΑΒΑΛΛΕΙ τις
-        # συνδεδεμένες κλήσεις — cross-side strict validation, atomic
+        # συνδεδεμένες κλήσεις — cross-side strict validation, atomic.
+        # Ενιαία σειρά κλειδώματος call → ticket (deadlock fix).
         from django.db import transaction
         ticket_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
-            tickets = list(Ticket.objects.select_for_update()
-                           .filter(pk__in=ticket_ids))
-            call_ids = [t.call_id for t in tickets if t.call_id]
-            calls = list(VoIPCall.objects.select_for_update()
-                         .filter(id__in=call_ids))
+            calls, tickets = _lock_calls_then_tickets(ticket_ids)
             _require_access(request, tickets, strict=False)
             _require_access(request, calls, strict=True)
             super().delete_queryset(
@@ -775,15 +808,13 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         # standard object delete view: cross-side validation ΠΑΝΩ στο
         # locked row (TOCTOU). Το call_id προκύπτει ΜΟΝΟ από το locked
         # ticket — όχι από το stale obj που φόρτωσε ο Django.
+        # Ενιαία σειρά κλειδώματος call → ticket (deadlock fix).
         from django.db import transaction
         with transaction.atomic():
-            locked_ticket = (Ticket.objects.select_for_update()
-                             .filter(pk=obj.pk).first())
-            if locked_ticket is None:
+            calls, tickets = _lock_calls_then_tickets([obj.pk])
+            if not tickets:
                 return  # εξαφανίστηκε ενδιάμεσα — no-op fail closed
-            calls = (list(VoIPCall.objects.select_for_update()
-                          .filter(pk=locked_ticket.call_id))
-                     if locked_ticket.call_id else [])
+            locked_ticket = tickets[0]
             _require_access(request, [locked_ticket], strict=False)
             _require_access(request, calls, strict=True)
             super().delete_model(request, locked_ticket)
@@ -843,12 +874,9 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         from django.db import transaction
         ticket_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
-            tickets = list(Ticket.objects.select_for_update()
-                           .filter(pk__in=ticket_ids))
-            call_ids = [t.call_id for t in tickets if t.call_id]
-            calls = (VoIPCall.objects.select_for_update()
-                     .filter(id__in=call_ids))
-            calls_list = list(calls)
+            # Ενιαία σειρά κλειδώματος call → ticket (deadlock fix)
+            calls_list, tickets = _lock_calls_then_tickets(ticket_ids)
+            call_ids = [c.pk for c in calls_list]
             # Fail closed: κάθε ticket ΚΑΙ κάθε κλήση προσβάσιμα
             _require_access(request, tickets, strict=False)
             _require_access(request, calls_list, strict=True)
@@ -875,13 +903,10 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
         from django.db import transaction
         ticket_ids = list(queryset.values_list('pk', flat=True))
         with transaction.atomic():
-            tickets = list(Ticket.objects.select_for_update()
-                           .filter(pk__in=ticket_ids))
             # Το pre_delete signal ΤΡΟΠΟΠΟΙΕΙ τις συνδεδεμένες κλήσεις →
-            # απαιτούν κι αυτές access
-            call_ids = [t.call_id for t in tickets if t.call_id]
-            calls = list(VoIPCall.objects.select_for_update()
-                         .filter(id__in=call_ids))
+            # απαιτούν κι αυτές access. Ενιαία σειρά κλειδώματος
+            # call → ticket (deadlock fix).
+            calls, tickets = _lock_calls_then_tickets(ticket_ids)
             _require_access(request, tickets, strict=False)
             _require_access(request, calls, strict=True)
             count = len(tickets)
@@ -914,22 +939,20 @@ class TicketAdmin(ClientScopedAdminMixin, admin.ModelAdmin):
                 from django.core.exceptions import PermissionDenied
                 from django.db import transaction
                 with transaction.atomic():
-                    # TOCTOU-safe: κλείδωσε+ξαναφόρτωσε ΠΡΩΤΑ το ticket·
-                    # ΚΑΘΕ authorization & το call_id προκύπτουν ΜΟΝΟ από
-                    # το locked ticket, ποτέ από το stale obj.
-                    ticket_qs = (Ticket.objects.select_for_update()
-                                 .filter(pk=object_id))
-                    locked_ticket = ticket_qs.first()
+                    # TOCTOU-safe: ΚΑΘΕ authorization & το call_id
+                    # προκύπτουν ΜΟΝΟ από το locked state, ποτέ από το
+                    # stale obj. Ενιαία σειρά κλειδώματος call → ticket
+                    # (deadlock fix).
+                    calls, tickets = _lock_calls_then_tickets([object_id])
+                    locked_ticket = tickets[0] if tickets else None
                     if locked_ticket is None:
                         raise PermissionDenied
-                    # Το τρέχον (locked) call_id — αν η σχέση άλλαξε,
-                    # ΔΕΝ ακολουθούμε παλιό call ID
-                    current_call_id = locked_ticket.call_id
+                    locked_call = calls[0] if calls else None
+                    ticket_qs = Ticket.objects.filter(pk=locked_ticket.pk)
                     call_qs = (
-                        VoIPCall.objects.select_for_update()
-                        .filter(pk=current_call_id)
-                        if current_call_id else VoIPCall.objects.none())
-                    locked_call = call_qs.first()
+                        VoIPCall.objects.filter(pk=locked_call.pk)
+                        if locked_call is not None
+                        else VoIPCall.objects.none())
 
                     # Re-check permissions ΠΑΝΩ στο locked state:
                     # delete_ticket (+ scoping + change_voipcall αν υπάρχει

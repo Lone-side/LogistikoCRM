@@ -1533,15 +1533,36 @@ class VoIPCallLog(models.Model):
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
-        # Αυτόματο snapshot κατά τη δημιουργία — καλύπτει όλα τα call sites
+        # Αυτόματο snapshot κατά τη δημιουργία — καλύπτει όλα τα call sites.
+        #
+        # Race-safe: τα snapshots διαβάζονται από τη ΒΑΣΗ με
+        # select_for_update στη γραμμή της κλήσης, ΟΧΙ από το in-memory
+        # `self.call` — ένα stale instance (π.χ. φορτωμένο πριν από
+        # ταυτόχρονο change_call_client) θα έγραφε παλιό client snapshot
+        # ΜΕΤΑ το resync του service, αφήνοντας μόνιμο client-mismatch.
+        # Το FOR UPDATE σειριοποιεί το INSERT με το change_call_client
+        # (που κρατά lock στην ίδια γραμμή): όποιος προλάβει, ο άλλος
+        # βλέπει το αποτέλεσμά του — είτε φρέσκο client_id εδώ, είτε το
+        # νέο log πιάνεται από το bulk resync του service.
         if self._state.adding and self.call_id is not None:
-            call = self.call
-            if not self.client_id:
-                self.client_id = call.client_id
-            if not self.call_reference:
-                self.call_reference = str(call.call_id or call.pk)
-            if not self.phone_number:
-                self.phone_number = call.phone_number or ''
+            from django.db import transaction
+            with transaction.atomic():
+                fresh = (VoIPCall.objects.select_for_update()
+                         .filter(pk=self.call_id)
+                         .values('client_id', 'call_id', 'phone_number')
+                         .first())
+                if fresh is not None:
+                    if not self.client_id:
+                        self.client_id = fresh['client_id']
+                    if not self.call_reference:
+                        self.call_reference = str(
+                            fresh['call_id'] or self.call_id)
+                    if not self.phone_number:
+                        self.phone_number = fresh['phone_number'] or ''
+                # Το INSERT μένει ΜΕΣΑ στο atomic ώστε να συμβεί όσο
+                # κρατιέται το lock — αλλιώς το παράθυρο ξανανοίγει.
+                super().save(*args, **kwargs)
+            return
         super().save(*args, **kwargs)
 
     def __str__(self):

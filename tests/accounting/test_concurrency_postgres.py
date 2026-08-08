@@ -863,3 +863,186 @@ class AdminDeleteTOCTOUTest(TransactionTestCase):
         self.assertTrue(self.VoIPCall.objects.filter(pk=call_mine.pk).exists())
         self.assertEqual(self._deletion_count(self.Ticket, ticket.pk), 1)
         self.assertEqual(self._deletion_count(self.VoIPCall, call_mine.pk), 0)
+
+
+class VoIPCallLogSnapshotRaceTest(TransactionTestCase):
+    """
+    Race «δημιουργία VoIPCallLog ταυτόχρονα με αλλαγή πελάτη» (εύρημα
+    ανεξάρτητου review): ένα log που ξεκίνησε με stale VoIPCall instance
+    ΔΕΝ επιτρέπεται να εισαχθεί μετά το commit του change_call_client με
+    παλιό client snapshot — θα άφηνε μόνιμο client-mismatch που κανένα
+    resync δεν ξαναπιάνει.
+
+    Deterministic: ο changer κρατά FOR UPDATE στην κλήση όσο ο creator
+    επιχειρεί το create. Το VoIPCallLog.save() διαβάζει τα snapshots από
+    τη βάση με FOR UPDATE στη γραμμή της κλήσης, οπότε μπλοκάρει μέχρι
+    το commit και γράφει τον ΝΕΟ πελάτη. (Πριν το fix: αντέγραφε από το
+    in-memory stale instance → client=None → το test αποτυγχάνει.)
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL (REQUIRE_POSTGRES_TESTS=1).')
+        from accounting.models import VoIPCall
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='RACE ΑΕ')
+        self.call = VoIPCall.objects.create(
+            call_id='RACE-1', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=None)
+
+    def test_log_from_stale_call_instance_gets_fresh_snapshot(self):
+        import time
+        from django.db import transaction
+        from accounting.models import VoIPCall, VoIPCallLog
+        from accounting.services.call_assignment import change_call_client
+
+        barrier = threading.Barrier(2, timeout=15)
+        errors = {}
+        created = {}
+
+        def changer():
+            try:
+                with transaction.atomic():
+                    VoIPCall.objects.select_for_update().get(pk=self.call.pk)
+                    barrier.wait()
+                    # Ο creator τώρα μπλοκάρει στο FOR UPDATE του save()
+                    time.sleep(0.8)
+                    fresh = VoIPCall.objects.get(pk=self.call.pk)
+                    change_call_client(fresh, self.owner)
+            except Exception as exc:  # pragma: no cover
+                errors['changer'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        def creator():
+            try:
+                # Stale instance: φορτωμένο ΠΡΙΝ την αλλαγή (client=None)
+                stale = VoIPCall.objects.get(pk=self.call.pk)
+                assert stale.client_id is None
+                barrier.wait()
+                log = VoIPCallLog.objects.create(call=stale, action='started')
+                created['pk'] = log.pk
+            except Exception as exc:  # pragma: no cover
+                errors['creator'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=changer),
+                   threading.Thread(target=creator)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+
+        self.assertFalse(errors, f'threads απέτυχαν: {errors}')
+        from accounting.models import VoIPCallLog
+        log = VoIPCallLog.objects.get(pk=created['pk'])
+        self.assertEqual(
+            log.client_id, self.owner.pk,
+            'log από stale instance εισήχθη με παλιό client snapshot — '
+            'μόνιμο client-mismatch')
+
+        # Και το audit gate συμφωνεί
+        from django.core.management import call_command
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+
+class CallTicketLockOrderTest(TransactionTestCase):
+    """
+    Deadlock fix: ταυτόχρονη διαγραφή του ίδιου Call–Ticket ζεύγους από
+    VoIPCallAdmin (κλειδώνει call → ticket) και TicketAdmin.
+
+    Με την παλιά σειρά του TicketAdmin (ticket → call) το ΑΒ/ΒΑ
+    αναπαρήχθη σε PostgreSQL 14 ως «deadlock detected». Πλέον ΚΑΙ τα
+    ticket paths κλειδώνουν call → ticket (_lock_calls_then_tickets),
+    οπότε το σενάριο σειριοποιείται.
+
+    Deterministic: T1 μιμείται το call-side mid-flight (κρατά το call
+    lock, μετά θέλει το ticket), ενώ T2 τρέχει το ΠΡΑΓΜΑΤΙΚΟ
+    TicketAdmin.delete_queryset. Με τη νέα σειρά ο T2 μπλοκάρει στο
+    call lock και ολοκληρώνει μετά τον T1. Με την παλιά, ο T2 έπαιρνε
+    πρώτος το ticket lock και το ζεύγος κατέληγε σε deadlock.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL (REQUIRE_POSTGRES_TESTS=1).')
+        from accounting.models import Ticket, VoIPCall
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='LOCK ΑΕ')
+        self.call = VoIPCall.objects.create(
+            call_id='LOCK-1', phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.owner)
+        self.ticket = Ticket.objects.create(
+            client=self.owner, call=self.call, title='τ', description='-',
+            status='open')
+        self.superuser = User.objects.create_superuser(
+            'lock_admin', 'l@test.com', 'x')
+
+    def test_concurrent_pair_deletion_does_not_deadlock(self):
+        import time
+        from django.contrib.admin.sites import site
+        from django.db import transaction
+        from django.test import RequestFactory
+        from accounting.models import Ticket, VoIPCall
+
+        admin_instance = site._registry[Ticket]
+        request = RequestFactory().post('/')
+        request.user = self.superuser
+
+        barrier = threading.Barrier(2, timeout=15)
+        errors = {}
+
+        def call_side_mid_flight():
+            # Ό,τι κάνει το VoIPCallAdmin: κρατά call lock, μετά ticket
+            try:
+                with transaction.atomic():
+                    VoIPCall.objects.select_for_update().get(pk=self.call.pk)
+                    barrier.wait()
+                    time.sleep(0.5)
+                    Ticket.objects.select_for_update().filter(
+                        call_id=self.call.pk).first()
+            except Exception as exc:  # pragma: no cover
+                errors['call_side'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        def ticket_side_real_admin():
+            try:
+                barrier.wait()
+                admin_instance.delete_queryset(
+                    request, Ticket.objects.filter(pk=self.ticket.pk))
+            except Exception as exc:  # pragma: no cover
+                errors['ticket_side'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=call_side_mid_flight),
+                   threading.Thread(target=ticket_side_real_admin)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+
+        self.assertFalse(
+            errors,
+            f'deadlock ή αποτυχία στο ταυτόχρονο Call–Ticket ζεύγος: '
+            f'{errors}')
+        self.assertFalse(
+            Ticket.objects.filter(pk=self.ticket.pk).exists(),
+            'το ticket δεν διαγράφηκε')
+        self.assertTrue(
+            VoIPCall.objects.filter(pk=self.call.pk).exists(),
+            'η κλήση δεν έπρεπε να διαγραφεί από αυτό το path')

@@ -1607,3 +1607,149 @@ class DeletionCounterAccuracyTest(_OwnedMixin, TestCase):
         msgs = ' '.join(str(m) for m in get_messages(resp.wsgi_request))
         self.assertIn('1 κλήσεις', msgs)
         self.assertIn('1 tickets αποσυνδέθηκαν', msgs)
+
+
+class VoIPCallLogClientResyncTest(TestCase):
+    """
+    Current-attribution contract (εύρημα ανεξάρτητου review στο `5e518a8`):
+    όσο υπάρχει η κλήση, ΚΑΘΕ VoIPCallLog της πρέπει να έχει snapshot
+    client ίδιο με την κλήση. Τα change_call_client() και
+    sync_ticket_call_client() άλλαζαν το VoIPCall.client ΧΩΡΙΣ να
+    συγχρονίζουν τα ήδη υπάρχοντα logs — ο νέος scoped owner δεν έβλεπε
+    το ιστορικό πριν την αντιστοίχιση, και το audit gate
+    (--fail-on-findings) κοκκίνιζε με client-mismatch.
+    """
+
+    def setUp(self):
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        self.owner = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.other = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        # Unassigned κλήση με προϋπάρχον log — και τα δύο client=None
+        self.call = VoIPCall.objects.create(
+            call_id='RESYNC-1', phone_number='2109999999',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=None)
+        self.started_log = VoIPCallLog.objects.create(
+            call=self.call, action='started')
+        self.assertIsNone(self.started_log.client_id)
+
+    def _audit_clean(self):
+        from django.core.management import call_command
+        call_command('audit_voipcalllog_snapshots', '--fail-on-findings')
+
+    def test_change_call_client_resyncs_existing_logs(self):
+        """Το repro του review: unassigned → owner, το παλιό log ακολουθεί."""
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.owner,
+                           log_action='client_matched')
+
+        self.started_log.refresh_from_db()
+        self.assertEqual(self.started_log.client_id, self.owner.pk)
+        # Και το νέο client_matched log είναι σωστό
+        from accounting.models import VoIPCallLog
+        for log in VoIPCallLog.objects.filter(call=self.call):
+            self.assertEqual(log.client_id, self.owner.pk)
+        self._audit_clean()
+
+    def test_scoped_owner_sees_full_history_after_match(self):
+        """ENFORCE_CLIENT_ASSIGNMENT=True: ο owner βλέπει ΟΛΟ το ιστορικό."""
+        from django.test import override_settings
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.owner,
+                           log_action='client_matched')
+
+        user = make_staff('resync_owner', 'view_voipcalllog')
+        self.owner.assigned_users.add(user)
+        self.client.force_login(user)
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            resp = self.client.get(
+                '/accounting/api/v1/voip-call-logs/', secure=True)
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        results = data['results'] if isinstance(data, dict) else data
+        ids = {row['id'] for row in results}
+        self.assertIn(self.started_log.pk, ids,
+                      'το προ-αντιστοίχισης log λείπει από το ιστορικό '
+                      'του scoped owner')
+
+    def test_reassignment_moves_all_logs_off_old_client(self):
+        """Α→Β: κανένα log δεν μένει scoped στον Α."""
+        from accounting.models import VoIPCallLog
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.owner)
+        VoIPCallLog.objects.create(call=self.call, action='answered')
+        change_call_client(self.call, self.other)
+
+        self.assertFalse(
+            VoIPCallLog.objects.filter(
+                call=self.call, client=self.owner).exists(),
+            'log παρέμεινε scoped στον παλιό πελάτη')
+        self.assertEqual(
+            VoIPCallLog.objects.filter(
+                call=self.call, client=self.other).count(),
+            VoIPCallLog.objects.filter(call=self.call).count())
+        self._audit_clean()
+
+    def test_sync_ticket_call_client_resyncs_logs(self):
+        """Από την πλευρά του ticket: unassigned κλήση → πελάτης ticket."""
+        from accounting.models import Ticket
+        from accounting.services.call_assignment import sync_ticket_call_client
+
+        ticket = Ticket.objects.create(
+            client=self.owner, call=self.call, title='τ', description='-',
+            status='open')
+        sync_ticket_call_client(ticket)
+
+        self.call.refresh_from_db()
+        self.started_log.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.owner.pk)
+        self.assertEqual(self.started_log.client_id, self.owner.pk)
+        self._audit_clean()
+
+    def test_deletion_after_change_keeps_last_consistent_snapshot(self):
+        """Διαγραφή μετά την αλλαγή: το log κρατά τον τελευταίο πελάτη."""
+        from accounting.services.call_assignment import change_call_client
+
+        change_call_client(self.call, self.owner)
+        self.call.delete()
+
+        self.started_log.refresh_from_db()
+        self.assertIsNone(self.started_log.call_id)
+        self.assertEqual(self.started_log.client_id, self.owner.pk)
+        self.assertEqual(self.started_log.call_reference, 'RESYNC-1')
+        self._audit_clean()
+
+    def test_rollback_when_log_resync_fails(self):
+        """Αποτυχία συγχρονισμού logs → rollback ΚΑΙ της αλλαγής πελάτη."""
+        from unittest import mock
+        from django.db import DatabaseError
+        from accounting.models import VoIPCallLog
+        from accounting.services.call_assignment import change_call_client
+
+        real_filter = VoIPCallLog.objects.filter
+
+        def failing_filter(*args, **kwargs):
+            qs = real_filter(*args, **kwargs)
+            if kwargs.get('call') is not None:
+                broken = mock.MagicMock(wraps=qs)
+                broken.update.side_effect = DatabaseError('resync failed')
+                return broken
+            return qs
+
+        with mock.patch.object(
+                type(VoIPCallLog.objects), 'filter',
+                side_effect=failing_filter):
+            with self.assertRaises(DatabaseError):
+                change_call_client(self.call, self.owner)
+
+        self.call.refresh_from_db()
+        self.started_log.refresh_from_db()
+        self.assertIsNone(self.call.client_id,
+                          'η αλλαγή πελάτη ΔΕΝ έγινε rollback')
+        self.assertIsNone(self.started_log.client_id)
