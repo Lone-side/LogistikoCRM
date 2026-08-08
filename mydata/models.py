@@ -228,6 +228,49 @@ class MyDataCredentials(models.Model):
         return bool(self._encrypted_user_id and self._encrypted_subscription_key)
 
     @property
+    def credentials_corrupted(self) -> bool:
+        """
+        Check if credentials exist but cannot be decrypted.
+
+        This happens when SECRET_KEY changes after credentials were stored.
+        Returns True if encrypted data exists but decryption fails.
+        """
+        if not self.has_credentials:
+            return False
+        # If encrypted data exists but decrypted values are empty, credentials are corrupted
+        return not self.user_id or not self.subscription_key
+
+    @property
+    def needs_reconfiguration(self) -> bool:
+        """
+        Check if credentials need to be re-entered.
+
+        Returns True if:
+        - No credentials exist, OR
+        - Credentials exist but cannot be decrypted (corrupted)
+        """
+        if not self.has_credentials:
+            return True
+        return self.credentials_corrupted
+
+    def clear_corrupted_credentials(self):
+        """
+        Clear corrupted credentials so new ones can be entered.
+
+        Use this when decryption fails due to SECRET_KEY change.
+        """
+        self._encrypted_user_id = ''
+        self._encrypted_subscription_key = ''
+        self.is_verified = False
+        self.verification_error = 'Τα credentials διαγράφηκαν λόγω αλλαγής SECRET_KEY. Παρακαλώ εισάγετε νέα.'
+        self.save(update_fields=[
+            '_encrypted_user_id',
+            '_encrypted_subscription_key',
+            'is_verified',
+            'verification_error'
+        ])
+
+    @property
     def client_afm(self) -> str:
         """Shortcut to client's AFM."""
         return self.client.afm if self.client else ''

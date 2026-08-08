@@ -455,6 +455,10 @@ export interface MyDataCredentialsData {
   is_sandbox: boolean;
   is_active: boolean;
   is_verified: boolean;
+  has_credentials?: boolean;
+  credentials_corrupted?: boolean;
+  needs_reconfiguration?: boolean;
+  verification_error?: string;
   last_sync_at: string | null;
   last_vat_sync_at: string | null;
   created_at?: string;
@@ -562,6 +566,27 @@ export function useSyncMyDataVAT(clientId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [CLIENT_MYDATA_CREDENTIALS_KEY, clientId] });
       queryClient.invalidateQueries({ queryKey: ['mydata'] });
+    },
+  });
+}
+
+/**
+ * Clear corrupted myDATA credentials
+ * Use when SECRET_KEY has changed and credentials cannot be decrypted
+ */
+export function useClearCorruptedCredentials(clientId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (credentialsId: number) => {
+      const response = await apiClient.post<{ success: boolean; message: string; needs_reconfiguration: boolean }>(
+        `api/mydata/credentials/${credentialsId}/clear_corrupted/`
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [CLIENT_MYDATA_CREDENTIALS_KEY, clientId] });
+      queryClient.invalidateQueries({ queryKey: ['mydata', 'clients'] });
     },
   });
 }
