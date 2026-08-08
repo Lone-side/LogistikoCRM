@@ -48,4 +48,3 @@ jobs:
           trigger_phrase: "@claude"
           additional_permissions: |
             actions: read
-            checks: read
