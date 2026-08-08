@@ -28,6 +28,7 @@ from pathlib import Path
 from unittest import mock
 
 import yaml
+from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -155,9 +156,13 @@ class ProductionComposeTest(SimpleTestCase):
 
     def test_django_env_is_production(self):
         """
-        Χωρίς DJANGO_ENV το manage.py (settings_local) πέφτει στο
-        development branch: DEBUG=True, ALLOWED_HOSTS=['*'], χωρίς
-        secure cookies/HSTS — και παρακάμπτει τα prod fail-closed guards.
+        Το production compose πρέπει να δηλώνει ρητά DJANGO_ENV=production.
+
+        Χωρίς αυτό, τα manage.py βήματα του compose (migrate,
+        createcachetable) αποτυγχάνουν πλέον κλειστά με
+        ImproperlyConfigured — το settings_local δεν μαντεύει περιβάλλον.
+        (Ιστορικά, πριν το fail-closed, η απουσία σήμαινε σιωπηλά
+        development: DEBUG=True, ALLOWED_HOSTS=['*'], δημόσια /media/.)
         """
         self.assertEqual(str(self.env.get('DJANGO_ENV', '')).lower(),
                          'production')
@@ -205,8 +210,14 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
                  for k in ('webcrm.settings_local', 'webcrm.settings')}
         try:
             with mock.patch.dict(os.environ, env, clear=False):
-                if 'DJANGO_ENV' not in env:
-                    os.environ.pop('DJANGO_ENV', None)
+                # Κλειδιά που το test θέλει ρητά ΑΠΟΝΤΑ αφαιρούνται από το
+                # ambient περιβάλλον. Σημείωση: το load_dotenv() του
+                # settings.py μπορεί να ξαναγεμίσει το DEBUG από τοπικό
+                # .env κατά το import — ίδια συμπεριφορά με το πραγματικό
+                # manage.py, οπότε τα tests μετρούν την αλήθεια.
+                for key in ('DJANGO_ENV', 'DEBUG'):
+                    if key not in env:
+                        os.environ.pop(key, None)
                 return importlib.import_module('webcrm.settings_local')
         finally:
             for key, value in saved.items():
@@ -220,28 +231,151 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
         self.assertFalse(mod.DEBUG)
         self.assertNotIn('*', mod.ALLOWED_HOSTS)
 
-    def test_debug_false_alone_does_not_enable_production(self):
+    def test_debug_false_without_django_env_fails_closed(self):
         """
-        Η παγίδα της χειροκίνητης εγκατάστασης (βλ. DEPLOYMENT.md).
+        Η παγίδα της χειροκίνητης εγκατάστασης — πλέον fail closed.
 
-        Το manage.py φορτώνει `webcrm.settings_local`, που διαλέγει branch
-        ΜΟΝΟ από το DJANGO_ENV. Με `DEBUG=False` αλλά χωρίς
-        `DJANGO_ENV=production` μπαίνει στο development branch και γράφει
-        `DEBUG = True` από πάνω — οπότε τα /media/ σερβίρονται ελεύθερα
-        από το `static()` αντί για το authenticated view.
+        Παλιότερα αυτός ο συνδυασμός κατέληγε σιωπηλά σε development:
+        DEBUG=True, ALLOWED_HOSTS=['*'] και **δημόσια /media/** (το urls.py
+        διαλέγει `static()` αντί για το authenticated view με βάση το
+        DEBUG). Η εφαρμογή ξεκινούσε κανονικά και έμοιαζε σωστά ρυθμισμένη.
 
-        Το test κατοχυρώνει τη σημερινή συμπεριφορά ώστε η τεκμηρίωση να
-        μην αποκλίνει σιωπηλά από τον κώδικα.
+        Πλέον σκάει αντί να μαντεύει.
         """
-        mod = self._load_settings_local({**self.PROD_ENV})
+        # Προσομοίωση πραγματικού entry point (π.χ. `manage.py migrate`):
+        # αλλιώς ισχύει η εξαίρεση του test runner, αφού αυτό εδώ τρέχει
+        # μέσα από `manage.py test`.
+        with mock.patch.object(sys, 'argv', ['manage.py', 'migrate']):
+            with self.assertRaises(ImproperlyConfigured) as ctx:
+                self._load_settings_local({**self.PROD_ENV})
 
-        self.assertTrue(
-            mod.DEBUG,
-            'Η συμπεριφορά άλλαξε: το DEBUG=False αρκεί πλέον χωρίς '
-            'DJANGO_ENV. Ενημέρωσε DEPLOYMENT.md / PRODUCTION_CHECKLIST.md '
-            'και .env.production.example.')
-        self.assertIn('*', mod.ALLOWED_HOSTS)
-        self.assertFalse(mod.SESSION_COOKIE_SECURE)
+        message = str(ctx.exception)
+        self.assertIn('DJANGO_ENV', message)
+        # Το μήνυμα πρέπει να λέει στον χειριστή τι ακριβώς να ορίσει.
+        self.assertIn('production', message)
+        self.assertIn('development', message)
+
+    def test_missing_django_env_allows_explicit_debug_true(self):
+        """
+        Τοπικό runserver χωρίς πλήρες .env: το ρητό DEBUG=True είναι σαφής
+        δήλωση πρόθεσης και επιτρέπεται.
+        """
+        env = {k: v for k, v in self.PROD_ENV.items() if k != 'DEBUG'}
+        mod = self._load_settings_local({**env, 'DEBUG': 'True'})
+        self.assertTrue(mod.DEBUG)
+
+    def test_unknown_django_env_values_fail_closed(self):
+        """
+        Typo σε production ΔΕΝ γίνεται σιωπηλά development.
+
+        Χωρίς αυτό, ένα `DJANGO_ENV=prodction` σε production server θα
+        έδινε DEBUG=True και δημόσια έγγραφα πελατών.
+        """
+        for value in ('prod', 'prodction', 'Production!', '   ', '',
+                      'dev', 'staging'):
+            with self.subTest(django_env=value):
+                with self.assertRaises(ImproperlyConfigured):
+                    self._load_settings_local(
+                        {**self.PROD_ENV, 'DJANGO_ENV': value})
+
+    def test_valid_values_tolerate_case_and_whitespace(self):
+        """
+        `  ProDuction  ` είναι σαφής πρόθεση, όχι typo — κανονικοποιείται
+        αντί να σκάει, ώστε ένα κενό στο .env να μη ρίχνει την παραγωγή.
+        """
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': '  ProDuction  '})
+        self.assertFalse(mod.DEBUG)
+
+        # Χωρίς το DEBUG=False του PROD_ENV — θα ήταν πλέον αντίφαση με
+        # development (βλ. test_development_with_explicit_debug_false...).
+        env = {k: v for k, v in self.PROD_ENV.items() if k != 'DEBUG'}
+        mod = self._load_settings_local({**env, 'DJANGO_ENV': 'DEVELOPMENT'})
+        self.assertTrue(mod.DEBUG)
+
+    def test_production_with_explicit_debug_true_fails_closed(self):
+        """
+        Η αντίφαση που έπιασε το ανεξάρτητο review του #191.
+
+        Το settings.py εισάγεται ΠΡΩΤΟ (from .settings import *) και με
+        truthy DEBUG env var παραλείπει ολόκληρο το production security
+        block. Πριν τη διόρθωση, ο συνδυασμός ολοκλήρωνε το import ΧΩΡΙΣ
+        exception και έδινε μετρημένα: DEBUG=False, SECURE_SSL_REDIRECT=
+        False, SESSION_COOKIE_SECURE=False, HSTS=0 — production όψη,
+        development θωράκιση. Πλέον σκάει πριν προλάβει να μοιάσει υγιές.
+        """
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            self._load_settings_local(
+                {**self.PROD_ENV, 'DJANGO_ENV': 'production',
+                 'DEBUG': 'True'})
+        message = str(ctx.exception)
+        self.assertIn('Αντίφαση', message)
+        self.assertIn('production', message)
+
+    def test_development_with_explicit_debug_false_fails_closed(self):
+        """
+        Η αντίστροφη αντίφαση: με falsey DEBUG το settings.py έτρεξε τα
+        production guards για ένα περιβάλλον που δηλώνεται development.
+        Τα PROD_ENV secrets κρατούν τον import του settings.py ζωντανό
+        ώστε να αποδεικνύεται ότι σκάει ο ΔΙΚΟΣ μας έλεγχος, όχι τα
+        guards.
+        """
+        with self.assertRaises(ImproperlyConfigured) as ctx:
+            self._load_settings_local(
+                {**self.PROD_ENV, 'DJANGO_ENV': 'development',
+                 'DEBUG': 'False'})
+        message = str(ctx.exception)
+        self.assertIn('Αντίφαση', message)
+        self.assertIn('development', message)
+
+    def test_test_runner_works_without_django_env(self):
+        """
+        Ο test runner δεν πρέπει να απαιτεί env setup.
+
+        Η εξαίρεση κρατά το τοπικό `python manage.py test` λειτουργικό
+        χωρίς κανένα env setup. Το CI `test` job δεν βασίζεται σε αυτήν:
+        δηλώνει ρητά DJANGO_ENV=development και DEBUG=True, επειδή τρέχει
+        και `manage.py migrate` (non-test command, εκτός εξαίρεσης). Το
+        `security-smoke` job δηλώνει ρητά production, οπότε η production
+        διαδρομή παραμένει καλυμμένη.
+
+        Το ότι τρέχει αυτό το ίδιο το test μέσα από `manage.py test` είναι
+        η ζωντανή απόδειξη· εδώ κλειδώνεται και ρητά.
+        """
+        with mock.patch.object(sys, 'argv', ['manage.py', 'test']):
+            mod = self._load_settings_local({**self.PROD_ENV})
+        self.assertTrue(mod.DEBUG)
+
+    def test_production_serves_media_through_authenticated_view(self):
+        """
+        Το πραγματικό στοίχημα: με DJANGO_ENV=production τα /media/ πάνε
+        στο authenticated `serve_protected_media`, όχι στο `static()`.
+
+        Ελέγχεται το URLconf που παράγει το ίδιο το settings module, ώστε
+        να μην αρκεστούμε στο ότι «το DEBUG είναι False».
+        """
+        mod = self._load_settings_local(
+            {**self.PROD_ENV, 'DJANGO_ENV': 'production'})
+        self.assertFalse(mod.DEBUG)
+
+        saved = sys.modules.pop('webcrm.urls', None)
+        try:
+            with mock.patch.dict(os.environ, {'DJANGO_ENV': 'production'},
+                                 clear=False):
+                with mock.patch('django.conf.settings.DEBUG', False):
+                    urls = importlib.import_module('webcrm.urls')
+                    names = {
+                        getattr(p, 'name', None)
+                        for p in urls.urlpatterns
+                    }
+            self.assertIn(
+                'protected_media', names,
+                'Σε production τα /media/ πρέπει να περνούν από το '
+                'authenticated serve_protected_media.')
+        finally:
+            sys.modules.pop('webcrm.urls', None)
+            if saved is not None:
+                sys.modules['webcrm.urls'] = saved
 
     def test_production_env_yields_secure_transport_settings(self):
         """Το DJANGO_ENV=production δίνει secure cookies και HSTS."""
@@ -250,6 +384,72 @@ class SettingsLocalEnvironmentTest(SimpleTestCase):
         self.assertTrue(mod.SESSION_COOKIE_SECURE)
         self.assertTrue(mod.CSRF_COOKIE_SECURE)
         self.assertTrue(mod.SECURE_SSL_REDIRECT)
+
+
+class CIWorkflowEnvironmentTest(SimpleTestCase):
+    """
+    Κάθε CI job που τρέχει `manage.py` πρέπει να δηλώνει DJANGO_ENV.
+
+    Δεν είναι υποθετικό: όταν μπήκε το fail-closed, το `test` job έσκασε
+    στο βήμα «Run migrations» — η εξαίρεση του test runner καλύπτει το
+    `manage.py test`, όχι το `manage.py migrate` που τρέχει πριν από αυτό.
+    Το test κλειδώνει τη διόρθωση ώστε να μην επανεμφανιστεί σιωπηλά.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.workflow = yaml.safe_load(
+            (BASE_DIR / '.github' / 'workflows' / 'tests.yml').read_text(
+                encoding='utf-8'))
+
+    def test_jobs_running_manage_py_declare_django_env(self):
+        for name, job in self.workflow['jobs'].items():
+            steps = job.get('steps') or []
+            runs_manage_py = any(
+                'manage.py' in str(step.get('run', ''))
+                for step in steps
+            )
+            if not runs_manage_py:
+                continue
+            with self.subTest(job=name):
+                declared = str(
+                    (job.get('env') or {}).get('DJANGO_ENV', '')).lower()
+                self.assertIn(
+                    declared, ('production', 'development'),
+                    f'Το job «{name}» τρέχει manage.py χωρίς έγκυρο '
+                    f'DJANGO_ENV — το settings_local θα αποτύχει κλειστά '
+                    f'σε κάθε non-test command (π.χ. migrate).')
+
+    def test_declared_debug_does_not_contradict_django_env(self):
+        """
+        Το settings_local σκάει σε αντιφατικά DJANGO_ENV/DEBUG — άρα ένα
+        CI job με τέτοιο ζεύγος θα κοκκίνιζε στο πρώτο manage.py βήμα.
+        Ο έλεγχος εδώ το πιάνει στο ίδιο το YAML, με σαφές μήνυμα, πριν
+        φτάσει καν στο CI.
+        """
+        for name, job in self.workflow['jobs'].items():
+            env = job.get('env') or {}
+            declared = str(env.get('DJANGO_ENV', '')).strip().lower()
+            if declared not in ('production', 'development'):
+                continue
+            if 'DEBUG' not in env:
+                continue
+            debug_truthy = str(env['DEBUG']).strip().lower() in (
+                'true', '1', 'yes')
+            with self.subTest(job=name):
+                if declared == 'production':
+                    self.assertFalse(
+                        debug_truthy,
+                        f'Το job «{name}» δηλώνει DJANGO_ENV=production με '
+                        f'truthy DEBUG — το settings.py θα παρέλειπε το '
+                        f'security block και το settings_local θα έσκαγε.')
+                else:
+                    self.assertTrue(
+                        debug_truthy,
+                        f'Το job «{name}» δηλώνει DJANGO_ENV=development με '
+                        f'falsey DEBUG — αντίφαση, το settings_local θα '
+                        f'έσκαγε στο πρώτο manage.py βήμα.')
 
 
 class ProductionEnvTemplateTest(SimpleTestCase):
@@ -274,7 +474,8 @@ class ProductionEnvTemplateTest(SimpleTestCase):
         self.assertEqual(
             values, ['production'],
             'Το .env.production.example πρέπει να ορίζει DJANGO_ENV=production· '
-            'χωρίς αυτό κάθε manage.py εντολή τρέχει με DEBUG=True.')
+            'χωρίς αυτό οι production manage.py εντολές αποτυγχάνουν κλειστά — '
+            'το production template πρέπει να δηλώνει ρητά DJANGO_ENV=production.')
 
     def test_django_env_is_documented_as_mandatory(self):
         """Να μη μείνει γυμνή γραμμή χωρίς την εξήγηση της παγίδας."""
