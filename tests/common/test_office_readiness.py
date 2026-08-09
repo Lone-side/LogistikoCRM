@@ -161,7 +161,51 @@ class OfficeComposeStructureTest(TestCase):
         volumes = self.overlay['services']['nginx']['volumes']
         self.assertIn(
             './nginx/office.conf:/etc/nginx/conf.d/default.conf:ro', volumes)
-        self.assertIn('./certs:/etc/nginx/certs:ro', volumes)
+        self.assertIn('./certs/office.crt:/etc/nginx/certs/office.crt:ro',
+                      volumes)
+        self.assertIn('./certs/office.key:/etc/nginx/certs/office.key:ro',
+                      volumes)
+
+    def _merged_volumes(self):
+        """
+        Προσομοίωση του Compose merge για volumes: append των overlay
+        entries πάνω στα prod (τα volumes ΔΕΝ φέρουν !override tag στο
+        overlay, οπότε ο merged κατάλογος = prod + overlay). Έτσι το
+        test καλύπτει το ΤΕΛΙΚΟ merged configuration χωρίς να απαιτεί
+        docker CLI στο CI.
+        """
+        merged = {}
+        for source in (self.prod, self.overlay):
+            for name, service in source.get('services', {}).items():
+                merged.setdefault(name, []).extend(
+                    service.get('volumes', []))
+        return merged
+
+    def test_ca_private_key_never_mounted_in_any_container(self):
+        """
+        Το CA private key (office-ca.key) δεν επιτρέπεται να υπάρχει σε
+        ΚΑΝΕΝΑ container — ούτε μέσω απευθείας mount ούτε μέσω mount
+        ολόκληρου του ./certs φακέλου (που τον περιέχει).
+        """
+        for service, volumes in self._merged_volumes().items():
+            for volume in volumes:
+                source = str(volume).split(':', 1)[0]
+                self.assertNotIn('office-ca.key', source,
+                                 msg=f'{service}: {volume}')
+                self.assertNotRegex(
+                    source, r'(^|/)certs/?$',
+                    msg=f'{service}: mount ολόκληρου του certs dir '
+                        f'({volume}) εκθέτει το CA private key',
+                )
+
+    def test_only_nginx_mounts_cert_material(self):
+        """Cert mounts μόνο στο nginx — ποτέ σε app/web containers."""
+        for service, volumes in self._merged_volumes().items():
+            if service == 'nginx':
+                continue
+            for volume in volumes:
+                self.assertNotIn('certs', str(volume).split(':', 1)[0],
+                                 msg=f'{service}: {volume}')
 
     def test_overlay_forces_x_forwarded_proto(self):
         env = self.overlay['services']['web']['environment']

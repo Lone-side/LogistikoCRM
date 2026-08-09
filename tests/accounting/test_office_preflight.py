@@ -183,17 +183,46 @@ class OfficePreflightTest(TestCase):
             settings_overrides={'MYDATA_IS_SANDBOX': False})
         self.assert_check(output, 'FAIL', 'mydata-sandbox')
 
-    def test_production_client_credentials_warn_without_pii(self):
+    def test_active_production_client_credentials_fail_without_pii(self):
+        """Fail-closed: ενεργά production credentials = FAIL, όχι WARN."""
         from accounting.models import ClientProfile
         from mydata.models import MyDataCredentials
         client = ClientProfile.objects.create(
             afm='090000045', onoma='ΔΟΚΙΜΑΣΤΙΚΗ ΕΠΕ')
-        MyDataCredentials.objects.create(client=client, is_sandbox=False)
+        MyDataCredentials.objects.create(
+            client=client, is_sandbox=False, is_active=True)
         output = self.run_preflight()
-        self.assert_check(output, 'WARN', 'mydata-client-creds')
+        self.assert_check(output, 'FAIL', 'mydata-client-creds')
+        with self.assertRaises(CommandError):
+            self.run_preflight(fail_on_findings=True)
         # Ποτέ ΑΦΜ/επωνυμία στο output
         self.assertNotIn('090000045', output)
         self.assertNotIn('ΔΟΚΙΜΑΣΤΙΚΗ', output)
+
+    def test_inactive_production_client_credentials_warn(self):
+        """Ανενεργά production credentials: WARN (όχι FAIL)."""
+        from accounting.models import ClientProfile
+        from mydata.models import MyDataCredentials
+        client = ClientProfile.objects.create(
+            afm='090000046', onoma='ΑΝΕΝΕΡΓΗ ΕΠΕ')
+        MyDataCredentials.objects.create(
+            client=client, is_sandbox=False, is_active=False)
+        output = self.run_preflight()
+        self.assert_check(output, 'WARN', 'mydata-client-creds')
+        self.assertNotIn('[FAIL]', output)
+        self.assertNotIn('090000046', output)
+        self.assertNotIn('ΑΝΕΝΕΡΓΗ', output)
+
+    def test_active_sandbox_credentials_ok(self):
+        """Sandbox credentials δεν προκαλούν ούτε WARN."""
+        from accounting.models import ClientProfile
+        from mydata.models import MyDataCredentials
+        client = ClientProfile.objects.create(
+            afm='090000047', onoma='SANDBOX ΕΠΕ')
+        MyDataCredentials.objects.create(
+            client=client, is_sandbox=True, is_active=True)
+        output = self.run_preflight()
+        self.assert_check(output, 'OK', 'mydata-client-creds')
 
     def test_pending_migrations_fail(self):
         with mock.patch(

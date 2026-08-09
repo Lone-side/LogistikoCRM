@@ -335,12 +335,23 @@ class Command(BaseCommand):
         except Exception:
             self._report('OK', 'mydata-client-creds', 'μη διαθέσιμο app')
             return
-        count = MyDataCredentials.objects.filter(is_sandbox=False).count()
-        if count:
+        production = MyDataCredentials.objects.filter(is_sandbox=False)
+        active = production.filter(is_active=True).count()
+        inactive = production.filter(is_active=False).count()
+        if active:
+            # Fail-closed: ενεργά production credentials σημαίνουν ότι το
+            # sync μπορεί να μιλήσει στο πραγματικό myDATA — απαγορευμένο
+            # στην office εγκατάσταση (sandbox-only gate).
+            self._report('FAIL', 'mydata-client-creds',
+                         f'{active} ΕΝΕΡΓΑ πελατ. credentials σε ΠΑΡΑΓΩΓΗ '
+                         '(is_sandbox=False, is_active=True) — '
+                         'απενεργοποιήστε τα ή γυρίστε τα σε sandbox')
+        elif inactive:
             self._report('WARN', 'mydata-client-creds',
-                         f'{count} πελατ. credentials σε ΠΑΡΑΓΩΓΗ '
-                         '(is_sandbox=False — το default του πεδίου είναι '
-                         'παραγωγή, ελέγξτε τα συνειδητά)')
+                         f'{inactive} ανενεργά πελατ. credentials σε '
+                         'παραγωγή (is_sandbox=False — το default του '
+                         'πεδίου είναι παραγωγή, ελέγξτε τα πριν την '
+                         'ενεργοποίηση)')
         else:
             self._report('OK', 'mydata-client-creds',
                          'κανένα production credential')

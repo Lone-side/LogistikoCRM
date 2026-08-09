@@ -29,7 +29,11 @@ services:
       # Αντικαθιστά το config του image — τα υπόλοιπα volumes του prod
       # file (media για X-Accel-Redirect) διατηρούνται (append merge).
       - ./nginx/office.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/etc/nginx/certs:ro
+      # ΜΟΝΟ το server cert/key — ΠΟΤΕ ολόκληρος ο ./certs φάκελος:
+      # το office-ca.key (CA private key) δεν πρέπει να υπάρχει μέσα σε
+      # κανένα container (regression test στο test_office_readiness.py).
+      - ./certs/office.crt:/etc/nginx/certs/office.crt:ro
+      - ./certs/office.key:/etc/nginx/certs/office.key:ro
 
   web:
     environment:

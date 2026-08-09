@@ -52,6 +52,14 @@ nano .env    # OFFICE_BIND_IP, OFFICE_HOSTNAME, ALLOWED_HOSTS,
 
 # 2. Εσωτερικό CA + server certificate (φάκελος ./certs, εκτός git)
 ./scripts/office_certs.sh crm.office.lan 192.168.1.10
+# ⚠️ Το office-ca.key (CA private key) ΔΕΝ μπαίνει ποτέ σε container —
+# το compose κάνει mount ΜΟΝΟ τα office.crt/office.key στο nginx.
+# Φύλαξη του office-ca.key: μένει στον server με δικαιώματα 600 (το
+# script τα ορίζει), και κρατήστε offline αντίγραφο (π.χ. κρυπτογραφημένο
+# USB στο χρηματοκιβώτιο του γραφείου) — αν χαθεί, νέο CA σημαίνει
+# επανεγκατάσταση σε ΟΛΟΥΣ τους υπολογιστές· αν διαρρεύσει, ο κάτοχος
+# μπορεί να πλαστογραφήσει οποιοδήποτε site για τα μηχανήματα που το
+# εμπιστεύονται (αμέσως αφαίρεση από όλα τα trust stores + νέο CA).
 
 # 3. Build + εκκίνηση (πάντα και τα δύο -f, με αυτή τη σειρά)
 docker compose -f docker-compose.prod.yml -f docker-compose.office.yml up -d --build
@@ -176,6 +184,8 @@ docker compose -f docker-compose.prod.yml up -d
   restart του nginx service. ⚠️ Με ληγμένο cert οι browsers μπλοκάρουν
   σκληρά λόγω HSTS.
 - **Πρόβα restore** στην trial εγκατάσταση: τουλάχιστον 2 φορές τον χρόνο.
+- **CA private key**: παραμένει ΜΟΝΟ στον server (0600) + offline
+  αντίγραφο — ποτέ σε container, email ή shared φάκελο (βλ. §2).
 
 ## 8. Troubleshooting
 
