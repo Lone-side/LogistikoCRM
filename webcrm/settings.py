@@ -374,9 +374,29 @@ OAUTH2_DATA = {
 # Hardcoded dummy redirect URI for non-web apps.
 REDIRECT_URI = ''
 
-# Credentials for Google reCAPTCHA.
-GOOGLE_RECAPTCHA_SITE_KEY = ''
-GOOGLE_RECAPTCHA_SECRET_KEY = ''
+# Credentials for Google reCAPTCHA (environment-backed, όχι hardcoded).
+GOOGLE_RECAPTCHA_SITE_KEY = os.getenv('GOOGLE_RECAPTCHA_SITE_KEY', '')
+GOOGLE_RECAPTCHA_SECRET_KEY = os.getenv('GOOGLE_RECAPTCHA_SECRET_KEY', '')
+
+# Τα δύο keys πρέπει να ορίζονται μαζί ή καθόλου — μερική configuration
+# σημαίνει είτε ότι το widget δεν θα εμφανίζεται είτε ότι το verification
+# δεν θα μπορεί να τρέξει, οπότε αποτυγχάνουμε κλειστά στο startup.
+if bool(GOOGLE_RECAPTCHA_SITE_KEY) != bool(GOOGLE_RECAPTCHA_SECRET_KEY):
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        "Μερική reCAPTCHA configuration: τα GOOGLE_RECAPTCHA_SITE_KEY και "
+        "GOOGLE_RECAPTCHA_SECRET_KEY πρέπει να είναι είτε και τα δύο "
+        "ορισμένα είτε και τα δύο κενά."
+    )
+
+# Timeout (seconds) για το verification request προς την Google.
+GOOGLE_RECAPTCHA_VERIFY_TIMEOUT = int(
+    os.getenv('GOOGLE_RECAPTCHA_VERIFY_TIMEOUT', '5')
+)
+
+# Rate limit για τα public intake endpoints (contact_form, add_request)
+# ανά client IP και endpoint. Μορφή DRF: "<αριθμός>/<περίοδος>".
+PUBLIC_FORM_THROTTLE_RATE = os.getenv('PUBLIC_FORM_THROTTLE_RATE', '30/hour')
 
 GEOIP = False
 GEOIP_PATH = MEDIA_ROOT / 'geodb'

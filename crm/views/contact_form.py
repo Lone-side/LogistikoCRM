@@ -15,6 +15,7 @@ from crm.forms.contact_form import ContactForm
 from crm.models import LeadSource
 from crm.utils.create_form_request import create_form_request
 from crm.utils.helpers import is_company_banned
+from crm.utils.public_rate_limit import throttle_public_form
 
 
 # csrf_exempt decorator marks the view as being exempt
@@ -25,6 +26,7 @@ from crm.utils.helpers import is_company_banned
 
 @xframe_options_exempt
 @csrf_exempt
+@throttle_public_form('contact_form')
 def contact_form(request, uuid):
     lead_source = get_object_or_404(LeadSource, uuid=uuid)
     if request.method == 'POST':
