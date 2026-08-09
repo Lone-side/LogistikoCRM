@@ -31,9 +31,12 @@ $candidates = @(
     "$env:USERPROFILE\Downloads\LogistikoCRM",
     "C:\LogistikoCRM"
 )
-# Και ο φάκελος όπου βρίσκεται το ίδιο το script (../ από το scripts/)
-$here = Split-Path -Parent $PSScriptRoot
-if ($here) { $candidates += $here }
+# Και ο φάκελος όπου βρίσκεται το ίδιο το script (../ από το scripts/).
+# Κενό όταν το script τρέχει απευθείας από URL (irm ... | iex) — γι' αυτό ο έλεγχος.
+if ($PSScriptRoot) {
+    $here = Split-Path -Parent $PSScriptRoot
+    if ($here) { $candidates += $here }
+}
 
 $found = @()
 foreach ($dir in ($candidates | Select-Object -Unique)) {
@@ -65,8 +68,20 @@ foreach ($dir in ($candidates | Select-Object -Unique)) {
 }
 if ($found.Count -eq 0) {
     Write-Host "     - Δεν βρέθηκε εγκατάσταση στις συνηθισμένες τοποθεσίες."
-    Write-Host "       Αν την είχες βάλει αλλού, ψάξε στην Εξερεύνηση για φάκελο"
-    Write-Host "       που περιέχει manage.py και webcrm μαζί."
+    Write-Host "     - Βαθιά σάρωση στον φάκελο χρήστη (μπορεί να πάρει ένα λεπτό)..."
+    $deep = Get-ChildItem $env:USERPROFILE -Recurse -Directory -Filter 'webcrm' `
+                -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Parent.FullName } |
+            Where-Object { Test-Path (Join-Path $_ 'manage.py') } |
+            Select-Object -Unique
+    if ($deep) {
+        foreach ($d in $deep) { Write-Host "     [!] ΒΡΕΘΗΚΕ εγκατάσταση: $d" }
+        $found += $deep
+    } else {
+        Write-Host "     - Καθαρό: καμία εγκατάσταση στον φάκελο χρήστη."
+        Write-Host "       Αν την είχες βάλει σε άλλον δίσκο, ψάξε για φάκελο"
+        Write-Host "       που περιέχει manage.py και webcrm μαζί."
+    }
 }
 Write-Host ""
 
