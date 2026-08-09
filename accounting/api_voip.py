@@ -172,6 +172,19 @@ def _scope_by_client(queryset, user):
     ).distinct()
 
 
+class CallTicketCreateInputSerializer(serializers.Serializer):
+    """Input validation για το POST /calls/{id}/create_ticket/ —
+    τρέχει ΠΡΙΝ το transactional service (invalid → 400, καμία
+    μεταβολή)."""
+    title = serializers.CharField(
+        max_length=200, required=False, allow_blank=True)
+    description = serializers.CharField(
+        max_length=5000, required=False, allow_blank=True)
+    priority = serializers.ChoiceField(
+        choices=[c[0] for c in Ticket.PRIORITY_CHOICES],
+        required=False, default='medium')
+
+
 class VoIPCallViewSet(viewsets.ModelViewSet):
     """
     Enhanced VoIP Call ViewSet with match and ticket creation
@@ -201,9 +214,27 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         'match_client': ['accounting.change_voipcall'],
         'auto_match': ['accounting.change_voipcall'],
         'auto_match_all': ['accounting.change_voipcall'],
-        # Δημιουργία ticket ΑΠΟ κλήση: διαβάζει την κλήση + γράφει ticket
-        'create_ticket': ['accounting.view_voipcall', 'accounting.add_ticket'],
+        # Δημιουργία ticket ΑΠΟ κλήση: διαβάζει την κλήση, γράφει ticket
+        # ΚΑΙ μεταβάλλει την κλήση (flags) + γράφει log → και change_voipcall
+        'create_ticket': ['accounting.view_voipcall', 'accounting.add_ticket',
+                          'accounting.change_voipcall'],
     }
+
+    def perform_destroy(self, instance):
+        # Διαγραφή κλήσης με linked ticket = μετάλλαξη Ticket (SET_NULL)
+        # → κεντρικό service: + change_ticket, lock order call → ticket,
+        # revalidation, πρόσβαση και στις δύο πλευρές
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import delete_call
+        try:
+            delete_call(instance, user=self.request.user)
+        except DjangoValidationError as e:
+            raise ValidationError(
+                getattr(e, 'message_dict', None) or e.messages
+            )
 
     def _validate_client_id(self, serializer):
         # Το client_id στο payload μόνο για προσβάσιμο πελάτη
@@ -387,38 +418,39 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        title = request.data.get('title', f'Κλήση από {call.phone_number}')
-        description = request.data.get('description', '')
-        priority = request.data.get('priority', 'medium')
+        # DRF validation ΠΡΙΝ το transactional service: μόνο έγκυρα
+        # priority choices, σωστοί τύποι, όρια μήκους — invalid input
+        # → 400 με μηδενική μεταβολή (τα raw request.data πήγαιναν
+        # απευθείας στο model, οπότε άκυρο priority αποθηκευόταν παρά
+        # τα choices του πεδίου)
+        input_serializer = CallTicketCreateInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        params = input_serializer.validated_data
+        title = params.get('title') or f'Κλήση από {call.phone_number}'
+        description = params.get('description', '')
+        priority = params.get('priority', 'medium')
 
+        # Κεντρικό service: Ticket create + Call flags + Log σε ΜΙΑ atomic
+        # συναλλαγή, με lock στην κλήση και revalidation (ταυτόχρονο διπλό
+        # create → το πολύ ένα ticket). ΔΕΝ καταπίνουμε exceptions: είτε
+        # ολοκληρώνονται όλα, είτε τίποτα (rollback) — ένα απρόσμενο
+        # σφάλμα προπαγανδίζεται αντί για 400 με μερικό state.
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from accounting.services.call_assignment import create_ticket_for_call
         try:
-            ticket = Ticket.objects.create(
-                call=call,
-                client=call.client,
-                title=title,
-                description=description,
-                priority=priority,
-                status='open'
+            ticket = create_ticket_for_call(
+                call, user=request.user, title=title,
+                description=description, priority=priority,
             )
-
-            call.ticket_created = True
-            call.ticket_id = str(ticket.id)
-            call.save()
-
-            # Log the action
-            VoIPCallLog.objects.create(
-                call=call,
-                action='ticket_created',
-                description=f'Ticket #{ticket.id} created: {title}'
-            )
-
-            return Response(TicketSerializer(ticket).data, status=status.HTTP_201_CREATED)
-        except Exception as e:
-            logger.error(f"Error creating ticket: {e}", exc_info=True)
+        except DjangoValidationError as e:
             return Response(
-                {'error': 'Σφάλμα κατά τη δημιουργία ticket'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': '; '.join(e.messages)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
+
+        return Response(TicketSerializer(ticket).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'])
     def auto_match_all(self, request):
@@ -697,6 +729,24 @@ class TicketViewSet(viewsets.ModelViewSet):
             except DjangoValidationError as e:
                 raise ValidationError(
                     getattr(e, 'message_dict', None) or e.messages)
+
+    def perform_destroy(self, instance):
+        # Διαγραφή ticket με linked call = μετάλλαξη VoIPCall (το
+        # pre_delete signal μηδενίζει ticket_created/ticket_id) →
+        # κεντρικό service: + change_voipcall, lock order call → ticket,
+        # TOCTOU revalidation, πρόσβαση και στις δύο πλευρές· αποτυχία
+        # του signal κάνει rollback ολόκληρη τη διαγραφή.
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import delete_ticket
+        try:
+            delete_ticket(instance, user=self.request.user)
+        except DjangoValidationError as e:
+            raise ValidationError(
+                getattr(e, 'message_dict', None) or e.messages
+            )
 
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):

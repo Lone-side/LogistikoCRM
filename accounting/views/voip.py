@@ -35,7 +35,10 @@ import logging
 import json
 import csv
 
-from ..permissions import INSECURE_DEFAULT_TOKEN, IsVoIPMonitor, IsLocalRequest
+from ..permissions import (
+    INSECURE_DEFAULT_TOKEN, IsVoIPMonitor, IsLocalRequest,
+    ClientModelPermissions,
+)
 from ..models import (
     ClientProfile, VoIPCall, VoIPCallLog, Ticket
 )
@@ -160,9 +163,11 @@ def fritz_webhook(request):
             # Auto-match client by phone
             client = _match_client_by_phone_standalone(call.phone_number)
             if client:
-                call.client = client
-                call.client_email = client.email
-                call.save()
+                # Μέσω κεντρικού service — atomic με ticket sync/log resync
+                from accounting.services.call_assignment import (
+                    change_call_client,
+                )
+                change_call_client(call, client)
                 logger.info(f"VoIP: Matched call {call.call_id} to client {client.eponimia}")
 
             # Create log entry
@@ -372,25 +377,67 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return _scope_by_client(super().get_queryset(), self.request.user)
     serializer_class = VoIPCallSerializer
-    # Service callers (monitor/localhost): ΜΟΝΟ create/update/end_call
+    # Χρήστες: auth + model perms (το σκέτο IsAdminUser άφηνε read-only
+    # staff να κάνει PATCH/POST/DELETE — RBAC bypass). Service callers
+    # (monitor/localhost): ΜΟΝΟ create/update/end_call.
     permission_classes = [
-        permissions.IsAdminUser
+        (permissions.IsAuthenticated & ClientModelPermissions)
         | ((IsVoIPMonitor | IsLocalRequest) & ServiceWriteOnly)
     ]
+    # Το custom POST end_call αλλάζει την κλήση — change_voipcall, όχι
+    # το add_voipcall που θα χαρτογραφούσε το POST
+    action_perms = {
+        'end_call': ['accounting.change_voipcall'],
+    }
     filterset_fields = ['direction', 'status', 'client', 'phone_number']
     search_fields = ['phone_number', 'client__eponimia', 'notes']
     ordering_fields = ['started_at', 'duration_seconds']
     ordering = ['-started_at']
 
+    def _gate_client_payload(self, serializer):
+        """Πολιτική payload `client` — καθρέφτης του /api/v1/calls/
+        (api_voip._validate_client_id):
+        - service callers (monitor/localhost) ΔΕΝ αντιστοιχίζουν πελάτη —
+          το `client` αγνοείται (create ΚΑΙ update)· η αντιστοίχιση
+          γίνεται μόνο από auto-match μέσω change_call_client()·
+        - authenticated χρήστες: μόνο προσβάσιμος πελάτης (accessible
+          policy, 404 fail-closed)·
+        - unassign assigned κλήσης: μόνο see-all χρήστες."""
+        data = serializer.validated_data
+        if 'client' not in data:
+            return
+        user = self.request.user
+        if not getattr(user, 'is_authenticated', False):
+            data.pop('client', None)
+            return
+        client = data['client']
+        if client is None:
+            from accounting.mixins import user_sees_all_clients
+            if (
+                serializer.instance is not None
+                and serializer.instance.client_id is not None
+                and not user_sees_all_clients(user)
+            ):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied(
+                    'Η αφαίρεση πελάτη από κλήση επιτρέπεται μόνο σε '
+                    'διαχειριστές.'
+                )
+            return
+        from accounting.services.access import get_accessible_client_or_404
+        get_accessible_client_or_404(user, client.pk, request=self.request)
+
     def perform_create(self, serializer):
         """Create call and auto-match client"""
+        self._gate_client_payload(serializer)
         voip_call = serializer.save()
         client = self._match_client_by_phone(voip_call.phone_number)
 
-        if client:
-            voip_call.client = client
-            voip_call.client_email = client.email
-            voip_call.save()
+        if client and voip_call.client_id != client.pk:
+            # Auto-match σε ΥΠΑΡΧΟΥΣΑ πλέον κλήση: μέσω κεντρικού service
+            # (atomic ticket sync + log resync — snapshot contract)
+            from accounting.services.call_assignment import change_call_client
+            change_call_client(voip_call, client)
             logger.info(f"Matched call to client: {client.eponimia}")
 
         # Log call creation
@@ -412,41 +459,115 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
             Q(tilefono_epixeirisis_2__icontains=clean_number)
         ).first()
 
+    def _parse_create_ticket_flag(self):
+        """Αυστηρό parsing του `create_ticket` flag (mutation flag —
+        όχι raw truthiness). Απούσα τιμή → False. Μη έγκυρη τιμή →
+        DRF ValidationError (400) πριν από οποιαδήποτε αποθήκευση."""
+        from rest_framework.exceptions import ValidationError
+        sentinel = object()
+        raw = self.request.data.get('create_ticket', sentinel)
+        if raw is sentinel:
+            return False
+        if raw is True or raw == 1:
+            return True
+        if raw is False or raw == 0:
+            return False
+        if isinstance(raw, str) and raw.lower() in ('true', '1'):
+            return True
+        if isinstance(raw, str) and raw.lower() in ('false', '0'):
+            return False
+        raise ValidationError(
+            {'create_ticket': 'Μη έγκυρη boolean τιμή.'})
+
     def perform_update(self, serializer):
         """Update call and create ticket if requested"""
-        voip_call = serializer.save()
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from django.db import transaction
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import change_call_client
 
-        # Check if we should create a ticket (for missed calls)
-        create_ticket = self.request.data.get('create_ticket', False)
-
-        if create_ticket and voip_call.status == 'missed' and not voip_call.ticket_created:
-            try:
-                # Create ticket for missed call
-                ticket = Ticket.objects.create(
-                    client=voip_call.client,
+        # Αλλαγή πελάτη ΜΟΝΟ μέσω του κεντρικού service: το γυμνό
+        # serializer.save() παρέκαμπτε το atomic Ticket sync και το
+        # VoIPCallLog resync (invariant κλήσης-ticket + snapshot contract).
+        # Gate πολιτικής payload: service callers χάνουν το `client`,
+        # authenticated χρήστες περιορίζονται σε προσβάσιμο πελάτη και
+        # το unassign σε see-all — ΠΡΙΝ από κάθε αποθήκευση
+        self._gate_client_payload(serializer)
+        data = serializer.validated_data
+        client_change = 'client' in data
+        new_client = data.pop('client', None) if client_change else None
+        user = self.request.user
+        # Hidden cross-model ενέργεια `create_ticket=true`: ΜΟΝΟ
+        # authenticated χρήστες με add_ticket (το change_voipcall
+        # απαιτείται ήδη από το ίδιο το PATCH). Service callers δεν
+        # μπορούν να την ενεργοποιήσουν.
+        # ΑΥΣΤΗΡΟ boolean parsing — bool("false") είναι True στην
+        # Python, οπότε το raw truthiness δημιουργούσε ticket σε
+        # `{"create_ticket": "false"}`. Δεκτά ΜΟΝΟ true/false/"true"/
+        # "false"/1/0/"1"/"0"· οτιδήποτε άλλο (null, "yes", λίστα, ...)
+        # → 400 ΠΡΙΝ από κάθε αποθήκευση (rollback και των PATCH fields).
+        create_ticket = self._parse_create_ticket_flag()
+        if create_ticket and not getattr(user, 'is_authenticated', False):
+            create_ticket = False
+        with transaction.atomic():
+            # Τα υπόλοιπα πεδία του serializer, η αλλαγή πελάτη ΚΑΙ η
+            # δημιουργία ticket ολοκληρώνονται σε ΜΙΑ συναλλαγή —
+            # αποτυχία οποιουδήποτε σκέλους αναιρεί τα πάντα.
+            voip_call = serializer.save()
+            if client_change:
+                try:
+                    change_call_client(voip_call, new_client, user=user)
+                except DjangoValidationError as e:
+                    raise ValidationError(
+                        getattr(e, 'message_dict', None) or e.messages
+                    )
+            if (
+                create_ticket
+                and voip_call.status == 'missed'
+                and not voip_call.ticket_created
+            ):
+                from django.core.exceptions import PermissionDenied
+                from accounting.services.call_assignment import (
+                    create_ticket_for_call,
+                )
+                if not user.has_perm('accounting.add_ticket'):
+                    # Μέσα στο atomic: rollback ΚΑΙ των υπόλοιπων
+                    # PATCH fields — καμία μερική μετάλλαξη
+                    raise PermissionDenied(
+                        'Η δημιουργία ticket απαιτεί δικαίωμα προσθήκης '
+                        'ticket.'
+                    )
+                started = voip_call.started_at
+                ticket = create_ticket_for_call(
+                    voip_call, user=user,
                     title=f"Αναπάντητη κλήση από {voip_call.phone_number}",
-                    description=f"Αναπάντητη κλήση στις {voip_call.started_at.strftime('%d/%m/%Y %H:%M') if voip_call.started_at else 'N/A'}",
-                    priority='medium',
-                    status='open',
-                    call=voip_call
+                    description=(
+                        'Αναπάντητη κλήση στις '
+                        f"{started.strftime('%d/%m/%Y %H:%M') if started else 'N/A'}"
+                    ),
                 )
+                logger.info(
+                    f"Created ticket #{ticket.id} for missed call "
+                    f"{voip_call.call_id}")
 
-                # Update call with ticket info
-                voip_call.ticket_created = True
-                voip_call.ticket_id = str(ticket.id)
-                voip_call.save(update_fields=['ticket_created', 'ticket_id'])
-
-                # Log the action
-                VoIPCallLog.objects.create(
-                    call=voip_call,
-                    action='ticket_created',
-                    description=f'Auto-created ticket #{ticket.id} for missed call'
-                )
-
-                logger.info(f"Created ticket #{ticket.id} for missed call {voip_call.call_id}")
-
-            except Exception as e:
-                logger.error(f"Failed to create ticket for call {voip_call.id}: {e}")
+    def perform_destroy(self, instance):
+        # Διαγραφή κλήσης με linked ticket = μετάλλαξη Ticket
+        # (SET_NULL) → μέσω κεντρικού service: delete_voipcall (ήδη από
+        # ClientModelPermissions) + change_ticket + πρόσβαση και στις
+        # δύο πλευρές, με lock order call → ticket και revalidation.
+        from django.core.exceptions import (
+            ValidationError as DjangoValidationError,
+        )
+        from rest_framework.exceptions import ValidationError
+        from accounting.services.call_assignment import delete_call
+        try:
+            delete_call(instance, user=self.request.user)
+        except DjangoValidationError as e:
+            raise ValidationError(
+                getattr(e, 'message_dict', None) or e.messages
+            )
 
     @action(detail=True, methods=['post'])
     def end_call(self, request, pk=None):
@@ -557,13 +678,28 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
 
 class VoIPCallLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Read-only ViewSet for call logs
+    Read-only ViewSet for call logs (audit trail).
+
+    RBAC: απαιτεί το model permission `view_voipcalllog` και εφαρμόζει
+    client scoping μέσω του snapshot `client` (επιβιώνει της διαγραφής
+    της κλήσης). Fail closed: logs με `client=None` (unassigned/legacy
+    orphan) βλέπουν ΜΟΝΟ superusers / χρήστες με global client access —
+    ΠΟΤΕ scoped χρήστης. Δεν χρησιμοποιείται το nullable `call__client`.
     """
-    queryset = VoIPCallLog.objects.all()
     serializer_class = VoIPCallLogSerializer
-    permission_classes = [permissions.IsAdminUser]  # SECURITY: Restrict to admin users only
+    permission_classes = [permissions.IsAuthenticated, ClientModelPermissions]
     filterset_fields = ['call', 'action']
     ordering = ['-created_at']
+
+    def get_queryset(self):
+        from accounting.mixins import user_sees_all_clients
+        qs = VoIPCallLog.objects.all()
+        if user_sees_all_clients(self.request.user):
+            return qs
+        # Scoping στο snapshot client· client__isnull αποκλείεται (fail closed)
+        return qs.filter(
+            client__assigned_users=self.request.user
+        ).distinct()
 
 
 # ============================================

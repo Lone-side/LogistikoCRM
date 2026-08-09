@@ -918,9 +918,11 @@ ADMIN_DATA = [
                 'model': django_apps.get_model('accounting', 'VoIPCallLog'),
                 'name': 'Καταγραφές Κλήσεων',
                 'object_name': 'VoIPCallLog',
-                'perms': {'add': False, 'change': True, 'delete': False, 'view': True},
+                # Audit trail: το VoIPCallLogAdmin είναι read-only
+                # (has_change/has_delete → False) — PR #179
+                'perms': {'add': False, 'change': False, 'delete': False, 'view': True},
                 'admin_url': '/en/456-admin/accounting/voipcalllog/',
-                'view_only': False,
+                'view_only': True,
             },
             {
                 'model': django_apps.get_model('accounting', 'VoIPCall'),

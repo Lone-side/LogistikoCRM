@@ -428,12 +428,14 @@ class ClientProfileAdmin(admin.ModelAdmin):
         updated = queryset.update(is_active=True)
         self.message_user(request, f'✅ Ενεργοποιήθηκαν {updated} πελάτες', messages.SUCCESS)
     mark_active.short_description = '✅ Ενεργοποίηση'
+    mark_active.allowed_permissions = ('change',)
 
     def mark_inactive(self, request, queryset):
         """Απενεργοποίηση πελατών"""
         updated = queryset.update(is_active=False)
         self.message_user(request, f'⚠️ Απενεργοποιήθηκαν {updated} πελάτες', messages.WARNING)
     mark_inactive.short_description = '❌ Απενεργοποίηση'
+    mark_inactive.allowed_permissions = ('change',)
 
     # ============================================
     # CUSTOM URLS

@@ -7,6 +7,7 @@ Handles:
 - Auto-creation of ClientObligation for new clients
 """
 import logging
+
 from django.db.models.signals import pre_delete, post_save
 from django.dispatch import receiver
 from django.conf import settings
@@ -90,5 +91,12 @@ def cleanup_orphan_call_on_ticket_delete(sender, instance, **kwargs):
                 call.ticket_id = None
                 call.save(update_fields=['ticket_created', 'ticket_id'])
                 logger.info(f"Call {call.call_id}: ticket_created reset to False")
-        except Exception as e:
-            logger.warning(f"Could not update call on ticket delete: {e}")
+        except Exception:
+            # Fail closed: το signal προστατεύει data invariant — ΚΑΘΕ
+            # αποτυχία ενημέρωσης της κλήσης πρέπει να ακυρώνει ολόκληρη
+            # τη διαγραφή του ticket (rollback στο atomic του caller),
+            # όχι σιωπηλά ticket_created=True προς ανύπαρκτο ticket.
+            # (Η απουσία κλήσης καλύπτεται ήδη ρητά από το .first().)
+            logger.exception(
+                'Αποτυχία ενημέρωσης κλήσης κατά τη διαγραφή ticket')
+            raise

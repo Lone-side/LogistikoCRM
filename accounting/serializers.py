@@ -101,8 +101,14 @@ class VoIPCallSerializer(serializers.ModelSerializer):
 
 
 class VoIPCallLogSerializer(serializers.ModelSerializer):
-    call_display = serializers.CharField(source='call.phone_number', read_only=True)
-    
+    call_display = serializers.SerializerMethodField()
+
+    def get_call_display(self, obj):
+        # Null-safe: μετά τη διαγραφή της κλήσης χρησιμοποιείται το snapshot
+        if obj.call_id is not None:
+            return obj.call.phone_number
+        return obj.phone_number or obj.call_reference or None
+
     class Meta:
         model = VoIPCallLog
         fields = [
