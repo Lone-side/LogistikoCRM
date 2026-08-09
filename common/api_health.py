@@ -20,6 +20,11 @@ from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
 
+# Καταστάσεις component που καθιστούν το σύστημα μη λειτουργικό (503).
+UNHEALTHY_COMPONENT_STATUSES = frozenset(
+    {'unhealthy', 'critical', 'error', 'unavailable'}
+)
+
 
 def check_database():
     """Check database connectivity"""
@@ -193,19 +198,28 @@ def health_check_detailed(request):
     celery_status = check_celery()
     disk_status = check_disk_space()
 
-    # Determine overall status
+    # Determine overall status — συμμετέχουν ΚΑΙ τα τέσσερα components,
+    # ώστε πεσμένοι Celery workers ή critical disk να μην επιστρέφουν
+    # ποτέ overall "healthy".
     statuses = [
         db_status.get('status'),
         cache_status.get('status'),
+        celery_status.get('status'),
+        disk_status.get('status'),
     ]
 
-    if 'unhealthy' in statuses or 'critical' in statuses:
+    if any(status in UNHEALTHY_COMPONENT_STATUSES for status in statuses):
+        # unhealthy / critical / error / unavailable σε οποιοδήποτε
+        # απαιτούμενο component ⇒ overall unhealthy.
         overall_status = 'unhealthy'
         status_code = 503
-    elif 'degraded' in statuses or 'warning' in statuses:
+    elif any(status != 'healthy' for status in statuses):
+        # degraded / warning / unknown (χωρίς critical κατάσταση)
+        # ⇒ overall degraded — ποτέ healthy.
         overall_status = 'degraded'
         status_code = 200
     else:
+        # healthy μόνο όταν και τα τέσσερα components είναι healthy.
         overall_status = 'healthy'
         status_code = 200
 
