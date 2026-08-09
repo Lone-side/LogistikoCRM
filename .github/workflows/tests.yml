@@ -270,3 +270,64 @@ jobs:
       # μόνο για απρόσμενες κατηγορίες findings (βλ. DEPLOYMENT.md).
       - name: ClientDocument invariant audit (blocking — CI only)
         run: python manage.py audit_clientdocument_invariants --fail-on-findings
+
+  # Χτίζει τα production images (frontend → app → nginx) και επικυρώνει
+  # τα nginx configs + το merged office compose configuration. Blocking:
+  # το nginx.conf syntax bug (unquoted regex braces) έζησε απαρατήρητο
+  # ακριβώς επειδή το CI δεν έχτιζε ποτέ τα images. Το containers-up +
+  # healthy + preflight παραμένει χειροκίνητο office-host acceptance
+  # gate (docs/OFFICE_RUNBOOK.md §5) — εδώ επικυρώνεται build + config.
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build production images (frontend → app → nginx)
+        run: |
+          docker build --target nginx -t logistiko-nginx-ci .
+          docker build --target app -t logistiko-app-ci .
+
+      - name: nginx -t (baked production config)
+        run: docker run --rm logistiko-nginx-ci nginx -t
+
+      - name: nginx -t (office TLS config με throwaway certs)
+        run: |
+          ./scripts/office_certs.sh ci.office.test 127.0.0.1
+          docker run --rm \
+            -v "$PWD/nginx/office.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/certs/office.crt:/etc/nginx/certs/office.crt:ro" \
+            -v "$PWD/certs/office.key:/etc/nginx/certs/office.key:ro" \
+            logistiko-nginx-ci nginx -t
+
+      - name: Compose config validation (prod + office overlay)
+        run: |
+          cat > /tmp/office-ci.env <<'ENVEOF'
+          SECRET_KEY=ci-compose-validation-secret-key-not-a-real-secret-000
+          DB_PASSWORD=ci-compose-validation-not-a-real-secret
+          FRITZ_API_TOKEN=ci-compose-validation-not-a-real-secret
+          DATA_ENCRYPTION_KEY_CURRENT=jhgAUo9ScsDy8CjlAM8XO5cFANKz_Nb2i01amVUla0c=
+          OFFICE_BIND_IP=127.0.0.1
+          ENVEOF
+          docker compose -f docker-compose.prod.yml -f docker-compose.office.yml \
+            --env-file /tmp/office-ci.env config --format json > /tmp/merged.json
+          python3 - <<'PYEOF'
+          import json
+          services = json.load(open('/tmp/merged.json'))['services']
+          # 1. Κανένα host port σε db/redis/web/celery/celery-beat
+          for name in ('db', 'redis', 'web', 'celery', 'celery-beat'):
+              assert not services[name].get('ports'), f'{name} εκθέτει ports'
+          # 2. Το nginx δένει ΜΟΝΟ στο OFFICE_BIND_IP
+          ports = services['nginx']['ports']
+          assert ports, 'το nginx δεν έχει ports'
+          for port in ports:
+              assert port.get('host_ip') == '127.0.0.1', port
+          # 3. Το CA private key (ή όλος ο certs dir) δεν γίνεται mount πουθενά
+          for name, service in services.items():
+              for volume in service.get('volumes', []):
+                  source = volume.get('source', '')
+                  assert 'office-ca.key' not in source, (name, source)
+                  assert not source.rstrip('/').endswith('/certs'), (name, source)
+          print('merged office compose config: OK')
+          PYEOF
