@@ -70,6 +70,12 @@ def change_call_client(call, new_client, *, user=None, log_action=None):
         _require_locked_access(user, new_client)
 
         if linked is not None:
+            # Cross-side gap (τελικό εύρημα review): το linked Ticket
+            # μπορεί να μεταβληθεί εδώ — σε legacy inconsistent state
+            # (Call=A, Ticket=B) scoped χρήστης του Α δεν επιτρέπεται
+            # να αγγίξει το ξένο ticket. Triage (client=None) και
+            # user=None (system) μένουν ανεπηρέαστα.
+            _require_locked_access(user, linked.client)
             if linked.client_id is not None:
                 if new_client_id is None:
                     raise ValidationError({

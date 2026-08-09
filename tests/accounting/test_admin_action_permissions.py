@@ -2568,3 +2568,61 @@ class CreateTicketInputValidationTest(TestCase):
         self.assertEqual(resp.status_code, 201, resp.content)
         ticket = Ticket.objects.get(call=self.call)
         self.assertEqual(ticket.priority, 'high')
+
+
+class ChangeCallClientCrossSideAccessTest(TestCase):
+    """Τελικό εύρημα review στο `6d53e0f`: το change_call_client()
+    επανέλεγχε locked call + target client αλλά ΟΧΙ το linked Ticket —
+    σε legacy inconsistent state (Call=A, Ticket=B) scoped χρήστης του
+    Α μετέβαλλε το ξένο ticket του Β."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from accounting.models import VoIPCall
+
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.b = ClientProfile.objects.create(
+            afm='998877665', eponimia='ΠΕΛΑΤΗΣ Β')
+        self.call = VoIPCall.objects.create(
+            call_id='XSIDE-1', phone_number='2109700001',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.a)
+        self.user = make_staff('xside_user', 'view_voipcall',
+                               'change_voipcall', 'change_ticket')
+        self.a.assigned_users.add(self.user)
+
+    def test_inaccessible_linked_ticket_fails_closed(self):
+        from django.core.exceptions import PermissionDenied
+        from django.test import override_settings
+        from accounting.services.call_assignment import change_call_client
+
+        # Legacy inconsistent state: Call=A, Ticket=B (bypass clean())
+        ticket = Ticket.objects.create(
+            client=self.b, title='ξένο τ', description='-', status='open')
+        Ticket.objects.filter(pk=ticket.pk).update(call=self.call)
+
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            with self.assertRaises(PermissionDenied):
+                change_call_client(self.call, self.a, user=self.user)
+
+        self.call.refresh_from_db()
+        ticket.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.a.pk)
+        self.assertEqual(ticket.client_id, self.b.pk,
+                         'το ξένο ticket μεταβλήθηκε από scoped χρήστη')
+        self.assertEqual(ticket.call_id, self.call.pk)
+
+    def test_accessible_linked_ticket_still_works(self):
+        from django.test import override_settings
+        from accounting.services.call_assignment import change_call_client
+
+        ticket = Ticket.objects.create(
+            client=self.a, call=self.call, title='δικό μας τ',
+            description='-', status='open')
+        with override_settings(ENFORCE_CLIENT_ASSIGNMENT=True):
+            change_call_client(self.call, self.a, user=self.user)
+        self.call.refresh_from_db()
+        ticket.refresh_from_db()
+        self.assertEqual(self.call.client_id, self.a.pk)
+        self.assertEqual(ticket.client_id, self.a.pk)
