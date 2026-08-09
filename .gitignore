@@ -144,6 +144,8 @@ backups/
 # Local files
 *.bat
 !setup_dev.bat
+!LogistikoCRM.bat
+!scripts/check_local_install.bat
 redis.msi
 NewFile
 .py
