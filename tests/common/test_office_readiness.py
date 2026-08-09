@@ -101,3 +101,176 @@ class ProductionRedirectExemptTest(TestCase):
             any(re.match(p, path) for p in settings.HEALTH_CHECK_EXEMPT_URLS),
             msg=f'healthcheck path {path!r} δεν εξαιρείται από το redirect',
         )
+
+
+class _OfficeOverrideLoader(yaml.SafeLoader):
+    """SafeLoader που δέχεται τα Compose merge tags (!override/!reset)."""
+
+
+for _tag in ('!override', '!reset'):
+    _OfficeOverrideLoader.add_constructor(
+        _tag,
+        lambda loader, node, _t=_tag: (
+            loader.construct_sequence(node)
+            if isinstance(node, yaml.SequenceNode) else
+            loader.construct_mapping(node)
+            if isinstance(node, yaml.MappingNode) else
+            loader.construct_scalar(node)
+        ),
+    )
+
+
+@tag('TestCase')
+class OfficeComposeStructureTest(TestCase):
+    """Το overlay δένει το nginx ΜΟΝΟ στη LAN IP και τίποτα άλλο."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.overlay_text = (
+            BASE_DIR / 'docker-compose.office.yml'
+        ).read_text(encoding='utf-8')
+        cls.overlay = yaml.load(cls.overlay_text, Loader=_OfficeOverrideLoader)
+        cls.prod = yaml.safe_load(
+            (BASE_DIR / 'docker-compose.prod.yml').read_text(encoding='utf-8')
+        )
+
+    def test_nginx_ports_bind_only_to_office_ip(self):
+        ports = self.overlay['services']['nginx']['ports']
+        self.assertTrue(ports)
+        for port in ports:
+            self.assertTrue(
+                port.startswith('${OFFICE_BIND_IP'),
+                msg=f'port {port!r} δεν δένει στο OFFICE_BIND_IP',
+            )
+            self.assertIn(':?', port, msg='το OFFICE_BIND_IP πρέπει να είναι υποχρεωτικό')
+
+    def test_nginx_ports_use_override_tag(self):
+        """Χωρίς !override το Compose ΠΡΟΣΘΕΤΕΙ στο 0.0.0.0:80 του prod."""
+        self.assertRegex(self.overlay_text, r'ports:\s*!override')
+
+    def test_overlay_exposes_no_other_service(self):
+        for name, service in self.overlay['services'].items():
+            if name == 'nginx':
+                continue
+            self.assertNotIn('ports', service, msg=name)
+        self.assertNotIn('db', self.overlay['services'])
+        self.assertNotIn('redis', self.overlay['services'])
+
+    def test_overlay_mounts_office_conf_and_certs(self):
+        volumes = self.overlay['services']['nginx']['volumes']
+        self.assertIn(
+            './nginx/office.conf:/etc/nginx/conf.d/default.conf:ro', volumes)
+        self.assertIn('./certs:/etc/nginx/certs:ro', volumes)
+
+    def test_overlay_forces_x_forwarded_proto(self):
+        env = self.overlay['services']['web']['environment']
+        self.assertEqual(env['USE_X_FORWARDED_PROTO'], 'True')
+
+    def test_prod_db_redis_still_unexposed(self):
+        """Regression: το prod file πάνω στο οποίο βασιζόμαστε."""
+        for name in ('db', 'redis', 'web', 'celery', 'celery-beat'):
+            self.assertNotIn('ports', self.prod['services'][name], msg=name)
+
+
+def _parse_env_example(path):
+    """Απλό KEY=VALUE parse (χωρίς python-dotenv, μόνο για tests)."""
+    values = {}
+    for line in path.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        values[key.strip()] = value.strip()
+    return values
+
+
+@tag('TestCase')
+class OfficeEnvExampleTest(TestCase):
+    """Το .env.office.example: ασφαλή defaults, μηδέν πραγματικά secrets."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.env = _parse_env_example(BASE_DIR / '.env.office.example')
+
+    def test_required_keys_present(self):
+        for key in ('DJANGO_ENV', 'SECRET_KEY', 'DB_PASSWORD',
+                    'DATA_ENCRYPTION_KEY_CURRENT', 'FRITZ_API_TOKEN',
+                    'ALLOWED_HOSTS', 'CSRF_TRUSTED_ORIGINS',
+                    'ENFORCE_CLIENT_ASSIGNMENT',
+                    'ALLOW_UNSCOPED_CLIENT_ACCESS', 'MYDATA_IS_SANDBOX',
+                    'OFFICE_BIND_IP', 'OFFICE_HOSTNAME', 'SITE_URL',
+                    'USE_X_FORWARDED_PROTO'):
+            self.assertIn(key, self.env, msg=key)
+
+    def test_secret_values_are_empty(self):
+        """Tripwire: secrets στο template = διαρροή στο repo."""
+        for key in ('SECRET_KEY', 'DB_PASSWORD', 'FRITZ_API_TOKEN',
+                    'DATA_ENCRYPTION_KEY_CURRENT',
+                    'DATA_ENCRYPTION_KEY_PREVIOUS', 'EMAIL_HOST_PASSWORD'):
+            self.assertEqual(self.env.get(key, ''), '', msg=key)
+
+    def test_security_posture_values(self):
+        self.assertEqual(self.env['DJANGO_ENV'], 'production')
+        self.assertEqual(self.env['ENFORCE_CLIENT_ASSIGNMENT'], 'True')
+        self.assertEqual(self.env['ALLOW_UNSCOPED_CLIENT_ACCESS'], 'False')
+        self.assertEqual(self.env['MYDATA_IS_SANDBOX'], 'True')
+        self.assertEqual(self.env['USE_X_FORWARDED_PROTO'], 'True')
+
+    def test_no_wildcard_hosts_and_https_origins(self):
+        self.assertNotIn('*', self.env['ALLOWED_HOSTS'])
+        origins = [o.strip() for o in
+                   self.env['CSRF_TRUSTED_ORIGINS'].split(',') if o.strip()]
+        self.assertTrue(origins)
+        for origin in origins:
+            self.assertTrue(origin.startswith('https://'), msg=origin)
+        self.assertTrue(self.env['SITE_URL'].startswith('https://'))
+
+    def test_bind_ip_is_not_wildcard(self):
+        self.assertNotIn(self.env['OFFICE_BIND_IP'], ('0.0.0.0', '', '*'))
+
+
+@tag('TestCase')
+class OfficeNginxParityTest(TestCase):
+    """Το office.conf δεν πρέπει να αποκλίνει από το nginx.conf."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.prod_conf = (
+            BASE_DIR / 'nginx' / 'nginx.conf').read_text(encoding='utf-8')
+        cls.office_conf = (
+            BASE_DIR / 'nginx' / 'office.conf').read_text(encoding='utf-8')
+
+    def test_every_prod_location_exists_in_office(self):
+        prod_locations = re.findall(r'^\s*(location[^{]+)\{',
+                                    self.prod_conf, re.MULTILINE)
+        self.assertTrue(prod_locations)
+        for location in prod_locations:
+            self.assertIn(location.strip(), self.office_conf,
+                          msg=location.strip())
+
+    def test_office_tls_server(self):
+        self.assertIn('listen 443 ssl', self.office_conf)
+        self.assertIn('ssl_certificate /etc/nginx/certs/office.crt',
+                      self.office_conf)
+        self.assertIn('ssl_certificate_key /etc/nginx/certs/office.key',
+                      self.office_conf)
+
+    def test_office_http_only_redirects(self):
+        http_server = self.office_conf.split('listen 443')[0]
+        self.assertIn('return 301 https://$host$request_uri', http_server)
+        self.assertNotIn('proxy_pass', http_server)
+
+    def test_protected_media_stays_internal(self):
+        match = re.search(
+            r'location /protected-media/ \{([^}]*)\}', self.office_conf)
+        self.assertIsNotNone(match)
+        self.assertIn('internal;', match.group(1))
+
+    def test_body_size_parity(self):
+        prod_size = re.search(r'client_max_body_size\s+(\S+);', self.prod_conf)
+        office_size = re.search(
+            r'client_max_body_size\s+(\S+);', self.office_conf)
+        self.assertEqual(prod_size.group(1), office_size.group(1))

@@ -1,0 +1,38 @@
+# LogistikoCRM — Office/LAN overlay πάνω στο production compose
+#
+# Χρήση (ΠΑΝΤΑ μαζί με το docker-compose.prod.yml, με αυτή τη σειρά):
+#   docker compose -f docker-compose.prod.yml -f docker-compose.office.yml up -d --build
+#
+# Απαιτεί Docker Compose >= 2.24 (YAML tag `!override`). Σε παλιότερη
+# έκδοση η εκκίνηση αποτυγχάνει με σφάλμα άγνωστου tag (fail-closed).
+#
+# Τι αλλάζει σε σχέση με το σκέτο production compose:
+# - Το nginx δένει ΜΟΝΟ στη δηλωμένη LAN IP του server (OFFICE_BIND_IP),
+#   ποτέ σε 0.0.0.0 — καμία έκθεση σε άλλα interfaces/Internet.
+#   Το `!override` ΑΝΤΙΚΑΘΙΣΤΑ τη λίστα ports του prod file (χωρίς αυτό
+#   το Compose θα ΠΡΟΣΘΕΤΕ τα ports στο 0.0.0.0:80 του prod).
+# - TLS termination στο nginx με το εσωτερικό certificate του γραφείου
+#   (nginx/office.conf + ./certs από το scripts/office_certs.sh).
+# - USE_X_FORWARDED_PROTO=True ώστε το Django να αναγνωρίζει τα HTTPS
+#   requests πίσω από το nginx (χωρίς redirect loop με SECURE_SSL_REDIRECT).
+#
+# Τα db/redis ΔΕΝ εκτίθενται στον host (κληρονομείται από το prod file
+# και φυλάσσεται από το tests/common/test_office_readiness.py).
+
+services:
+  nginx:
+    ports: !override
+      - "${OFFICE_BIND_IP:?Set OFFICE_BIND_IP in .env (η στατική LAN IP του server, ΟΧΙ 0.0.0.0)}:443:443"
+      # Το :80 μένει ανοιχτό ΜΟΝΟ για redirect σε https (nginx/office.conf)
+      - "${OFFICE_BIND_IP:?Set OFFICE_BIND_IP in .env (η στατική LAN IP του server, ΟΧΙ 0.0.0.0)}:80:80"
+    volumes:
+      # Αντικαθιστά το config του image — τα υπόλοιπα volumes του prod
+      # file (media για X-Accel-Redirect) διατηρούνται (append merge).
+      - ./nginx/office.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+
+  web:
+    environment:
+      # Πίσω από το TLS-terminating nginx το X-Forwarded-Proto είναι
+      # αξιόπιστο — χωρίς αυτό το SECURE_SSL_REDIRECT κάνει loop.
+      USE_X_FORWARDED_PROTO: "True"
