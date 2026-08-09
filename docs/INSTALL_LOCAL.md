@@ -14,7 +14,9 @@ Python venv + SQLite — χωρίς Docker/PostgreSQL).
 ## 0. Έλεγχος για παλιά εγκατάσταση (προαιρετικό)
 
 Αν πιθανόν υπάρχει ήδη παλιότερη εγκατάσταση στον υπολογιστή, τρέξε με διπλό
-κλικ το `scripts\check_local_install.bat`. Θα σου δείξει:
+κλικ το `scripts\check_local_install.bat` (wrapper — η δουλειά γίνεται στο
+`check_local_install.ps1`, ώστε τα ελληνικά να εμφανίζονται σωστά). Θα σου
+δείξει:
 
 - σε ποιους φακέλους βρέθηκε εγκατάσταση (venv, db.sqlite3, media κλπ),
 - αν τρέχει ήδη server στα ports 8000/5173,
