@@ -459,6 +459,26 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
             Q(tilefono_epixeirisis_2__icontains=clean_number)
         ).first()
 
+    def _parse_create_ticket_flag(self):
+        """Αυστηρό parsing του `create_ticket` flag (mutation flag —
+        όχι raw truthiness). Απούσα τιμή → False. Μη έγκυρη τιμή →
+        DRF ValidationError (400) πριν από οποιαδήποτε αποθήκευση."""
+        from rest_framework.exceptions import ValidationError
+        sentinel = object()
+        raw = self.request.data.get('create_ticket', sentinel)
+        if raw is sentinel:
+            return False
+        if raw is True or raw == 1:
+            return True
+        if raw is False or raw == 0:
+            return False
+        if isinstance(raw, str) and raw.lower() in ('true', '1'):
+            return True
+        if isinstance(raw, str) and raw.lower() in ('false', '0'):
+            return False
+        raise ValidationError(
+            {'create_ticket': 'Μη έγκυρη boolean τιμή.'})
+
     def perform_update(self, serializer):
         """Update call and create ticket if requested"""
         from django.core.exceptions import (
@@ -483,7 +503,12 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
         # authenticated χρήστες με add_ticket (το change_voipcall
         # απαιτείται ήδη από το ίδιο το PATCH). Service callers δεν
         # μπορούν να την ενεργοποιήσουν.
-        create_ticket = bool(self.request.data.get('create_ticket', False))
+        # ΑΥΣΤΗΡΟ boolean parsing — bool("false") είναι True στην
+        # Python, οπότε το raw truthiness δημιουργούσε ticket σε
+        # `{"create_ticket": "false"}`. Δεκτά ΜΟΝΟ true/false/"true"/
+        # "false"/1/0/"1"/"0"· οτιδήποτε άλλο (null, "yes", λίστα, ...)
+        # → 400 ΠΡΙΝ από κάθε αποθήκευση (rollback και των PATCH fields).
+        create_ticket = self._parse_create_ticket_flag()
         if create_ticket and not getattr(user, 'is_authenticated', False):
             create_ticket = False
         with transaction.atomic():

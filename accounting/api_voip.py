@@ -172,6 +172,19 @@ def _scope_by_client(queryset, user):
     ).distinct()
 
 
+class CallTicketCreateInputSerializer(serializers.Serializer):
+    """Input validation για το POST /calls/{id}/create_ticket/ —
+    τρέχει ΠΡΙΝ το transactional service (invalid → 400, καμία
+    μεταβολή)."""
+    title = serializers.CharField(
+        max_length=200, required=False, allow_blank=True)
+    description = serializers.CharField(
+        max_length=5000, required=False, allow_blank=True)
+    priority = serializers.ChoiceField(
+        choices=[c[0] for c in Ticket.PRIORITY_CHOICES],
+        required=False, default='medium')
+
+
 class VoIPCallViewSet(viewsets.ModelViewSet):
     """
     Enhanced VoIP Call ViewSet with match and ticket creation
@@ -405,9 +418,17 @@ class VoIPCallViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        title = request.data.get('title', f'Κλήση από {call.phone_number}')
-        description = request.data.get('description', '')
-        priority = request.data.get('priority', 'medium')
+        # DRF validation ΠΡΙΝ το transactional service: μόνο έγκυρα
+        # priority choices, σωστοί τύποι, όρια μήκους — invalid input
+        # → 400 με μηδενική μεταβολή (τα raw request.data πήγαιναν
+        # απευθείας στο model, οπότε άκυρο priority αποθηκευόταν παρά
+        # τα choices του πεδίου)
+        input_serializer = CallTicketCreateInputSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        params = input_serializer.validated_data
+        title = params.get('title') or f'Κλήση από {call.phone_number}'
+        description = params.get('description', '')
+        priority = params.get('priority', 'medium')
 
         # Κεντρικό service: Ticket create + Call flags + Log σε ΜΙΑ atomic
         # συναλλαγή, με lock στην κλήση και revalidation (ταυτόχρονο διπλό

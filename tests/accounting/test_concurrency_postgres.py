@@ -1227,3 +1227,214 @@ class ConcurrentCreateTicketTest(TransactionTestCase):
         call = VoIPCall.objects.get(pk=self.call.pk)
         self.assertTrue(call.ticket_created)
         self.assertEqual(call.ticket_id, str(tickets.first().pk))
+
+
+@override_settings(ENFORCE_CLIENT_ASSIGNMENT=True)
+class StaleAccessRevalidationTest(TransactionTestCase):
+    """
+    Blocker «stale object authorization μετά το lock»: το view κάνει
+    client scoping ΠΡΙΝ το lock, οπότε αν το primary object αλλάξει
+    πελάτη (A→B) μεταξύ lookup και lock, scoped χρήστης του Α θα
+    μετέβαλλε πόρο του Β. Τα services επανελέγχουν πλέον την πρόσβαση
+    ΠΑΝΩ στο locked state (_require_locked_access) — fail closed χωρίς
+    καμία μετάλλαξη.
+
+    Deterministic: ο attacker κρατά FOR UPDATE στο row, ο victim καλεί
+    το service με stale instance και μπλοκάρει στο lock· μετά το commit
+    του attacker (client=Β) το revalidation αρνείται.
+    """
+
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            import os
+            if os.environ.get('REQUIRE_POSTGRES_TESTS') == '1':
+                self.fail(
+                    'Το REQUIRE_POSTGRES_TESTS=1 απαιτεί PostgreSQL backend '
+                    '— το concurrency test δεν έτρεξε πραγματικά.')
+            self.skipTest('Απαιτεί PostgreSQL (REQUIRE_POSTGRES_TESTS=1).')
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='STALE Α')
+        self.b = ClientProfile.objects.create(
+            afm='998877665', eponimia='STALE Β')
+        user = User.objects.create_user('stale_user', password='x',
+                                        is_staff=True)
+        for codename in ('view_voipcall', 'change_voipcall',
+                         'delete_voipcall', 'view_ticket', 'change_ticket',
+                         'delete_ticket', 'add_ticket'):
+            user.user_permissions.add(Permission.objects.get(
+                codename=codename, content_type__app_label='accounting'))
+        self.user = User.objects.get(pk=user.pk)
+        self.a.assigned_users.add(self.user)
+
+    def _make_call(self, client, cid='STALE-C1'):
+        from accounting.models import VoIPCall
+        return VoIPCall.objects.create(
+            call_id=cid, phone_number='2101234567',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=client)
+
+    def _race(self, model, pk, mutate, victim_action):
+        """attacker: lock row → barrier → sleep → mutate → commit·
+        victim: barrier → victim_action(). Επιστρέφει (outcome, errors)."""
+        import time
+        from django.core.exceptions import PermissionDenied
+        from django.db import transaction
+
+        barrier = threading.Barrier(2, timeout=15)
+        errors = {}
+        outcome = {}
+
+        def attacker():
+            try:
+                with transaction.atomic():
+                    model.objects.select_for_update().get(pk=pk)
+                    barrier.wait()
+                    time.sleep(0.8)
+                    mutate()
+            except Exception as exc:  # pragma: no cover
+                errors['attacker'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        def victim():
+            try:
+                barrier.wait()
+                try:
+                    victim_action()
+                    outcome['result'] = 'mutated'
+                except PermissionDenied:
+                    outcome['result'] = 'denied'
+            except Exception as exc:  # pragma: no cover
+                errors['victim'] = f'{type(exc).__name__}: {exc}'
+            finally:
+                connections.close_all()
+
+        threads = [threading.Thread(target=attacker),
+                   threading.Thread(target=victim)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(20)
+        return outcome, errors
+
+    def test_1_delete_call_stale_reassigned_denied(self):
+        from accounting.models import VoIPCall
+        from accounting.services.call_assignment import delete_call
+
+        call = self._make_call(self.a)
+        stale = VoIPCall.objects.get(pk=call.pk)
+
+        outcome, errors = self._race(
+            VoIPCall, call.pk,
+            lambda: VoIPCall.objects.filter(pk=call.pk).update(
+                client=self.b),
+            lambda: delete_call(stale, user=self.user))
+        self.assertFalse(errors, errors)
+        self.assertEqual(outcome.get('result'), 'denied',
+                         'scoped χρήστης διέγραψε ξένη (πλέον) κλήση')
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk,
+                                                client=self.b).exists())
+
+    def test_2_create_ticket_stale_reassigned_denied(self):
+        from accounting.models import Ticket, VoIPCall, VoIPCallLog
+        from accounting.services.call_assignment import create_ticket_for_call
+
+        call = self._make_call(self.a, 'STALE-C2')
+        stale = VoIPCall.objects.get(pk=call.pk)
+
+        outcome, errors = self._race(
+            VoIPCall, call.pk,
+            lambda: VoIPCall.objects.filter(pk=call.pk).update(
+                client=self.b),
+            lambda: create_ticket_for_call(stale, user=self.user))
+        self.assertFalse(errors, errors)
+        self.assertEqual(outcome.get('result'), 'denied')
+        self.assertFalse(Ticket.objects.filter(call_id=call.pk).exists())
+        self.assertFalse(VoIPCallLog.objects.filter(
+            call_id=call.pk, action='ticket_created').exists())
+        fresh = VoIPCall.objects.get(pk=call.pk)
+        self.assertFalse(fresh.ticket_created)
+
+    def test_3_change_call_client_stale_reassigned_denied(self):
+        from accounting.models import VoIPCall
+        from accounting.services.call_assignment import change_call_client
+
+        call = self._make_call(self.a, 'STALE-C3')
+        stale = VoIPCall.objects.get(pk=call.pk)
+
+        outcome, errors = self._race(
+            VoIPCall, call.pk,
+            lambda: VoIPCall.objects.filter(pk=call.pk).update(
+                client=self.b),
+            lambda: change_call_client(stale, self.a, user=self.user))
+        self.assertFalse(errors, errors)
+        self.assertEqual(outcome.get('result'), 'denied',
+                         'scoped χρήστης ξανάγραψε τον πελάτη ξένης κλήσης')
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk,
+                                                client=self.b).exists())
+
+    def test_4_delete_ticket_stale_reassigned_denied(self):
+        from accounting.models import Ticket
+        from accounting.services.call_assignment import delete_ticket
+
+        ticket = Ticket.objects.create(
+            client=self.a, title='stale τ', description='-', status='open')
+        stale = Ticket.objects.get(pk=ticket.pk)
+
+        outcome, errors = self._race(
+            Ticket, ticket.pk,
+            lambda: Ticket.objects.filter(pk=ticket.pk).update(
+                client=self.b),
+            lambda: delete_ticket(stale, user=self.user))
+        self.assertFalse(errors, errors)
+        self.assertEqual(outcome.get('result'), 'denied')
+        self.assertTrue(Ticket.objects.filter(pk=ticket.pk,
+                                              client=self.b).exists())
+
+    def test_5_sync_ticket_call_client_stale_denied(self):
+        from accounting.models import Ticket, VoIPCall
+        from accounting.services.call_assignment import (
+            sync_ticket_call_client,
+        )
+
+        call = self._make_call(None, 'STALE-C5')
+        ticket = Ticket.objects.create(
+            client=self.a, call=call, title='stale sync', description='-',
+            status='open')
+        stale = Ticket.objects.get(pk=ticket.pk)
+
+        outcome, errors = self._race(
+            Ticket, ticket.pk,
+            lambda: Ticket.objects.filter(pk=ticket.pk).update(
+                client=self.b),
+            lambda: sync_ticket_call_client(stale, user=self.user))
+        self.assertFalse(errors, errors)
+        self.assertEqual(outcome.get('result'), 'denied')
+        # Πλήρες rollback: η κλήση παραμένει unassigned
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk,
+                                                client__isnull=True).exists())
+
+    def test_6_positive_controls_accessible_objects_still_work(self):
+        from accounting.models import Ticket, VoIPCall
+        from accounting.services.call_assignment import (
+            change_call_client, create_ticket_for_call, delete_call,
+            delete_ticket,
+        )
+
+        call = self._make_call(None, 'STALE-OK1')
+        change_call_client(call, self.a, user=self.user)
+        ticket = create_ticket_for_call(call, user=self.user)
+        delete_ticket(ticket, user=self.user)
+        delete_call(call, user=self.user)
+        self.assertFalse(VoIPCall.objects.filter(pk=call.pk).exists())
+        self.assertFalse(Ticket.objects.filter(pk=ticket.pk).exists())
+
+    def test_7_system_user_none_not_restricted(self):
+        from accounting.models import VoIPCall
+        from accounting.services.call_assignment import change_call_client
+
+        call = self._make_call(self.b, 'STALE-SYS')
+        # System automation (auto-match κλπ): user=None δεν περιορίζεται
+        change_call_client(call, self.a)
+        self.assertTrue(VoIPCall.objects.filter(pk=call.pk,
+                                                client=self.a).exists())

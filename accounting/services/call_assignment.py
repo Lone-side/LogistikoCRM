@@ -17,6 +17,30 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 
+def _require_locked_access(user, client):
+    """
+    Fail-closed access έλεγχος ΠΑΝΩ στο locked state (blocker «stale
+    object authorization»): το view κάνει client scoping ΠΡΙΝ το lock,
+    οπότε το instance που φτάνει εδώ μπορεί να έχει αλλάξει πελάτη στο
+    μεταξύ. Καλείται ΜΟΝΟ αφού αποκτηθούν τα locks, με τον client του
+    locked row — ποτέ του stale instance.
+
+    - `user is None` (τεκμηριωμένο system automation): δεν περιορίζεται.
+    - `client is None` (unassigned/triage): προσβάσιμο σε όλους με τα
+      model permissions — υπάρχουσα triage policy.
+    - Αλλιώς: ο locked πόρος πρέπει να είναι προσβάσιμος στον χρήστη,
+      αλλιώς PermissionDenied ΧΩΡΙΣ καμία μετάλλαξη.
+    """
+    if user is None or client is None:
+        return
+    from django.core.exceptions import PermissionDenied
+    from accounting.services.access import user_can_access_client
+    if not user_can_access_client(user, client):
+        raise PermissionDenied(
+            'Ο πόρος ανήκει σε μη προσβάσιμο πελάτη.'
+        )
+
+
 def change_call_client(call, new_client, *, user=None, log_action=None):
     """
     Αλλάζει τον πελάτη μιας κλήσης atomic, μαζί με το linked ticket.
@@ -38,6 +62,12 @@ def change_call_client(call, new_client, *, user=None, log_action=None):
         linked = Ticket.objects.select_for_update().filter(
             call=locked_call
         ).first()
+
+        # Post-lock access revalidation: locked call (ΟΧΙ το stale
+        # instance) + target client — stale κλήση που έγινε ξένη πριν
+        # το lock δεν μεταβάλλεται από scoped χρήστη
+        _require_locked_access(user, locked_call.client)
+        _require_locked_access(user, new_client)
 
         if linked is not None:
             if linked.client_id is not None:
@@ -128,6 +158,9 @@ def sync_ticket_call_client(ticket, *, user=None):
                 'call': 'Η σύνδεση κλήσης-ticket άλλαξε κατά τη διάρκεια '
                         'της ενέργειας — δοκιμάστε ξανά.'
             })
+        # Post-lock access revalidation και στις δύο locked πλευρές
+        _require_locked_access(user, locked_ticket.client)
+        _require_locked_access(user, locked_call.client)
         if locked_call.client_id == locked_ticket.client_id:
             return
         if locked_call.client_id is not None:
@@ -177,6 +210,10 @@ def delete_call(call, *, user=None):
         locked_ticket = Ticket.objects.select_for_update().filter(
             call=locked_call
         ).first()
+        # Post-lock access revalidation στο ΙΔΙΟ το locked primary
+        # object (stale-authorization blocker): κλήση που άλλαξε πελάτη
+        # μεταξύ view lookup και lock δεν διαγράφεται από scoped χρήστη
+        _require_locked_access(user, locked_call.client)
         if locked_ticket is not None:
             if user is not None and not user.has_perm(
                 'accounting.change_ticket'
@@ -185,13 +222,7 @@ def delete_call(call, *, user=None):
                     'Η διαγραφή της κλήσης αποσυνδέει το ticket της — '
                     'απαιτείται δικαίωμα αλλαγής ticket.'
                 )
-            if user is not None and locked_ticket.client_id:
-                from accounting.services.access import user_can_access_client
-                if not user_can_access_client(user, locked_ticket.client):
-                    raise PermissionDenied(
-                        'Το συνδεδεμένο ticket ανήκει σε μη προσβάσιμο '
-                        'πελάτη.'
-                    )
+            _require_locked_access(user, locked_ticket.client)
         locked_call.delete()
 
 
@@ -231,6 +262,10 @@ def delete_ticket(ticket, *, user=None):
                 'call': 'Η σύνδεση κλήσης-ticket άλλαξε κατά τη διάρκεια '
                         'της ενέργειας — δοκιμάστε ξανά.'
             })
+        # Post-lock access revalidation στο ΙΔΙΟ το locked primary
+        # object: ticket που άλλαξε πελάτη μεταξύ lookup και lock δεν
+        # διαγράφεται από scoped χρήστη
+        _require_locked_access(user, locked_ticket.client)
         if locked_ticket.call_id:
             if user is not None and not user.has_perm(
                 'accounting.change_voipcall'
@@ -239,13 +274,7 @@ def delete_ticket(ticket, *, user=None):
                     'Η διαγραφή του ticket ενημερώνει τη συνδεδεμένη '
                     'κλήση — απαιτείται δικαίωμα αλλαγής κλήσης.'
                 )
-            if user is not None and locked_call.client_id:
-                from accounting.services.access import user_can_access_client
-                if not user_can_access_client(user, locked_call.client):
-                    raise PermissionDenied(
-                        'Η συνδεδεμένη κλήση ανήκει σε μη προσβάσιμο '
-                        'πελάτη.'
-                    )
+            _require_locked_access(user, locked_call.client)
         # Το pre_delete signal τρέχει εδώ, μέσα στο atomic — αποτυχία
         # του update της κλήσης κάνει rollback και τη διαγραφή.
         locked_ticket.delete()
@@ -275,6 +304,9 @@ def create_ticket_for_call(call, *, user=None, title=None, description='',
         )
     with transaction.atomic():
         locked_call = VoIPCall.objects.select_for_update().get(pk=call.pk)
+        # Post-lock access revalidation ΠΡΙΝ δημιουργηθεί οτιδήποτε:
+        # κλήση που έγινε ξένη μεταξύ lookup και lock δεν παίρνει ticket
+        _require_locked_access(user, locked_call.client)
         if Ticket.objects.filter(call=locked_call).exists():
             raise ValidationError({
                 'call': 'Υπάρχει ήδη ticket για αυτή την κλήση.'

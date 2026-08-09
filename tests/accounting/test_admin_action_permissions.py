@@ -2457,3 +2457,114 @@ class VoIPCreateTicketAtomicityTest(TestCase):
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertFalse(Ticket.objects.filter(call=self.call).exists(),
                          'service caller δημιούργησε ticket')
+
+
+class CreateTicketInputValidationTest(TestCase):
+    """Blockers «"create_ticket": "false"» και raw create-ticket input."""
+
+    LEGACY = '/accounting/api/v1/voip-calls/'
+    V2 = '/accounting/api/v1/calls/'
+
+    def setUp(self):
+        from accounting.models import VoIPCall
+
+        self.a = ClientProfile.objects.create(
+            afm='094014201', eponimia='ΠΕΛΑΤΗΣ Α')
+        self.call = VoIPCall.objects.create(
+            call_id='INP-1', phone_number='2109500001',
+            direction='incoming', status='missed',
+            started_at=timezone.now(), client=self.a, notes='αρχικό')
+        self.user = make_staff('inp_user', 'view_voipcall',
+                               'change_voipcall', 'add_ticket')
+
+    def _patch(self, payload):
+        import json
+        self.client.force_login(self.user)
+        return self.client.patch(
+            f'{self.LEGACY}{self.call.pk}/', data=json.dumps(payload),
+            content_type='application/json', secure=True)
+
+    def test_string_false_does_not_create_ticket(self):
+        """bool("false") is True — το raw truthiness δημιουργούσε ticket."""
+        resp = self._patch({'create_ticket': 'false', 'notes': 'ενημέρωση'})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists(),
+                         '"false" δημιούργησε ticket')
+        self.call.refresh_from_db()
+        self.assertEqual(self.call.notes, 'ενημέρωση',
+                         'το "false" δεν έπρεπε να μπλοκάρει τα PATCH fields')
+        self.assertFalse(self.call.ticket_created)
+
+    def test_valid_truthy_representations_create_ticket(self):
+        for value in (True, 'true', 1, '1'):
+            Ticket.objects.filter(call=self.call).delete()
+            self.call.ticket_created = False
+            self.call.ticket_id = None
+            self.call.save(update_fields=['ticket_created', 'ticket_id'])
+            resp = self._patch({'create_ticket': value})
+            self.assertEqual(resp.status_code, 200,
+                             f'{value!r}: {resp.content}')
+            self.assertTrue(Ticket.objects.filter(call=self.call).exists(),
+                            f'{value!r} δεν δημιούργησε ticket')
+
+    def test_invalid_values_return_400_with_full_rollback(self):
+        for value in (None, 'yes', ['true'], {'v': True}, 'ναι'):
+            resp = self._patch({'create_ticket': value, 'notes': 'ΑΛΛΑΓΗ'})
+            self.assertEqual(resp.status_code, 400,
+                             f'{value!r}: {resp.status_code}')
+            self.call.refresh_from_db()
+            self.assertEqual(self.call.notes, 'αρχικό',
+                             f'{value!r}: τα PATCH fields δεν έγιναν rollback')
+            self.assertFalse(Ticket.objects.filter(call=self.call).exists())
+
+    def test_service_caller_any_flag_representation_no_ticket(self):
+        import json
+        for value in (True, 'true', 1, '1'):
+            resp = self.client.patch(
+                f'{self.LEGACY}{self.call.pk}/',
+                data=json.dumps({'create_ticket': value,
+                                 'status': 'missed'}),
+                content_type='application/json', secure=True)
+            self.assertEqual(resp.status_code, 200, resp.content)
+            self.assertFalse(
+                Ticket.objects.filter(call=self.call).exists(),
+                f'service caller δημιούργησε ticket με {value!r}')
+
+    def test_v2_create_ticket_invalid_priority_400_no_mutation(self):
+        import json
+        from accounting.models import VoIPCall, VoIPCallLog
+
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            f'{self.V2}{self.call.pk}/create_ticket/',
+            data=json.dumps({'priority': 'ΆΚΥΡΟ'}),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists())
+        self.assertFalse(VoIPCallLog.objects.filter(
+            call=self.call, action='ticket_created').exists())
+        call = VoIPCall.objects.get(pk=self.call.pk)
+        self.assertFalse(call.ticket_created)
+
+    def test_v2_create_ticket_overlong_title_400(self):
+        import json
+
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            f'{self.V2}{self.call.pk}/create_ticket/',
+            data=json.dumps({'title': 'Τ' * 300}),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertFalse(Ticket.objects.filter(call=self.call).exists())
+
+    def test_v2_create_ticket_valid_priority_ok(self):
+        import json
+
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            f'{self.V2}{self.call.pk}/create_ticket/',
+            data=json.dumps({'priority': 'high', 'title': 'Χ'}),
+            content_type='application/json', secure=True)
+        self.assertEqual(resp.status_code, 201, resp.content)
+        ticket = Ticket.objects.get(call=self.call)
+        self.assertEqual(ticket.priority, 'high')
