@@ -8,9 +8,11 @@ from crm.forms.contact_form import ContactForm
 from crm.models import LeadSource
 from crm.utils.create_form_request import create_form_request
 from crm.utils.helpers import is_company_banned
+from crm.utils.public_rate_limit import throttle_public_form
 
 
 @csrf_exempt
+@throttle_public_form('add_request')
 def add_request(request):
     if not request.method == "POST":
         return HttpResponse(status=405)   # 405 Method Not Allowed
