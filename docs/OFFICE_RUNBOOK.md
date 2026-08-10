@@ -143,11 +143,35 @@ $COMPOSE exec web python manage.py setup_obligations
 |---|--------|--------------------|-------------|
 | 5.1 | Preflight | `./scripts/office_preflight.sh` | «όλα πράσινα» (το backup-age είναι WARN μέχρι το πρώτο backup) |
 | 5.2 | HTTPS χωρίς loop | Άνοιγμα `http://crm.office.lan/` | 301 σε `https://` και φόρτωση χωρίς προειδοποίηση cert |
-| 5.3 | SMTP (ελεγχόμενο) | `$COMPOSE exec web python manage.py sendtestemail <δικό-σας-inbox>` | Το email φτάνει· ο αποστολέας είναι το `DEFAULT_FROM_EMAIL` |
+| 5.3 | SMTP (ελεγχόμενο) | Βλ. §5.3 παρακάτω | Πρώτα console, μετά (χειροκίνητα) πραγματικό |
 | 5.4 | Upload/Download | UI: ανέβασμα δοκιμαστικού PDF σε δοκιμαστικό πελάτη → κατέβασμα → διαγραφή | Και τα δύο επιτυχή μέσω HTTPS (X-Accel-Redirect path) |
 | 5.5 | Scheduled tasks | `$COMPOSE exec web celery -A webcrm call accounting.tasks.backup_database_task` και μετά `$COMPOSE exec web python manage.py restore_database --list` | Εμφανίζεται φρέσκο `crm_db_*` (αποδεικνύει broker→worker→volume)· το κανονικό backup τρέχει αυτόματα 02:00 |
 | 5.6 | Restore σε trial | Βλ. §6 — ΠΟΤΕ restore δοκιμής στην κανονική εγκατάσταση | Η trial εγκατάσταση δείχνει τα δεδομένα του backup |
 | 5.7 | Reboot | `sudo systemctl is-enabled docker` (πρέπει `enabled`) → `sudo reboot` → μετά την επανεκκίνηση `./scripts/office_preflight.sh` | Όλα τα services επανήλθαν μόνα τους, preflight πράσινο |
+
+### §5.3 Email — πρώτα console, μετά πραγματικό
+
+**Κατά το acceptance με dummy δεδομένα** κρατήστε στο `.env`:
+
+```bash
+EMAIL_BACKEND_CONSOLE=True
+```
+
+Τα μηνύματα τυπώνονται μόνο στα logs — **καμία πραγματική αποστολή**:
+
+```bash
+$COMPOSE exec web python manage.py sendtestemail dummy@office.local
+$COMPOSE exec web python manage.py shell -c \
+  "from django.conf import settings; print(settings.EMAIL_BACKEND)"
+# αναμενόμενο: django.core.mail.backends.console.EmailBackend
+```
+
+**Μόνο για το χειροκίνητο πραγματικό SMTP test** (τελευταίο βήμα, με
+τον ιδιοκτήτη παρόντα): αφαιρέστε/θέστε `EMAIL_BACKEND_CONSOLE=False`,
+συμπληρώστε τα πραγματικά `EMAIL_HOST`, `EMAIL_HOST_USER`,
+`EMAIL_HOST_PASSWORD`, `EMAIL_PORT`, `DEFAULT_FROM_EMAIL`, κάντε
+`$COMPOSE up -d` και στείλτε σε **δικό σας** inbox. Χωρίς τη μεταβλητή
+ισχύει η παραγωγική συμπεριφορά (SMTP) — αυτό είναι και το default.
 
 ## 6. Δοκιμή restore σε ξεχωριστή trial εγκατάσταση
 

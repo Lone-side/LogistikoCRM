@@ -216,6 +216,22 @@ class OfficeComposeStructureTest(TestCase):
         for name in ('db', 'redis', 'web', 'celery', 'celery-beat'):
             self.assertNotIn('ports', self.prod['services'][name], msg=name)
 
+    def test_email_backend_console_reaches_all_django_services(self):
+        """
+        Το EMAIL_BACKEND_CONSOLE πρέπει να περνά στα Django services.
+
+        Χωρίς αυτό (εντοπίστηκε στο office rehearsal) η μεταβλητή του
+        .env δεν έφτανε ΠΟΤΕ στα containers και το Django έπεφτε πάντα
+        σε πραγματικό SMTP — αδύνατο ασφαλές acceptance με dummy data.
+        """
+        for name in ('web', 'celery', 'celery-beat'):
+            env = self.prod['services'][name]['environment']
+            self.assertIn('EMAIL_BACKEND_CONSOLE', env, msg=name)
+            # Default κενό ⇒ παραγωγική συμπεριφορά (SMTP) αμετάβλητη
+            self.assertEqual(
+                env['EMAIL_BACKEND_CONSOLE'],
+                '${EMAIL_BACKEND_CONSOLE:-}', msg=name)
+
 
 def _parse_env_example(path):
     """Απλό KEY=VALUE parse (χωρίς python-dotenv, μόνο για tests)."""

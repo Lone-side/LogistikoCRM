@@ -37,6 +37,11 @@ x-django-env: &django-env
   EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
   EMAIL_PORT: ${EMAIL_PORT:-587}
   DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
+  # Console email backend για ασφαλές acceptance με dummy δεδομένα: χωρίς
+  # αυτό το passthrough η μεταβλητή του .env δεν έφτανε ΠΟΤΕ στα
+  # containers και το Django έπεφτε πάντα σε πραγματικό SMTP. Default
+  # κενό => παραγωγική συμπεριφορά (SMTP) αμετάβλητη.
+  EMAIL_BACKEND_CONSOLE: ${EMAIL_BACKEND_CONSOLE:-}
   FRITZ_API_TOKEN: ${FRITZ_API_TOKEN:?Set FRITZ_API_TOKEN in .env}
   DATA_ENCRYPTION_KEY_CURRENT: ${DATA_ENCRYPTION_KEY_CURRENT:?Set DATA_ENCRYPTION_KEY_CURRENT in .env}
   DATA_ENCRYPTION_KEY_PREVIOUS: ${DATA_ENCRYPTION_KEY_PREVIOUS:-}
