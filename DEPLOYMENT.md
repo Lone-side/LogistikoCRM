@@ -123,6 +123,8 @@ docker compose -f docker-compose.prod.yml exec web python manage.py setupdata
 
 ### 5. HTTPS
 
+> Για εγκατάσταση **μέσα στο LAN γραφείου** με εσωτερικό certificate (χωρίς δημόσιο domain/certbot) βλ. `docs/OFFICE_RUNBOOK.md` και το `docker-compose.office.yml`.
+
 Βάλε certbot ή έναν HTTPS reverse proxy (Caddy/Traefik/Cloudflare) μπροστά από το nginx (port 80) και στο `.env`:
 
 ```bash

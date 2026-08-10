@@ -24,12 +24,24 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # postgresql-client: pg_dump για backups | libmagic1: έλεγχος τύπου αρχείων
+#
+# Ο postgresql-client καρφώνεται στο major του server (postgres:15 στο
+# docker-compose.prod.yml) μέσω του PGDG repo: ο client της βάσης του
+# Debian (trixie => v17) παράγει dumps με v17 SETs (π.χ.
+# transaction_timeout) που το pg_restore ΔΕΝ μπορεί να επαναφέρει σε
+# server 15 — δηλαδή backups που γράφονται «επιτυχώς» αλλά είναι
+# μη-επαναφέρσιμα. Tests: DockerPgClientServerParityTest + CI
+# docker-build step. Αν αναβαθμιστεί ο server, αλλάξτε ΚΑΙ τα δύο.
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     gettext \
     libmagic1 \
-    postgresql-client \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && python -c "import urllib.request; urllib.request.urlretrieve('https://www.postgresql.org/media/keys/ACCC4CF8.asc', '/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc')" \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y postgresql-client-15 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -39,13 +51,19 @@ COPY . .
 
 RUN mkdir -p logs media static backups
 
-# Collect static files (dummy env — δεν χρειάζεται βάση/secret για static)
-RUN SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput
-
 # Μη-root χρήστης: περιορίζει τη ζημιά σε περίπτωση RCE/container escape
 RUN useradd --create-home --shell /usr/sbin/nologin app \
     && chown -R app:app /app
 USER app
+
+# Collect static files (dummy env — δεν χρειάζεται βάση/secret για static).
+# ΠΡΕΠΕΙ να τρέχει ΜΕΤΑ το USER app: το django.setup() δημιουργεί tendo
+# singleton lockfiles στο /tmp (Massmail/Reminder/MonthlySnapshotSaving)
+# — αν τρέξει ως root, ψήνονται root-owned μέσα στο image και ΚΑΘΕ
+# runtime process του μη-root user σκάει με PermissionError (crash loop).
+# Το rm καθαρίζει τα build-time locks ώστε να μη μείνουν στο image.
+RUN SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput \
+    && rm -f /tmp/*.lock
 
 EXPOSE 8000
 

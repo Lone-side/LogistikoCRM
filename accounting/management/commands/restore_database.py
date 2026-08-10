@@ -500,6 +500,23 @@ class Command(BaseCommand):
     # Media swap + rollback
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _is_contents_mode(previous):
+        """True αν το safety αντίγραφο ζει ΜΕΣΑ στο MEDIA_ROOT (mountpoint mode)."""
+        return (
+            previous is not None
+            and previous is not NO_PREVIOUS_MEDIA
+            and Path(previous).parent == Path(settings.MEDIA_ROOT)
+        )
+
+    @staticmethod
+    def _move_children(src, dst, skip=None):
+        """Μετακίνηση όλων των παιδιών του src στο dst (εκτός του skip)."""
+        for child in Path(src).iterdir():
+            if skip is not None and child.name == skip:
+                continue
+            shutil.move(str(child), str(Path(dst) / child.name))
+
     def _swap_media(self, staged_media, state):
         """
         Ατομική αντικατάσταση του MEDIA_ROOT από τον staged φάκελο.
@@ -508,13 +525,31 @@ class Command(BaseCommand):
         διαδρομή των παλιών media, ή `NO_PREVIOUS_MEDIA` αν δεν υπήρχαν.
         Το state ενημερώνεται **πριν** από κάθε επικίνδυνη κίνηση, ώστε το
         rollback να ξέρει την πραγματική κατάσταση ακόμη κι αν σκάσουμε στη μέση.
+
+        Σε Docker εγκατάσταση το MEDIA_ROOT είναι volume mountpoint και δεν
+        μπορεί να μετονομαστεί (EBUSY). Τότε το swap γίνεται σε επίπεδο
+        ΠΕΡΙΕΧΟΜΕΝΩΝ, με το safety αντίγραφο ΜΕΣΑ στο volume
+        (.before_restore_<stamp>) ώστε να επιβιώνει ακόμη κι από θάνατο
+        του container στη μέση της επαναφοράς.
         """
         media_root = Path(settings.MEDIA_ROOT)
+        contents_mode = False
         if media_root.exists():
             stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            previous = (
-                media_root.parent / f'{media_root.name}_before_restore_{stamp}')
-            shutil.move(str(media_root), str(previous))
+            # Ο έλεγχος mountpoint γίνεται ΠΡΟΛΗΠΤΙΚΑ: το shutil.move σε
+            # cross-device αποτυχία κάνει copy+rmtree — το rmtree του
+            # mountpoint θα άδειαζε τα παλιά media ΠΡΙΝ αποτύχει.
+            if os.path.ismount(str(media_root)):
+                contents_mode = True
+                previous = media_root / f'.before_restore_{stamp}'
+                previous.mkdir()
+                state['previous'] = previous
+                self._move_children(media_root, previous, skip=previous.name)
+            else:
+                previous = (
+                    media_root.parent
+                    / f'{media_root.name}_before_restore_{stamp}')
+                shutil.move(str(media_root), str(previous))
             # ΑΜΕΣΩΣ μετά το move, πριν από οτιδήποτε άλλο: από αυτό το
             # σημείο και μετά τα παλιά media ΔΕΝ είναι στη θέση τους. Αν
             # σκάσει το επόμενο stdout.write (κλειστό stream, σπασμένο pipe),
@@ -527,11 +562,18 @@ class Command(BaseCommand):
             previous = NO_PREVIOUS_MEDIA
             state['previous'] = previous
         try:
-            shutil.move(str(staged_media), str(media_root))
+            if contents_mode:
+                self._move_children(staged_media, media_root)
+            else:
+                shutil.move(str(staged_media), str(media_root))
         except Exception:
-            # Το rename απέτυχε: γύρνα αμέσως τα προηγούμενα στη θέση τους
-            # ώστε ο φάκελος media να μη μείνει ανύπαρκτος.
-            if previous is not NO_PREVIOUS_MEDIA and not media_root.exists():
+            # Το move απέτυχε: γύρνα αμέσως τα προηγούμενα στη θέση τους
+            # ώστε ο φάκελος media να μη μείνει ανύπαρκτος/μισός.
+            if contents_mode:
+                self._move_children(previous, media_root, skip=None)
+                previous.rmdir()
+                state['previous'] = None
+            elif previous is not NO_PREVIOUS_MEDIA and not media_root.exists():
                 shutil.move(str(previous), str(media_root))
                 state['previous'] = None
             raise
@@ -554,15 +596,33 @@ class Command(BaseCommand):
             # προσπαθούμε να αποτρέψουμε.
             try:
                 if media_root.exists():
-                    shutil.rmtree(media_root)
+                    try:
+                        shutil.rmtree(media_root)
+                    except OSError:
+                        # Mountpoint: καθάρισε μόνο τα περιεχόμενα.
+                        for child in media_root.iterdir():
+                            shutil.rmtree(child, ignore_errors=True) \
+                                if child.is_dir() else child.unlink()
             except Exception as exc:  # noqa: BLE001
                 problems.append(
                     f'τα νέα media δεν αφαιρέθηκαν από το {media_root} ({exc})')
         elif previous_media is not None:
             try:
-                if media_root.exists():
-                    shutil.rmtree(media_root, ignore_errors=True)
-                shutil.move(str(previous_media), str(media_root))
+                if self._is_contents_mode(previous_media):
+                    # Mountpoint mode: αφαίρεσε τα νέα περιεχόμενα και
+                    # γύρνα πίσω τα παλιά από το .before_restore_ dir.
+                    previous_media = Path(previous_media)
+                    for child in media_root.iterdir():
+                        if child.name == previous_media.name:
+                            continue
+                        shutil.rmtree(child, ignore_errors=True) \
+                            if child.is_dir() else child.unlink()
+                    self._move_children(previous_media, media_root)
+                    previous_media.rmdir()
+                else:
+                    if media_root.exists():
+                        shutil.rmtree(media_root, ignore_errors=True)
+                    shutil.move(str(previous_media), str(media_root))
             except Exception as exc:  # noqa: BLE001
                 problems.append(
                     f'τα προηγούμενα media παρέμειναν στο {previous_media} '

@@ -298,6 +298,18 @@ SECURE_HSTS_SECONDS = 0  # set to 31536000 for the production server
 # Set all the following to True for the production server
 SECURE_HSTS_INCLUDE_SUBDOMAINS = False
 SECURE_SSL_REDIRECT = False
+# Τα anonymous health endpoints πρέπει να απαντούν και σε plain HTTP όταν
+# το SSL redirect είναι ενεργό: το docker healthcheck μιλά απευθείας στο
+# gunicorn (http://localhost:8000) πίσω από το nginx, οπότε ένα 301 σε
+# https καταλήγει σε TLS handshake πάνω σε plaintext socket και ο
+# container μένει μόνιμα unhealthy. Το SecurityMiddleware ταιριάζει τα
+# regexes στο request.path χωρίς το αρχικό '/'. Το /api/health/detailed/
+# μένει ΕΚΤΟΣ λίστας σκόπιμα (admin-only, περνά πάντα από HTTPS).
+HEALTH_CHECK_EXEMPT_URLS = [
+    r'^api/health/$',
+    r'^api/health/ready/$',
+    r'^api/health/live/$',
+]
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_HSTS_PRELOAD = False
@@ -861,6 +873,12 @@ if not DEBUG:
         SECURE_SSL_REDIRECT = True
     else:
         SECURE_SSL_REDIRECT = not TESTING
+
+    # Εξαίρεση από το SSL redirect ΜΟΝΟ για τα anonymous health endpoints
+    # (βλ. HEALTH_CHECK_EXEMPT_URLS παραπάνω): αλλιώς το container
+    # healthcheck του docker-compose.prod.yml αποτυγχάνει μόνιμα σε
+    # DJANGO_ENV=production.
+    SECURE_REDIRECT_EXEMPT = HEALTH_CHECK_EXEMPT_URLS
 
     # Secure cookies
     SESSION_COOKIE_SECURE = True

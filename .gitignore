@@ -174,3 +174,6 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
+
+# Office/LAN TLS certificates (scripts/office_certs.sh) — ΠΟΤΕ commit
+certs/
