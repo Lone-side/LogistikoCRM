@@ -267,10 +267,18 @@ class Command(BaseCommand):
         ]
         
         for obl_data in obligations:
+            # Το ObligationType.profiles είναι ManyToMany — δεν μπορεί να
+            # περάσει ως kwarg στο get_or_create (FieldError σε καθαρή
+            # βάση). Αφαιρείται από τα defaults και συνδέεται μετά.
+            profile = obl_data.pop('profile', None)
             obj, created = ObligationType.objects.get_or_create(
                 code=obl_data['code'],
                 defaults=obl_data
             )
+            if profile is not None:
+                # add(): idempotent — ισχύει και για προϋπάρχοντα rows
+                # από παλιές μερικές εκτελέσεις χωρίς το link.
+                obj.profiles.add(profile)
             if created:
                 self.stdout.write(f'  ✓ {obj.name}')
             else:
