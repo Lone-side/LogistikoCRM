@@ -15,6 +15,25 @@ from accounting.models import ObligationGroup, ObligationProfile, ObligationType
 # ήδη (π.χ. ΑΠΔ ΤΕΚΑ από το βασικό σετ, ή τροποποιημένος από χρήστη)
 # ΔΕΝ ξαναδημιουργείται και δεν αλλοιώνεται.
 # ---------------------------------------------------------------------------
+# Μετονομασίες σε επίσημες ονομασίες — επιβεβαιωμένα 1-προς-1 ίδια
+# (ανθρώπινο review, 2026-08-10): το υπάρχον row μετονομάζεται και
+# κρατά ID/code/ρυθμίσεις/profiles/αναθέσεις πελατών. Αν υπάρχει ΗΔΗ
+# row με το νέο όνομα (π.χ. φτιαγμένο χειροκίνητα), η μετονομασία
+# ΠΑΡΑΛΕΙΠΕΤΑΙ και καταγράφεται — καμία σιωπηλή συγχώνευση.
+# Τα VIES / Παρεπιδημούντων (1→2 splits) ΔΕΝ μετονομάζονται: μένουν
+# ενεργά δίπλα στα νέα ανά-περίοδο entries μέχρι χειροκίνητη μετάβαση.
+OFFICIAL_RENAMES = [
+    ('ΦΠΑ Μηνιαίο', 'Περιοδική Φ.Π.Α. (Μήνα)'),
+    ('ΦΠΑ Τρίμηνο', 'Περιοδική Φ.Π.Α. (Τριμήνου)'),
+    ('Πλαστικές Σακούλες', 'Απόδοση Τέλους Πλαστικής Σακούλας'),
+    ('Πλαστικά Προϊόντα', 'Περιβαλλοντική εισφορά για τα πλαστικά προϊόντα'),
+    ('Φόρος Διαμονής', 'Απόδοση Τέλους Διαμονής'),
+    ('Συμφωνητικά', 'Κατάσταση Συμφωνητικών'),
+    ('Παρακρατούμενη 3%', 'Φόρος 3% Εργολάβων, Ενοικιαστών Προσόδων'),
+    ('Παρακρατούμενη 20%', 'Παρακρατούμενοι φόροι (Επαγγ. Δραστηριότητα)'),
+    ('ΑΠΔ ΕΦΚΑ', 'ΑΠΔ (Κοινών)'),
+]
+
 DEFAULT_CATALOG = [
     # (name, code) — codes σταθερά ASCII slugs, priority = 100 + index
     ('ΑΠΔ (Κοινών)', 'APD_KOINON'),
@@ -97,10 +116,29 @@ class Command(BaseCommand):
         self.stdout.write('Δημιουργία Τύπων Υποχρεώσεων...')
         self.create_obligation_types()
 
+        self.stdout.write('Μετονομασίες σε επίσημες ονομασίες...')
+        self.apply_official_renames()
+
         self.stdout.write('Δημιουργία Default Catalog...')
         self.create_default_catalog()
 
         self.stdout.write(self.style.SUCCESS('✅ Ολοκληρώθηκε!'))
+
+    def apply_official_renames(self):
+        """Μετονομασία επιβεβαιωμένων duplicates — μόνο το όνομα αλλάζει."""
+        for old_name, new_name in OFFICIAL_RENAMES:
+            if ObligationType.objects.filter(name=new_name).exists():
+                # Το νέο όνομα υπάρχει ήδη (μετονομασμένο ή χειροκίνητο) —
+                # αν συνυπάρχει ΚΑΙ το παλιό, θέλει ανθρώπινο έλεγχο.
+                if ObligationType.objects.filter(name=old_name).exists():
+                    self.stdout.write(self.style.WARNING(
+                        f'  ⚠ Συνυπάρχουν «{old_name}» και «{new_name}» — '
+                        'καμία αυτόματη συγχώνευση, ελέγξτε χειροκίνητα'))
+                continue
+            updated = ObligationType.objects.filter(
+                name=old_name).update(name=new_name)
+            if updated:
+                self.stdout.write(f'  ✓ «{old_name}» → «{new_name}»')
 
     def create_default_catalog(self):
         """

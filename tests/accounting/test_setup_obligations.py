@@ -31,9 +31,10 @@ MISTHODOSIA_CODES = {
 }
 ENDOKOINOTIKES_CODES = {'INTRA_EU', 'VIES'}
 BASE_TYPE_COUNT = 23
-# Default catalog: 52 ονομασίες, εκ των οποίων η «ΑΠΔ ΤΕΚΑ» υπάρχει ήδη
-# στο βασικό σετ (name-dedupe) => 51 νέοι τύποι.
-CATALOG_NEW_COUNT = 51
+# Default catalog: 52 ονομασίες. Καλύπτονται ήδη: η «ΑΠΔ ΤΕΚΑ» (βασικό
+# σετ) + 9 επίσημες μετονομασίες υπαρχόντων (OFFICIAL_RENAMES)
+# => 42 νέοι τύποι.
+CATALOG_NEW_COUNT = 42
 EXPECTED_TYPE_COUNT = BASE_TYPE_COUNT + CATALOG_NEW_COUNT
 
 
@@ -176,12 +177,14 @@ class DefaultCatalogTest(TestCase):
 
     def test_catalog_types_have_no_invented_schedule_or_profiles(self):
         """Χωρίς περιοδικότητα/προθεσμία/profiles/exclusion — η ρύθμιση
-        ανήκει στον λογιστή (skill obligation-engine)."""
+        ανήκει στον λογιστή (skill obligation-engine). Εξαιρούνται όσα
+        καλύπτονται από το βασικό σετ (μετονομασίες — κρατούν ρύθμιση)."""
         from accounting.management.commands.setup_obligations import (
             DEFAULT_CATALOG,
+            OFFICIAL_RENAMES,
         )
         run_setup_obligations()
-        base_names = {'ΑΠΔ ΤΕΚΑ'}
+        base_names = {'ΑΠΔ ΤΕΚΑ'} | {new for _, new in OFFICIAL_RENAMES}
         for name, _ in DEFAULT_CATALOG:
             if name in base_names:
                 continue
@@ -198,6 +201,61 @@ class DefaultCatalogTest(TestCase):
         run_setup_obligations()
         row = ObligationType.objects.get(name='Έντυπο Ε1')
         self.assertIsNone(row.get_deadline_for_month(2026, 8))
+
+    def test_official_renames_preserve_id_and_config(self):
+        """Μετονομασία: ίδιο row (ID/code/ρύθμιση/profiles), νέο όνομα."""
+        run_setup_obligations()  # πρώτο πέρασμα σε παλιά ονόματα + rename
+        row = ObligationType.objects.get(name='Περιοδική Φ.Π.Α. (Μήνα)')
+        self.assertEqual(row.code, 'VAT_MONTHLY')
+        self.assertEqual(row.frequency, 'monthly')
+        self.assertIsNotNone(row.exclusion_group)
+        # Το παλιό όνομα δεν υπάρχει πλέον
+        self.assertFalse(
+            ObligationType.objects.filter(name='ΦΠΑ Μηνιαίο').exists())
+
+    def test_legacy_row_renamed_keeping_pk(self):
+        """Υπάρχουσα εγκατάσταση: το row μετονομάζεται χωρίς νέο pk."""
+        legacy = ObligationType.objects.create(
+            name='Παρακρατούμενη 3%', code='WITHHOLD_3',
+            frequency='monthly', deadline_type='last_day', priority=31)
+        run_setup_obligations()
+        renamed = ObligationType.objects.get(
+            name='Φόρος 3% Εργολάβων, Ενοικιαστών Προσόδων')
+        self.assertEqual(renamed.pk, legacy.pk)
+        self.assertEqual(renamed.frequency, 'monthly')
+
+    def test_rename_skipped_when_both_names_exist(self):
+        """Αν συνυπάρχουν παλιό+νέο όνομα: καμία σιωπηλή συγχώνευση."""
+        # Ρεαλιστικό legacy: το παλιό row με το κανονικό base code, και
+        # ένα χειροκίνητο row που ήδη φέρει τη νέα ονομασία.
+        ObligationType.objects.create(
+            name='Συμφωνητικά', code='CONTRACTS',
+            frequency='quarterly', deadline_type='specific_day',
+            deadline_day=20)
+        ObligationType.objects.create(
+            name='Κατάσταση Συμφωνητικών', code='CONTRACTS_NEW_MANUAL',
+            frequency='', deadline_type='')
+        output = run_setup_obligations()
+        self.assertIn('Συνυπάρχουν', output)
+        # Και τα δύο rows παραμένουν ανέγγιχτα
+        self.assertEqual(
+            ObligationType.objects.get(name='Συμφωνητικά').code,
+            'CONTRACTS')
+        self.assertEqual(
+            ObligationType.objects.get(name='Κατάσταση Συμφωνητικών').code,
+            'CONTRACTS_NEW_MANUAL')
+
+    def test_split_pairs_keep_old_active_plus_new(self):
+        """VIES/Παρεπιδημούντων: παλιό ενεργό + 2 νέα ανά-περίοδο."""
+        run_setup_obligations()
+        for name in ('VIES', 'Παρεπιδημούντων'):
+            self.assertTrue(
+                ObligationType.objects.get(name=name).is_active, msg=name)
+        for name in ('VIES Αποστολές', 'VIES Αφίξεις',
+                     'Τέλος Παρεπιδημούντων/Ακαθάριστων Εσόδων (Μήνας)',
+                     'Τέλος Παρεπιδημούντων/Ακαθάριστων Εσόδων (Τρίμηνο)'):
+            row = ObligationType.objects.get(name=name)
+            self.assertEqual(row.frequency, '', msg=name)
 
     def test_catalog_available_for_client_selection(self):
         """Οι νέοι τύποι εμφανίζονται στο queryset επιλογής και μπορούν
