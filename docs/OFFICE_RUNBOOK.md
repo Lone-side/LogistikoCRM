@@ -113,6 +113,13 @@ $COMPOSE exec web python manage.py setup_roles
 $COMPOSE exec web python manage.py setup_obligations
 ```
 
+> ⚠️ **Γνωστό πρόβλημα**: το `setup_obligations` αυτή τη στιγμή αποτυγχάνει
+> σε καθαρή βάση με `FieldError: Invalid field name(s) ... 'profile'`
+> (προϋπάρχον bug — το command περνά `profile=` ενώ το
+> `ObligationType.profiles` είναι πλέον ManyToMany· απαιτεί ξεχωριστό
+> fix PR). Μέχρι τότε, δημιουργήστε τύπους/προφίλ υποχρεώσεων από το
+> admin (Λογιστική → Τύποι Υποχρεώσεων / Προφίλ).
+
 Μετά, από το admin (`https://crm.office.lan/el/456-admin/`):
 1. **Αλλάξτε αμέσως τον κωδικό του IamSUPER.**
 2. Δημιουργήστε προσωπικό λογαριασμό για κάθε χρήστη (ποτέ κοινόχρηστος).

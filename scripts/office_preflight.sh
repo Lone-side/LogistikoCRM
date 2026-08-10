@@ -64,7 +64,11 @@ fi
 OFFICE_HOSTNAME="$(grep -E '^OFFICE_HOSTNAME=' .env 2>/dev/null | cut -d= -f2- || true)"
 OFFICE_BIND_IP="$(grep -E '^OFFICE_BIND_IP=' .env 2>/dev/null | cut -d= -f2- || true)"
 if [ -n "$OFFICE_HOSTNAME" ] && [ -n "$OFFICE_BIND_IP" ] && [ -f certs/office-ca.crt ]; then
+    # --noproxy: ο έλεγχος αφορά την εσωτερική LAN διεύθυνση — δεν πρέπει
+    # ποτέ να δρομολογηθεί μέσω system/corporate proxy (θα αποτύγχανε
+    # ψευδώς αφού το hostname δεν υπάρχει έξω από το LAN).
     HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' \
+        --noproxy '*' \
         --cacert certs/office-ca.crt \
         --resolve "${OFFICE_HOSTNAME}:443:${OFFICE_BIND_IP}" \
         --max-time 10 \
