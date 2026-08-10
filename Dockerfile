@@ -24,12 +24,24 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # postgresql-client: pg_dump για backups | libmagic1: έλεγχος τύπου αρχείων
+#
+# Ο postgresql-client καρφώνεται στο major του server (postgres:15 στο
+# docker-compose.prod.yml) μέσω του PGDG repo: ο client της βάσης του
+# Debian (trixie => v17) παράγει dumps με v17 SETs (π.χ.
+# transaction_timeout) που το pg_restore ΔΕΝ μπορεί να επαναφέρει σε
+# server 15 — δηλαδή backups που γράφονται «επιτυχώς» αλλά είναι
+# μη-επαναφέρσιμα. Tests: DockerPgClientServerParityTest + CI
+# docker-build step. Αν αναβαθμιστεί ο server, αλλάξτε ΚΑΙ τα δύο.
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     gettext \
     libmagic1 \
-    postgresql-client \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && python -c "import urllib.request; urllib.request.urlretrieve('https://www.postgresql.org/media/keys/ACCC4CF8.asc', '/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc')" \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y postgresql-client-15 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

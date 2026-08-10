@@ -352,3 +352,34 @@ class DockerfileNonRootCollectstaticTest(TestCase):
 
     def test_build_time_locks_are_cleaned(self):
         self.assertIn('rm -f /tmp/*.lock', self.app_stage)
+
+
+@tag('TestCase')
+class DockerPgClientServerParityTest(TestCase):
+    """
+    Ο postgresql-client του app image πρέπει να έχει το ΙΔΙΟ major με τον
+    postgres server του docker-compose.prod.yml.
+
+    Νεότερος client (π.χ. v17 από το Debian trixie) παράγει dumps με
+    SETs που δεν υπάρχουν στον παλαιότερο server (transaction_timeout)
+    — το pg_restore αποτυγχάνει με rollback, δηλαδή τα backups γράφονται
+    «επιτυχώς» αλλά είναι ΜΗ-ΕΠΑΝΑΦΕΡΣΙΜΑ.
+    """
+
+    def test_pg_client_pinned_to_server_major(self):
+        compose = yaml.safe_load(
+            (BASE_DIR / 'docker-compose.prod.yml').read_text(encoding='utf-8')
+        )
+        image = compose['services']['db']['image']
+        server_major = re.match(r'postgres:(\d+)', image).group(1)
+        dockerfile = (BASE_DIR / 'Dockerfile').read_text(encoding='utf-8')
+        self.assertIn(
+            f'postgresql-client-{server_major}', dockerfile,
+            msg=f'Ο server είναι postgres:{server_major} αλλά το Dockerfile '
+                'δεν καρφώνει αντίστοιχο postgresql-client-'
+                f'{server_major} — τα backups δεν θα επαναφέρονται',
+        )
+        self.assertNotRegex(
+            dockerfile, r'postgresql-client\s*\\?\s*$',
+            msg='γενικό (χωρίς version) postgresql-client στο Dockerfile',
+        )

@@ -302,6 +302,16 @@ jobs:
             -e DEBUG=True \
             logistiko-app-ci python manage.py check
 
+      # Ο pg client του image πρέπει να έχει το ίδιο major με τον postgres
+      # server του compose — αλλιώς τα backups γράφονται αλλά ΔΕΝ
+      # επαναφέρονται (v17 dumps σε v15 server => pg_restore rollback).
+      - name: pg_dump/server version parity
+        run: |
+          CLIENT_MAJOR=$(docker run --rm logistiko-app-ci pg_dump --version | grep -oE '[0-9]+' | head -1)
+          SERVER_MAJOR=$(grep -oE 'image: postgres:[0-9]+' docker-compose.prod.yml | grep -oE '[0-9]+')
+          echo "client=$CLIENT_MAJOR server=$SERVER_MAJOR"
+          test "$CLIENT_MAJOR" = "$SERVER_MAJOR"
+
       - name: nginx -t (office TLS config με throwaway certs)
         run: |
           ./scripts/office_certs.sh ci.office.test 127.0.0.1
