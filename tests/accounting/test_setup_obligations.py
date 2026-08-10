@@ -30,7 +30,12 @@ MISTHODOSIA_CODES = {
     'OAED_PROGRAMS', 'LEAVE_TABLE',
 }
 ENDOKOINOTIKES_CODES = {'INTRA_EU', 'VIES'}
-EXPECTED_TYPE_COUNT = 23
+BASE_TYPE_COUNT = 23
+# Default catalog: 52 ονομασίες. Καλύπτονται ήδη: η «ΑΠΔ ΤΕΚΑ» (βασικό
+# σετ) + 9 επίσημες μετονομασίες υπαρχόντων (OFFICIAL_RENAMES)
+# => 42 νέοι τύποι.
+CATALOG_NEW_COUNT = 42
+EXPECTED_TYPE_COUNT = BASE_TYPE_COUNT + CATALOG_NEW_COUNT
 
 
 def run_setup_obligations():
@@ -109,3 +114,165 @@ class SetupObligationsCleanInstallTest(TestCase):
         self.assertTrue(
             ObligationType.objects.get(code='APD_EFKA')
             .profiles.filter(pk=misthodosia.pk).exists())
+
+
+@tag('TestCase')
+class DefaultCatalogTest(TestCase):
+    """Το default catalog: πλήρες σε clean install, idempotent, ανέγγιχτο
+    ό,τι προϋπάρχει, χωρίς επινοημένους κανόνες."""
+
+    def test_catalog_names_have_no_internal_duplicates(self):
+        from accounting.management.commands.setup_obligations import (
+            DEFAULT_CATALOG,
+        )
+        names = [name for name, _ in DEFAULT_CATALOG]
+        codes = [code for _, code in DEFAULT_CATALOG]
+        self.assertEqual(len(names), 52)
+        self.assertEqual(len(set(names)), 52)
+        self.assertEqual(len(set(codes)), 52)
+
+    def test_clean_install_creates_full_catalog(self):
+        from accounting.management.commands.setup_obligations import (
+            DEFAULT_CATALOG,
+        )
+        run_setup_obligations()
+        self.assertEqual(ObligationType.objects.count(), EXPECTED_TYPE_COUNT)
+        for name, _ in DEFAULT_CATALOG:
+            self.assertTrue(
+                ObligationType.objects.filter(name=name).exists(), msg=name)
+
+    def test_apd_teka_name_dedupe_keeps_existing_row(self):
+        """Η «ΑΠΔ ΤΕΚΑ» υπάρχει στο βασικό σετ — μία εγγραφή, με το
+        αρχικό code/profile, ΟΧΙ το catalog code."""
+        run_setup_obligations()
+        rows = ObligationType.objects.filter(name='ΑΠΔ ΤΕΚΑ')
+        self.assertEqual(rows.count(), 1)
+        row = rows.get()
+        self.assertEqual(row.code, 'APD_TEKA')
+        self.assertEqual(row.frequency, 'monthly')
+        self.assertFalse(
+            ObligationType.objects.filter(code='APD_TEKA_CATALOG').exists())
+
+    def test_second_run_changes_nothing(self):
+        run_setup_obligations()
+        first = dict(ObligationType.objects.values_list('name', 'code'))
+        run_setup_obligations()
+        second = dict(ObligationType.objects.values_list('name', 'code'))
+        self.assertEqual(first, second)
+        self.assertEqual(ObligationType.objects.count(), EXPECTED_TYPE_COUNT)
+
+    def test_user_modified_row_preserved(self):
+        """Τύπος με ίδιο όνομα που ρύθμισε ήδη ο χρήστης δεν αλλοιώνεται."""
+        ObligationType.objects.create(
+            name='Έντυπο Ε1', code='CUSTOM_E1',
+            frequency='annual', deadline_type='specific_day',
+            deadline_day=31, applicable_months='7', priority=5)
+        run_setup_obligations()
+        row = ObligationType.objects.get(name='Έντυπο Ε1')
+        self.assertEqual(row.code, 'CUSTOM_E1')
+        self.assertEqual(row.frequency, 'annual')
+        self.assertEqual(row.deadline_day, 31)
+        self.assertEqual(row.priority, 5)
+        self.assertEqual(ObligationType.objects.count(), EXPECTED_TYPE_COUNT)
+
+    def test_catalog_types_have_no_invented_schedule_or_profiles(self):
+        """Χωρίς περιοδικότητα/προθεσμία/profiles/exclusion — η ρύθμιση
+        ανήκει στον λογιστή (skill obligation-engine). Εξαιρούνται όσα
+        καλύπτονται από το βασικό σετ (μετονομασίες — κρατούν ρύθμιση)."""
+        from accounting.management.commands.setup_obligations import (
+            DEFAULT_CATALOG,
+            OFFICIAL_RENAMES,
+        )
+        run_setup_obligations()
+        base_names = {'ΑΠΔ ΤΕΚΑ'} | {new for _, new in OFFICIAL_RENAMES}
+        for name, _ in DEFAULT_CATALOG:
+            if name in base_names:
+                continue
+            row = ObligationType.objects.get(name=name)
+            self.assertEqual(row.frequency, '', msg=name)
+            self.assertEqual(row.deadline_type, '', msg=name)
+            self.assertIsNone(row.exclusion_group, msg=name)
+            self.assertEqual(row.profiles.count(), 0, msg=name)
+            self.assertTrue(row.is_active, msg=name)
+
+    def test_unconfigured_catalog_type_never_autogenerates(self):
+        """get_deadline_for_month => None: η γεννήτρια τον παραλείπει —
+        καμία αυτόματη υποχρέωση χωρίς ρύθμιση."""
+        run_setup_obligations()
+        row = ObligationType.objects.get(name='Έντυπο Ε1')
+        self.assertIsNone(row.get_deadline_for_month(2026, 8))
+
+    def test_official_renames_preserve_id_and_config(self):
+        """Μετονομασία: ίδιο row (ID/code/ρύθμιση/profiles), νέο όνομα."""
+        run_setup_obligations()  # πρώτο πέρασμα σε παλιά ονόματα + rename
+        row = ObligationType.objects.get(name='Περιοδική Φ.Π.Α. (Μήνα)')
+        self.assertEqual(row.code, 'VAT_MONTHLY')
+        self.assertEqual(row.frequency, 'monthly')
+        self.assertIsNotNone(row.exclusion_group)
+        # Το παλιό όνομα δεν υπάρχει πλέον
+        self.assertFalse(
+            ObligationType.objects.filter(name='ΦΠΑ Μηνιαίο').exists())
+
+    def test_legacy_row_renamed_keeping_pk(self):
+        """Υπάρχουσα εγκατάσταση: το row μετονομάζεται χωρίς νέο pk."""
+        legacy = ObligationType.objects.create(
+            name='Παρακρατούμενη 3%', code='WITHHOLD_3',
+            frequency='monthly', deadline_type='last_day', priority=31)
+        run_setup_obligations()
+        renamed = ObligationType.objects.get(
+            name='Φόρος 3% Εργολάβων, Ενοικιαστών Προσόδων')
+        self.assertEqual(renamed.pk, legacy.pk)
+        self.assertEqual(renamed.frequency, 'monthly')
+
+    def test_rename_skipped_when_both_names_exist(self):
+        """Αν συνυπάρχουν παλιό+νέο όνομα: καμία σιωπηλή συγχώνευση."""
+        # Ρεαλιστικό legacy: το παλιό row με το κανονικό base code, και
+        # ένα χειροκίνητο row που ήδη φέρει τη νέα ονομασία.
+        ObligationType.objects.create(
+            name='Συμφωνητικά', code='CONTRACTS',
+            frequency='quarterly', deadline_type='specific_day',
+            deadline_day=20)
+        ObligationType.objects.create(
+            name='Κατάσταση Συμφωνητικών', code='CONTRACTS_NEW_MANUAL',
+            frequency='', deadline_type='')
+        output = run_setup_obligations()
+        self.assertIn('Συνυπάρχουν', output)
+        # Και τα δύο rows παραμένουν ανέγγιχτα
+        self.assertEqual(
+            ObligationType.objects.get(name='Συμφωνητικά').code,
+            'CONTRACTS')
+        self.assertEqual(
+            ObligationType.objects.get(name='Κατάσταση Συμφωνητικών').code,
+            'CONTRACTS_NEW_MANUAL')
+
+    def test_split_pairs_keep_old_active_plus_new(self):
+        """VIES/Παρεπιδημούντων: παλιό ενεργό + 2 νέα ανά-περίοδο."""
+        run_setup_obligations()
+        for name in ('VIES', 'Παρεπιδημούντων'):
+            self.assertTrue(
+                ObligationType.objects.get(name=name).is_active, msg=name)
+        for name in ('VIES Αποστολές', 'VIES Αφίξεις',
+                     'Τέλος Παρεπιδημούντων/Ακαθάριστων Εσόδων (Μήνας)',
+                     'Τέλος Παρεπιδημούντων/Ακαθάριστων Εσόδων (Τρίμηνο)'):
+            row = ObligationType.objects.get(name=name)
+            self.assertEqual(row.frequency, '', msg=name)
+
+    def test_catalog_available_for_client_selection(self):
+        """Οι νέοι τύποι εμφανίζονται στο queryset επιλογής και μπορούν
+        να επιλεγούν χειροκίνητα σε πελάτη (ClientObligation M2M)."""
+        from accounting.models import ClientObligation, ClientProfile
+        run_setup_obligations()
+        # Το queryset του selection endpoint (api_obligation_profiles):
+        selectable = set(
+            ObligationType.objects.filter(is_active=True)
+            .values_list('name', flat=True))
+        self.assertIn('Έντυπο Ε1', selectable)
+        self.assertIn('Ψηφιακό Τέλος Συναλλαγής', selectable)
+
+        client = ClientProfile.objects.create(
+            afm='090000045', onoma='ΔΟΚΙΜΗ ΕΠΕ')
+        settings_row, _ = ClientObligation.objects.get_or_create(
+            client=client)
+        chosen = ObligationType.objects.get(name='Έντυπο Ε1')
+        settings_row.obligation_types.add(chosen)
+        self.assertIn(chosen, settings_row.get_all_obligation_types())

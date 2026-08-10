@@ -1,6 +1,107 @@
 from django.core.management.base import BaseCommand
 from accounting.models import ObligationGroup, ObligationProfile, ObligationType
 
+# ---------------------------------------------------------------------------
+# Default catalog: ονομασίες διαθέσιμες για χειροκίνητη επιλογή ανά πελάτη.
+#
+# ΣΚΟΠΙΜΑ ΧΩΡΙΣ frequency/deadline_type/profiles: η περιοδικότητα και η
+# προθεσμία ρυθμίζονται από τον λογιστή όταν ενεργοποιηθεί ο τύπος (βλ.
+# skill obligation-engine — καμία επινοημένη προθεσμία). Μέχρι τότε το
+# generate_monthly_obligations ΔΕΝ δημιουργεί υποχρεώσεις για αυτούς
+# (get_deadline_for_month => None => καταγράφεται 'No deadline' και
+# παραλείπεται) — fail-safe, όχι σιωπηλή αυτόματη γέννηση.
+#
+# Το deduplication γίνεται ΜΕ ΒΑΣΗ ΤΟ ΟΝΟΜΑ (unique): τύπος που υπάρχει
+# ήδη (π.χ. ΑΠΔ ΤΕΚΑ από το βασικό σετ, ή τροποποιημένος από χρήστη)
+# ΔΕΝ ξαναδημιουργείται και δεν αλλοιώνεται.
+# ---------------------------------------------------------------------------
+# Μετονομασίες σε επίσημες ονομασίες — επιβεβαιωμένα 1-προς-1 ίδια
+# (ανθρώπινο review, 2026-08-10): το υπάρχον row μετονομάζεται και
+# κρατά ID/code/ρυθμίσεις/profiles/αναθέσεις πελατών. Αν υπάρχει ΗΔΗ
+# row με το νέο όνομα (π.χ. φτιαγμένο χειροκίνητα), η μετονομασία
+# ΠΑΡΑΛΕΙΠΕΤΑΙ και καταγράφεται — καμία σιωπηλή συγχώνευση.
+# Τα VIES / Παρεπιδημούντων (1→2 splits) ΔΕΝ μετονομάζονται: μένουν
+# ενεργά δίπλα στα νέα ανά-περίοδο entries μέχρι χειροκίνητη μετάβαση.
+OFFICIAL_RENAMES = [
+    ('ΦΠΑ Μηνιαίο', 'Περιοδική Φ.Π.Α. (Μήνα)'),
+    ('ΦΠΑ Τρίμηνο', 'Περιοδική Φ.Π.Α. (Τριμήνου)'),
+    ('Πλαστικές Σακούλες', 'Απόδοση Τέλους Πλαστικής Σακούλας'),
+    ('Πλαστικά Προϊόντα', 'Περιβαλλοντική εισφορά για τα πλαστικά προϊόντα'),
+    ('Φόρος Διαμονής', 'Απόδοση Τέλους Διαμονής'),
+    ('Συμφωνητικά', 'Κατάσταση Συμφωνητικών'),
+    ('Παρακρατούμενη 3%', 'Φόρος 3% Εργολάβων, Ενοικιαστών Προσόδων'),
+    ('Παρακρατούμενη 20%', 'Παρακρατούμενοι φόροι (Επαγγ. Δραστηριότητα)'),
+    ('ΑΠΔ ΕΦΚΑ', 'ΑΠΔ (Κοινών)'),
+]
+
+DEFAULT_CATALOG = [
+    # (name, code) — codes σταθερά ASCII slugs, priority = 100 + index
+    ('ΑΠΔ (Κοινών)', 'APD_KOINON'),
+    ('Intrastat Αποστολές', 'INTRASTAT_DISPATCH'),
+    ('Intrastat Αφίξεις', 'INTRASTAT_ARRIVAL'),
+    ('VIES Αποστολές', 'VIES_DISPATCH'),
+    ('VIES Αφίξεις', 'VIES_ARRIVAL'),
+    ('Απόδοση Τέλους Πλαστικής Σακούλας', 'PLASTIC_BAG_FEE_RETURN'),
+    ('Απόδοση Τέλους Διαμονής', 'STAY_FEE_RETURN'),
+    ('Παρακράτηση φόρου για μερίσματα', 'WHT_DIVIDENDS'),
+    ('Παρακράτηση φόρου για Τόκους', 'WHT_INTEREST'),
+    ('Παρακράτηση φόρου για Δικαιώματα', 'WHT_ROYALTIES'),
+    ('Παρακρατούμενοι φόροι (Επαγγ. Δραστηριότητα)', 'WHT_BUSINESS'),
+    ('Παρακρατούμενοι φόροι (Μισθωτών)', 'WHT_PAYROLL'),
+    ('Περιοδική Φ.Π.Α. (Μήνα)', 'VAT_PERIODIC_MONTH'),
+    ('Περιοδική Φ.Π.Α. (Τριμήνου)', 'VAT_PERIODIC_QUARTER'),
+    ('Φόρος 3% Εργολάβων, Ενοικιαστών Προσόδων', 'TAX3_CONTRACTORS'),
+    ('Έντυπο Ε1', 'FORM_E1'),
+    ('Έντυπο Ε2', 'FORM_E2'),
+    ('Έντυπο Ε3', 'FORM_E3'),
+    ('Έντυπο Ε2 (Ν.Π.)', 'FORM_E2_NP'),
+    ('Έντυπο Ε3 (Ν.Π.)', 'FORM_E3_NP'),
+    ('Φ.Ε.Ν.Π.', 'FENP'),
+    ('ΑΠΔ (Οικοδομοτεχνικών)', 'APD_CONSTRUCTION'),
+    ('ΑΠΔ ΤΕΚΑ', 'APD_TEKA_CATALOG'),  # υπάρχει ήδη — name-dedupe skip
+    ('ΑΠΔ ΤΕΚΑ (Οικοδομοτεχνικών)', 'APD_TEKA_CONSTRUCTION'),
+    ('Απογραφική δήλωση χρησιμοποιούμενων αδειών εργαζομένων',
+     'LEAVE_USAGE_DECL'),
+    ('Απολογιστική δήλωση αλλαγών ωραρίου και οργάνωσης χρόνου εργασίας',
+     'WORKTIME_CHANGE_DECL'),
+    ('Απολογιστική δήλωση νόμιμης υπερωριακής απασχόλησης',
+     'OVERTIME_DECL'),
+    ('Δήλωση απόδοσης τέλους ανακύκλωσης', 'RECYCLING_FEE_DECL'),
+    ('Δήλωση απόδοσης Τέλους Ανθεκτικότητας στην Κλιματική Κρίση',
+     'CLIMATE_RESILIENCE_FEE'),
+    ('Δήλωση Βραχυχρόνιων Μισθώσεων', 'SHORT_TERM_RENTALS'),
+    ('Δήλωση Έναρξης Ασφάλισης Παροχής Υπηρεσιών σε e-ΕΦΚΑ (μπλοκάκια)',
+     'EFKA_FREELANCE_START'),
+    ('Δήλωση Ενδοκοινοτικής Απόκτησης Μεταφορικού Μέσου',
+     'INTRA_EU_VEHICLE_ACQ'),
+    ('Δήλωση Μέσων Πληρωμών (POS) για Χρήστες (Επιχείρησης)',
+     'POS_MEANS_DECL'),
+    ('Δήλωση Μίσθωσης Ακινήτων', 'PROPERTY_LEASE_DECL'),
+    ('Δικαίωμα υδροληψίας', 'WATER_RIGHTS'),
+    ('Ειδικός Φόρος Πολυτελείας', 'LUXURY_TAX'),
+    ('Ειδικός Φόρος Τηλεοπτικών Διαφημίσεων', 'TV_AD_TAX'),
+    ('Εισφορά 2% Διαδικτύου', 'INTERNET_FEE_2PCT'),
+    ('Κατ’ αποκοπή καταβολή φόρου', 'LUMP_SUM_TAX'),
+    ('Καταβολή Ασφαλιστικών Εισφορών', 'SOCIAL_CONTRIB_PAYMENT'),
+    ('Κατάσταση Συμφωνητικών', 'CONTRACTS_STATEMENT'),
+    ('Παρακρατούμενοι και Προκαταβλητέοι Φόροι Δικηγόρων',
+     'LAWYERS_WHT_PREPAID'),
+    ('Παρακρατούμενοι Φόροι (Φορείς Γεν. Κυβέρνησης)', 'WHT_GOV_ENTITIES'),
+    ('Περιβαλλοντική εισφορά για τα πλαστικά προϊόντα',
+     'PLASTIC_PRODUCTS_ENV_FEE'),
+    ('Τέλος διαφήμισης', 'AD_FEE'),
+    ('Τέλος Κινητής και Καρτοκινητής Τηλεφωνίας', 'MOBILE_TELEPHONY_FEE'),
+    ('Τέλος Παρεπιδημούντων/Ακαθάριστων Εσόδων (Μήνας)',
+     'VISITORS_GROSS_MONTH'),
+    ('Τέλος Παρεπιδημούντων/Ακαθάριστων Εσόδων (Τρίμηνο)',
+     'VISITORS_GROSS_QUARTER'),
+    ('Τέλος Συνδρομητών Σταθερής Τηλεφωνίας', 'FIXED_TELEPHONY_FEE'),
+    ('Φόρος 35% Τυχερών Παιγνίων μέσω διαδικτύου', 'GAMING_TAX_35'),
+    ('Φόρος και Εισφορά Αλληλεγγύης πληρωμάτων Εμπορικού Ναυτικού',
+     'SEAMEN_TAX_SOLIDARITY'),
+    ('Ψηφιακό Τέλος Συναλλαγής', 'DIGITAL_TRANSACTION_FEE'),
+]
+
 
 class Command(BaseCommand):
     help = 'Αρχικοποίηση Υποχρεώσεων Λογιστικού'
@@ -8,14 +109,64 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write('Δημιουργία Ομάδων Υποχρεώσεων...')
         self.create_groups()
-        
+
         self.stdout.write('Δημιουργία Profiles Υποχρεώσεων...')
         self.create_profiles()
-        
+
         self.stdout.write('Δημιουργία Τύπων Υποχρεώσεων...')
         self.create_obligation_types()
-        
+
+        self.stdout.write('Μετονομασίες σε επίσημες ονομασίες...')
+        self.apply_official_renames()
+
+        self.stdout.write('Δημιουργία Default Catalog...')
+        self.create_default_catalog()
+
         self.stdout.write(self.style.SUCCESS('✅ Ολοκληρώθηκε!'))
+
+    def apply_official_renames(self):
+        """Μετονομασία επιβεβαιωμένων duplicates — μόνο το όνομα αλλάζει."""
+        for old_name, new_name in OFFICIAL_RENAMES:
+            if ObligationType.objects.filter(name=new_name).exists():
+                # Το νέο όνομα υπάρχει ήδη (μετονομασμένο ή χειροκίνητο) —
+                # αν συνυπάρχει ΚΑΙ το παλιό, θέλει ανθρώπινο έλεγχο.
+                if ObligationType.objects.filter(name=old_name).exists():
+                    self.stdout.write(self.style.WARNING(
+                        f'  ⚠ Συνυπάρχουν «{old_name}» και «{new_name}» — '
+                        'καμία αυτόματη συγχώνευση, ελέγξτε χειροκίνητα'))
+                continue
+            updated = ObligationType.objects.filter(
+                name=old_name).update(name=new_name)
+            if updated:
+                self.stdout.write(f'  ✓ «{old_name}» → «{new_name}»')
+
+    def create_default_catalog(self):
+        """
+        Ονομασίες διαθέσιμες για χειροκίνητη επιλογή — χωρίς κανόνα
+        περιοδικότητας/προθεσμίας (βλ. σχόλιο στο DEFAULT_CATALOG).
+        """
+        created_count = existing_count = 0
+        for index, (name, code) in enumerate(DEFAULT_CATALOG):
+            obj, created = ObligationType.objects.get_or_create(
+                name=name,
+                defaults={
+                    'code': code,
+                    'frequency': '',
+                    'deadline_type': '',
+                    'priority': 100 + index,
+                    'description': (
+                        'Default catalog — ορίστε περιοδικότητα/προθεσμία '
+                        'πριν την αυτόματη δημιουργία υποχρεώσεων.'
+                    ),
+                },
+            )
+            if created:
+                created_count += 1
+            else:
+                existing_count += 1
+        self.stdout.write(
+            f'  ✓ Catalog: {created_count} νέοι, '
+            f'{existing_count} υπήρχαν ήδη (ανέγγιχτοι)')
 
     def create_groups(self):
         """Δημιουργία ομάδων αλληλοαποκλεισμού"""
