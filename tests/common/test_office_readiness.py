@@ -318,3 +318,37 @@ class OfficeNginxParityTest(TestCase):
         office_size = re.search(
             r'client_max_body_size\s+(\S+);', self.office_conf)
         self.assertEqual(prod_size.group(1), office_size.group(1))
+
+
+@tag('TestCase')
+class DockerfileNonRootCollectstaticTest(TestCase):
+    """
+    Το collectstatic ΠΡΕΠΕΙ να τρέχει μετά το USER app στο app stage.
+
+    Αν τρέξει ως root, το django.setup() ψήνει root-owned tendo singleton
+    lockfiles (/tmp/-app-manage-*.lock) μέσα στο image και ΚΑΘΕ runtime
+    process του μη-root user αποτυγχάνει με PermissionError — το
+    production image δεν μπορεί να εκκινήσει καθόλου (crash loop).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        dockerfile = (BASE_DIR / 'Dockerfile').read_text(encoding='utf-8')
+        # Μόνο το app stage (μέχρι το επόμενο FROM)
+        cls.app_stage = dockerfile.split('AS app', 1)[1].split('FROM', 1)[0]
+
+    def test_collectstatic_runs_after_user_app(self):
+        user_pos = self.app_stage.find('USER app')
+        collectstatic_pos = self.app_stage.find('collectstatic')
+        self.assertGreater(user_pos, -1, msg='λείπει το USER app')
+        self.assertGreater(collectstatic_pos, -1,
+                           msg='λείπει το collectstatic')
+        self.assertGreater(
+            collectstatic_pos, user_pos,
+            msg='το collectstatic τρέχει ως root — ψήνει root-owned '
+                'tendo locks και το runtime crash-άρει ως user app',
+        )
+
+    def test_build_time_locks_are_cleaned(self):
+        self.assertIn('rm -f /tmp/*.lock', self.app_stage)

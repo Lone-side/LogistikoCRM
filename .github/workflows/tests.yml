@@ -292,6 +292,16 @@ jobs:
       - name: nginx -t (baked production config)
         run: docker run --rm logistiko-nginx-ci nginx -t
 
+      # Runtime smoke ως ο πραγματικός μη-root user του image: πιάνει
+      # defects που δεν φαίνονται στο build (π.χ. root-owned tendo locks
+      # από build-time collectstatic => PermissionError crash loop).
+      - name: App image runtime smoke (django check ως non-root)
+        run: |
+          docker run --rm \
+            -e SECRET_KEY=ci-runtime-smoke-not-a-real-secret \
+            -e DEBUG=True \
+            logistiko-app-ci python manage.py check
+
       - name: nginx -t (office TLS config με throwaway certs)
         run: |
           ./scripts/office_certs.sh ci.office.test 127.0.0.1

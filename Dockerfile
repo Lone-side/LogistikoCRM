@@ -39,13 +39,19 @@ COPY . .
 
 RUN mkdir -p logs media static backups
 
-# Collect static files (dummy env — δεν χρειάζεται βάση/secret για static)
-RUN SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput
-
 # Μη-root χρήστης: περιορίζει τη ζημιά σε περίπτωση RCE/container escape
 RUN useradd --create-home --shell /usr/sbin/nologin app \
     && chown -R app:app /app
 USER app
+
+# Collect static files (dummy env — δεν χρειάζεται βάση/secret για static).
+# ΠΡΕΠΕΙ να τρέχει ΜΕΤΑ το USER app: το django.setup() δημιουργεί tendo
+# singleton lockfiles στο /tmp (Massmail/Reminder/MonthlySnapshotSaving)
+# — αν τρέξει ως root, ψήνονται root-owned μέσα στο image και ΚΑΘΕ
+# runtime process του μη-root user σκάει με PermissionError (crash loop).
+# Το rm καθαρίζει τα build-time locks ώστε να μη μείνουν στο image.
+RUN SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput \
+    && rm -f /tmp/*.lock
 
 EXPOSE 8000
 
