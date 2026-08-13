@@ -141,7 +141,7 @@ class CreateClientDocumentTest(FilingServiceBase):
         self.assertEqual((doc.year, doc.month), (2026, 2))
         self.assertEqual(doc.version, 1)
         self.assertTrue(doc.is_current)
-        self.assertIn(os.path.join('2026', '02', 'vat'), doc.file.name)
+        self.assertIn('2026/02/vat', doc.file.name)
 
     def test_versioning_same_combo(self):
         doc1 = self._upload(category='vat', year=2026, month=2)
