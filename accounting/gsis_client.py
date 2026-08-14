@@ -15,6 +15,8 @@ import requests
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
 from xml.etree import ElementTree as ET
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as safe_fromstring
 from accounting.services.access import mask_pii_value
 
 logger = logging.getLogger(__name__)
@@ -162,8 +164,8 @@ class GSISClient:
             GSISError: Αν υπάρχει σφάλμα στην απάντηση
         """
         try:
-            root = ET.fromstring(xml_response)
-        except ET.ParseError as e:
+            root = safe_fromstring(xml_response)
+        except (ET.ParseError, DefusedXmlException) as e:
             logger.error(f"Failed to parse GSIS XML response: {e}")
             raise GSISError(f"Σφάλμα ανάλυσης XML: {e}")
 

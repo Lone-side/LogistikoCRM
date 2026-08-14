@@ -13,6 +13,8 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 
+from accounting.door_security import begin_door_mutation, finish_door_mutation
+
 logger = logging.getLogger(__name__)
 
 # SECURITY: Load IP from settings instead of hardcoding
@@ -71,13 +73,18 @@ def door_status(request):
         }, status=500)
 
 
-@staff_member_required
+@login_required
 @require_http_methods(["POST"])
 def open_door(request):
     """
     Toggle door - ON <-> OFF
     SECURITY: Authentication and CSRF protection enabled to prevent unauthorized door control
     """
+    audit, rejection = begin_door_mutation(request, "toggle")
+    if rejection:
+        status, message = rejection
+        return JsonResponse({"success": False, "error": message}, status=status)
+
     try:
         # TOGGLE command
         url = f"http://{TASMOTA_IP}:{TASMOTA_PORT}/cm?cmnd=Power%20TOGGLE"
@@ -91,20 +98,25 @@ def open_door(request):
 
             logger.info(f"New state: {new_state}")
 
-            return JsonResponse({
+            response_data = {
                 "success": True,
                 "new_state": new_state,
                 "message": f"Πόρτα τώρα: {new_state}"
-            })
+            }
+            finish_door_mutation(audit, "success", response_data)
+            return JsonResponse(response_data)
         else:
             logger.error(f"HTTP {response.status_code}")
-            return JsonResponse({
+            response_data = {
                 "success": False,
                 "error": f"HTTP {response.status_code}"
-            }, status=500)
+            }
+            finish_door_mutation(audit, "failed", response_data)
+            return JsonResponse(response_data, status=500)
 
     except requests.exceptions.Timeout:
         logger.error(f"Timeout toggling door at {TASMOTA_IP}")
+        finish_door_mutation(audit, "timeout", {"success": False})
         return JsonResponse({
             "success": False,
             "error": "Timeout"
@@ -112,20 +124,22 @@ def open_door(request):
 
     except requests.exceptions.ConnectionError:
         logger.error(f"Cannot connect to {TASMOTA_IP}")
+        finish_door_mutation(audit, "offline", {"success": False})
         return JsonResponse({
             "success": False,
             "error": f"Cannot connect to {TASMOTA_IP}"
         }, status=503)
 
-    except Exception as e:
-        logger.error(f"Error: {e}", exc_info=True)
+    except Exception:
+        logger.error("Unexpected legacy door toggle error")
+        finish_door_mutation(audit, "failed", {"success": False})
         return JsonResponse({
             "success": False,
             "error": "Σφάλμα επικοινωνίας με τη συσκευή"
         }, status=500)
 
 
-@staff_member_required
+@login_required
 @require_http_methods(["GET", "POST"])
 def door_control(request):
     """Unified door control endpoint - requires authentication"""
