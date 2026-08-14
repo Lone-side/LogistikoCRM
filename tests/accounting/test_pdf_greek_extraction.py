@@ -18,10 +18,11 @@ LETTER DELTA) ως «∆» (U+2206 INCREMENT — μαθηματικό σύμβο
 μελλοντική έκδοση διορθώσει το πρόβλημα, το ξεκάρφωμα θα περάσει καθαρά.
 """
 import io
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from accounting.services.text_extraction import extract_text_from_file
+from accounting.services.text_extraction import MAX_TEXT_CHARS, extract_text_from_file
 
 # Το «Δ» εμφανίζεται δύο φορές — μία σε κάθε λέξη-κλειδί
 GREEK_SAMPLE = 'ΜΟΝΑΔΙΚΗΛΕΞΗ ΞΕΝΟΔΟΧΕΙΟ ΑΚΡΟΠΟΛΙΣ'
@@ -79,6 +80,54 @@ class GreekPdfExtractionTest(SimpleTestCase):
             f'Λείπει τελείως το ελληνικό «Δ» (U+0394) από το εξαγόμενο '
             f'κείμενο. pypdf: {self._pypdf_version()}\n  βρέθηκε: {text!r}'
         )
+
+    def test_delta_variants_normalize_at_pdf_extraction_boundary(self):
+        """Both parser variants are stored as searchable Greek capital delta."""
+        for parser_text in (f'{DELTA}ΗΛΩΣΗ', f'{INCREMENT}ΗΛΩΣΗ'):
+            with self.subTest(parser_text=parser_text), patch(
+                'pypdf.PdfReader'
+            ) as reader:
+                page = MagicMock()
+                page.extract_text.return_value = parser_text
+                reader.return_value.pages = [page]
+
+                text, status = extract_text_from_file(
+                    io.BytesIO(b'%PDF-1.4'), 'greek.pdf'
+                )
+
+                self.assertEqual(status, 'done')
+                self.assertEqual(text, f'{DELTA}ΗΛΩΣΗ')
+                self.assertNotIn(INCREMENT, text)
+
+    def test_legitimate_mathematical_increment_is_preserved(self):
+        with patch('pypdf.PdfReader') as reader:
+            page = MagicMock()
+            page.extract_text.return_value = f'{INCREMENT}ΗΛΩΣΗ | 5 {INCREMENT} 3 | {INCREMENT}x'
+            reader.return_value.pages = [page]
+
+            text, status = extract_text_from_file(
+                io.BytesIO(b'%PDF-1.4'), 'mixed-content.pdf'
+            )
+
+        self.assertEqual(status, 'done')
+        self.assertEqual(text, f'{DELTA}ΗΛΩΣΗ | 5 {INCREMENT} 3 | {INCREMENT}x')
+
+    def test_page_is_bounded_before_normalization_allocation(self):
+        with patch('pypdf.PdfReader') as reader, patch(
+            'accounting.services.text_extraction._normalize_pdf_text',
+            side_effect=lambda text: text,
+        ) as normalize:
+            page = MagicMock()
+            page.extract_text.return_value = 'Α' * (MAX_TEXT_CHARS * 2)
+            reader.return_value.pages = [page]
+
+            text, status = extract_text_from_file(
+                io.BytesIO(b'%PDF-1.4'), 'oversized-page.pdf'
+            )
+
+        self.assertEqual(status, 'done')
+        self.assertEqual(len(text), MAX_TEXT_CHARS)
+        self.assertEqual(len(normalize.call_args.args[0]), MAX_TEXT_CHARS)
 
     def test_no_unexpected_non_greek_symbols(self):
         """
