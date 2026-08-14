@@ -78,19 +78,22 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     return items;
   }, [searchData]);
 
-  // Focus input when modal opens
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
     if (isOpen) {
       setQuery('');
       setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }
+
+  // Focus input when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
-
-  // Reset selection when results change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [flatResults.length]);
 
   // Scroll selected item into view
   useEffect(() => {
@@ -150,7 +153,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     if (!extra?.status) return null;
 
     let colorClass = 'bg-slate-100 text-slate-700';
-    let statusText = extra.status_display || extra.status;
+    const statusText = extra.status_display || extra.status;
 
     if (item.type === 'obligation') {
       colorClass = OBLIGATION_STATUS_COLORS[extra.status] || colorClass;
@@ -253,7 +256,10 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSelectedIndex(0);
+            }}
             placeholder="Αναζήτηση πελατών, υποχρεώσεων, tickets, κλήσεων..."
             className="flex-1 text-lg outline-none placeholder-slate-400"
           />

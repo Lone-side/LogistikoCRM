@@ -15,6 +15,7 @@ import {
 import { Button } from './Button';
 import { mydataApi, clientsApi } from '../api/client';
 import { MONTH_NAMES as MONTHS, QUARTERS } from '../constants';
+import { periodForType } from '../utils/lintBehavior';
 
 // Types
 interface Client {
@@ -93,13 +94,7 @@ export default function VATPeriodCalculator() {
 
   // Adjust period when period type changes
   useEffect(() => {
-    if (periodType === 'quarterly') {
-      // Convert month to quarter
-      setPeriod(Math.ceil(period / 3));
-    } else {
-      // Keep valid month (1-12)
-      if (period > 12) setPeriod(12);
-    }
+    setPeriod((current) => periodForType(current, periodType));
   }, [periodType]);
 
   // Calculate VAT for selected period

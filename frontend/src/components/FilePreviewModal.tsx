@@ -3,7 +3,7 @@
  * Modal for previewing PDF files and images
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Download, ExternalLink, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { Modal } from './Modal';
 
@@ -24,6 +24,13 @@ export function FilePreviewModal({
 }: FilePreviewModalProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previousPreview, setPreviousPreview] = useState({ isOpen, fileUrl });
+
+  if (previousPreview.isOpen !== isOpen || previousPreview.fileUrl !== fileUrl) {
+    setPreviousPreview({ isOpen, fileUrl });
+    setIsLoading(true);
+    setError(null);
+  }
 
   // Determine file type from extension if not provided
   const getFileType = (): 'pdf' | 'image' | 'unknown' => {
@@ -35,13 +42,6 @@ export function FilePreviewModal({
 
   const previewType = getFileType();
   const canPreview = previewType !== 'unknown' && fileUrl;
-
-  useEffect(() => {
-    if (isOpen) {
-      setIsLoading(true);
-      setError(null);
-    }
-  }, [isOpen, fileUrl]);
 
   const handleLoad = () => {
     setIsLoading(false);

@@ -1,30 +1,12 @@
-import { useState, useEffect, createContext, useContext, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { X, CheckCircle, AlertCircle, Info, PhoneMissed } from 'lucide-react';
-
-// Toast types
-export type ToastType = 'success' | 'error' | 'info' | 'missed-call';
-
-interface Toast {
-  id: string;
-  type: ToastType;
-  title: string;
-  message?: string;
-  duration?: number;
-}
-
-interface ToastContextType {
-  addToast: (toast: Omit<Toast, 'id'>) => void;
-  removeToast: (id: string) => void;
-  showToast: (type: ToastType, title: string, message?: string) => void;
-}
-
-const ToastContext = createContext<ToastContextType | null>(null);
+import { ToastContext, type ToastMessage, type ToastType } from '../hooks/useToast';
 
 // Toast Provider Component
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
+  const addToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     setToasts((prev) => [...prev, { ...toast, id }]);
   }, []);
@@ -55,17 +37,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Hook to use toast
-export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
-  return context;
-}
-
 // Individual Toast Item
-function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
+function ToastItem({ toast, onClose }: { toast: ToastMessage; onClose: () => void }) {
   useEffect(() => {
     const duration = toast.duration || 5000;
     const timer = setTimeout(onClose, duration);
@@ -106,31 +79,6 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       </button>
     </div>
   );
-}
-
-// Add CSS animation (add to tailwind config or global CSS)
-const styles = `
-@keyframes slide-in {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.animate-slide-in {
-  animation: slide-in 0.3s ease-out;
-}
-`;
-
-// Inject styles
-if (typeof document !== 'undefined') {
-  const styleSheet = document.createElement('style');
-  styleSheet.textContent = styles;
-  document.head.appendChild(styleSheet);
 }
 
 export default ToastProvider;

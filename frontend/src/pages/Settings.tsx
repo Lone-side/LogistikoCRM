@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components';
 import { PageHeader } from '../components/ui';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { useAuthStore } from '../stores/authStore';
 import { gsisApi, authApi } from '../api/client';
 import apiClient from '../api/client';
@@ -169,7 +169,7 @@ export default function Settings() {
       setGsisPassword('');
       await loadGsisStatus();
       setTimeout(() => setShowGsisModal(false), 1500);
-    } catch (error) {
+    } catch {
       setGsisMessage({ type: 'error', text: 'Αποτυχία αποθήκευσης ρυθμίσεων' });
     } finally {
       setGsisLoading(false);
@@ -187,7 +187,7 @@ export default function Settings() {
       } else {
         setGsisMessage({ type: 'error', text: result.message });
       }
-    } catch (error) {
+    } catch {
       setGsisMessage({ type: 'error', text: 'Αποτυχία δοκιμής σύνδεσης' });
     } finally {
       setGsisTesting(false);

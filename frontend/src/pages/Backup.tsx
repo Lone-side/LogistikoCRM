@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Database,
   Download,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components';
 import { PageHeader } from '../components/ui';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { backupApi, type BackupItem, type BackupSettings } from '../api/client';
 
 export default function Backup() {
@@ -54,11 +54,7 @@ export default function Backup() {
   });
 
   // Load data
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [backupList, backupSettings] = await Promise.all([
@@ -78,7 +74,11 @@ export default function Backup() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Create backup
   const handleCreateBackup = async () => {

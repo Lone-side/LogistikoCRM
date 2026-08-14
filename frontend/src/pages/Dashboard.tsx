@@ -54,8 +54,8 @@ function AnimatedNumber({ value }: { value: number }) {
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setDisplay(value);
-      return;
+      frameRef.current = requestAnimationFrame(() => setDisplay(value));
+      return () => cancelAnimationFrame(frameRef.current);
     }
     const duration = 600;
     const start = performance.now();

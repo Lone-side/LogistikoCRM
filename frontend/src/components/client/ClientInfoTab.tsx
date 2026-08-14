@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   User,
@@ -67,14 +67,15 @@ export default function ClientInfoTab({
   const verifyMyDataMutation = useVerifyMyDataCredentials(clientId);
   const syncMyDataMutation = useSyncMyDataVAT(clientId);
 
-  // Initialize form when credentials load
-  useEffect(() => {
+  const [previousMyDataCreds, setPreviousMyDataCreds] = useState<typeof myDataCreds>(undefined);
+  if (previousMyDataCreds !== myDataCreds) {
+    setPreviousMyDataCreds(myDataCreds);
     if (myDataCreds) {
       setMyDataUserId(myDataCreds.user_id || '');
       setMyDataSubscriptionKey(myDataCreds.subscription_key || '');
       setMyDataIsSandbox(myDataCreds.is_sandbox ?? true);
     }
-  }, [myDataCreds]);
+  }
 
   const handleSaveMyDataCredentials = () => {
     saveMyDataMutation.mutate({
