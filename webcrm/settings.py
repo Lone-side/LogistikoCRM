@@ -446,6 +446,27 @@ PROJECT_SITE = "www.dpeconsolutions.com"
 
 
 TESTING = sys.argv[1:2] == ['test']
+# Legacy upstream components start daemon threads from AppConfig.ready(), so
+# they run in web, Celery, migrations and management commands. Production is
+# fail-safe: Celery is the only scheduler unless explicitly overridden.
+#
+# Resolution (fail-safe + backward compatible):
+#   * An explicit LEGACY_APP_THREADS_ENABLED env value always wins.
+#   * Otherwise the *final* environment decides: development => threads ON
+#     (backward compatible with existing development behaviour), production
+#     => threads OFF (single Celery scheduler). The final environment is
+#     chosen by webcrm.settings_local._resolve_environment(), which calls
+#     _resolve_legacy_threads_enabled() below after import so the flag never
+#     lags behind DEBUG.
+_LEGACY_ENV_RAW = os.environ.get('LEGACY_APP_THREADS_ENABLED')
+if _LEGACY_ENV_RAW is not None:
+    LEGACY_APP_THREADS_ENABLED = _LEGACY_ENV_RAW.strip().lower() in ('true', '1', 'yes')
+else:
+    LEGACY_APP_THREADS_ENABLED = None  # resolved by settings_local
+
+    def _resolve_legacy_threads_enabled():
+        from webcrm.settings_local import ENVIRONMENT
+        return ENVIRONMENT == 'development'
 if TESTING:
     SECURE_SSL_REDIRECT = False
     LANGUAGE_CODE = 'en'

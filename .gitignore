@@ -142,6 +142,13 @@ crm_db.backup
 backups/
 
 # Local files
+# Root environment files may contain database passwords, API tokens and
+# encryption keys. Ignore every local variant, but keep audited templates.
+/.env
+/.env.*
+!/.env.example
+!/.env.production.example
+!/.env.office.example
 *.bat
 !setup_dev.bat
 !LogistikoCRM.bat

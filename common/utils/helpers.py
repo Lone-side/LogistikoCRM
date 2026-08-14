@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.core.handlers.wsgi import WSGIRequest
+from django.core.mail import EmailMessage
 from django.core.mail import mail_admins
 from django.db.models import Exists
 from django.db.models import OuterRef
@@ -227,7 +228,34 @@ def send_crm_email(
     """Helps to send CRM notification emails."""
 
     app_config = apps.get_app_config('common')
-    app_config.nes.send_msg(subject, body, to)
+    sender = getattr(app_config, 'nes', None)
+    if sender is not None:
+        sender.send_msg(subject, body, to)
+        return
+
+    # Production disables the legacy queue thread. Preserve notification
+    # delivery through Django's configured backend without hidden background
+    # execution; application-level scheduled sends remain Celery tasks.
+    # A slow SMTP server must not occupy a Gunicorn/Celery worker indefinitely,
+    # and a transient failure must not crash the request that triggered the
+    # notification. Delivery is best-effort: log and continue.
+    import logging
+    from django.core.mail import get_connection
+    email_timeout = getattr(settings, 'EMAIL_TIMEOUT', 10)
+    msg = EmailMessage(
+        subject=subject,
+        body=body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=to,
+        reply_to=settings.CRM_REPLY_TO,
+    )
+    msg.content_subtype = 'html'
+    try:
+        connection = get_connection(timeout=email_timeout)
+        connection.send_messages([msg])
+    except Exception as exc:  # noqa: B902 - defensive, best-effort only
+        logging.getLogger('common.utils.helpers').warning(
+            'Synchronous CRM notification email failed: %s', exc)
 
 
 def set_toggle_tooltip(key: str, request: WSGIRequest, extra_context: dict) -> None:

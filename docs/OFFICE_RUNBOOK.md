@@ -216,6 +216,18 @@ docker compose -f docker-compose.prod.yml up -d
 
 ## 7. Περιοδική λειτουργία
 
+- **Legacy background threads:** η production εγκατάσταση επιβάλλει
+  `LEGACY_APP_THREADS_ENABLED=False`. Reminders υποχρεώσεων, scheduled emails,
+  retries, backups και housekeeping εκτελούνται από Celery beat. Τα upstream
+  generic CRM reminders (`common.Reminder`), rates loader, analytics monthly
+  snapshot και massmail daemon μένουν απενεργοποιημένα μέχρι να αποκτήσουν
+  ελεγχόμενα Celery tasks· δεν τα ενεργοποιούμε στο πρώτο go-live. Τα άμεσα
+  CRM notification emails διατηρούνται μέσω synchronous Django email fallback
+  (χωρίς κρυφό daemon thread) με `EMAIL_TIMEOUT` (default 10s) και
+  fail-silent logging — δεν μπλοκάρουν ποτέ τον worker ούτε ρίχνουν το request.
+  Το manual IMAP import (`_get_emails_by_uid`) επεξεργάζεται κάθε μήνυμα
+  σύγχρονα μέσω `process_imported_email` όταν λείπει το `eml_queue` (legacy
+  threads off) — δεν σκάει με `AttributeError`.
 - **Μετά από κάθε αλλαγή** (update, .env, certs): `./scripts/office_preflight.sh`.
 - **Ενημέρωση έκδοσης**: όπως DEPLOYMENT.md §Ενημέρωση, με το πλήρες
   compose prefix (`-f docker-compose.prod.yml -f docker-compose.office.yml`).

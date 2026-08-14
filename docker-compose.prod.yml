@@ -48,6 +48,9 @@ x-django-env: &django-env
   DATA_ENCRYPTION_KEY_ID: ${DATA_ENCRYPTION_KEY_ID:-}
   ENFORCE_CLIENT_ASSIGNMENT: ${ENFORCE_CLIENT_ASSIGNMENT:-True}
   ALLOW_UNSCOPED_CLIENT_ACCESS: ${ALLOW_UNSCOPED_CLIENT_ACCESS:-False}
+  # Import-time daemon threads race migrations and duplicate across gunicorn
+  # and Celery processes. Production scheduling belongs exclusively to Celery.
+  LEGACY_APP_THREADS_ENABLED: "False"
   MYDATA_USER_ID: ${MYDATA_USER_ID:-}
   MYDATA_SUBSCRIPTION_KEY: ${MYDATA_SUBSCRIPTION_KEY:-}
   MYDATA_ISSUER_VAT: ${MYDATA_ISSUER_VAT:-}
@@ -119,9 +122,12 @@ services:
       - logs_volume:/app/logs
       - backups_volume:/app/backups
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
     command: celery -A webcrm worker -l info
 
   celery-beat:
@@ -134,9 +140,14 @@ services:
     volumes:
       - logs_volume:/app/logs
     depends_on:
-      - db
-      - redis
-      - celery
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      celery:
+        condition: service_started
     command: celery -A webcrm beat -l info
 
   nginx:
@@ -150,7 +161,8 @@ services:
       # read-only πρόσβαση στα media για το X-Accel-Redirect
       - media_volume:/var/www/media:ro
     depends_on:
-      - web
+      web:
+        condition: service_healthy
 
 volumes:
   postgres_data:

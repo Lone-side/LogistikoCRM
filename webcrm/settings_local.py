@@ -113,6 +113,16 @@ def _resolve_environment():
 
 ENVIRONMENT = _resolve_environment()
 
+# Resolve the legacy AppConfig daemon-thread flag from the *final* environment
+# so it never lags behind the DEBUG value that webcrm.settings read at import
+# time. An explicit LEGACY_APP_THREADS_ENABLED env value already won and is
+# left untouched. When unset: development => threads ON (backward compatible),
+# production => OFF (Celery is the sole scheduler).
+import webcrm.settings as _base_settings
+if _base_settings.LEGACY_APP_THREADS_ENABLED is None:
+    _base_settings.LEGACY_APP_THREADS_ENABLED = \
+        _base_settings._resolve_legacy_threads_enabled()
+
 if ENVIRONMENT == 'production':
     DEBUG = False
     # Πρόσθεσε τις IPs που χρειάζεσαι

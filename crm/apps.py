@@ -10,6 +10,9 @@ class CrmConfig(AppConfig):
     default_auto_field = 'django.db.models.AutoField'
     
     def ready(self):
+        if not settings.LEGACY_APP_THREADS_ENABLED:
+            return
+
         from crm.utils.create_email_request import CreateEmailInquiry
         from crm.utils.import_emails import ImportEmails
         #from crm.utils.manage_imaps import CrmImapManager

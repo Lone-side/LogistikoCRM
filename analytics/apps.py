@@ -11,6 +11,9 @@ class AnalyticsConfig(AppConfig):
     default_auto_field = 'django.db.models.AutoField'
     
     def ready(self):
+        if not settings.LEGACY_APP_THREADS_ENABLED:
+            return
+
         if not settings.TESTING:
             from analytics.utils.monthly_snapshot_saving import MonthlySnapshotSaving
             try:
