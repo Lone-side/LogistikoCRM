@@ -43,12 +43,12 @@ export function SendEmailModal({
   const [error, setError] = useState<string | null>(null);
 
   const { data: templates, isLoading: templatesLoading } = useEmailTemplates();
-  const previewMutation = usePreviewEmail();
+  const { mutate: previewEmail } = usePreviewEmail();
 
   // Load template preview when selected
   useEffect(() => {
     if (selectedTemplate && isOpen) {
-      previewMutation.mutate(
+      previewEmail(
         {
           templateId: selectedTemplate,
           obligationId,
@@ -64,7 +64,7 @@ export function SendEmailModal({
         }
       );
     }
-  }, [selectedTemplate, obligationId]);
+  }, [selectedTemplate, obligationId, isOpen, previewEmail]);
 
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;

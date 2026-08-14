@@ -31,8 +31,10 @@ export function useFilingSettings() {
       const response = await axios.get<FilingSystemSettings>(`${API_BASE}/filing/`);
       setSettings(response.data);
       return response.data;
-    } catch (err: any) {
-      const message = err.response?.data?.error || 'Σφάλμα φόρτωσης ρυθμίσεων';
+    } catch (err: unknown) {
+      const message = axios.isAxiosError<{ error?: string }>(err)
+        ? err.response?.data?.error || 'Σφάλμα φόρτωσης ρυθμίσεων'
+        : 'Σφάλμα φόρτωσης ρυθμίσεων';
       setError(message);
       throw err;
     } finally {
@@ -47,8 +49,10 @@ export function useFilingSettings() {
       const response = await axios.patch<FilingSystemSettings>(`${API_BASE}/filing/`, data);
       setSettings(response.data);
       return response.data;
-    } catch (err: any) {
-      const message = err.response?.data?.error || 'Σφάλμα αποθήκευσης ρυθμίσεων';
+    } catch (err: unknown) {
+      const message = axios.isAxiosError<{ error?: string }>(err)
+        ? err.response?.data?.error || 'Σφάλμα αποθήκευσης ρυθμίσεων'
+        : 'Σφάλμα αποθήκευσης ρυθμίσεων';
       setError(message);
       throw err;
     } finally {

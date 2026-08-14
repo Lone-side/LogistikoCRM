@@ -913,7 +913,7 @@ export default function FileManager() {
   const removeFavoriteMutation = useRemoveFavorite();
   const createShareLinkMutation = useCreateSharedLink();
 
-  const documents = documentsData?.results || [];
+  const documents = useMemo(() => documentsData?.results || [], [documentsData]);
   const totalCount = documentsData?.count || 0;
 
   // Handlers

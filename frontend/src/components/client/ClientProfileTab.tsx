@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   RefreshCw,
@@ -41,13 +41,14 @@ export default function ClientProfileTab({
   const [exclusionWarning, setExclusionWarning] = useState<string | null>(null);
   const [, setShowBulkAssignModal] = useState(false);
 
-  // Initialize from client profile when it loads
-  useEffect(() => {
+  const [previousClientProfile, setPreviousClientProfile] = useState<typeof clientProfile>(undefined);
+  if (previousClientProfile !== clientProfile) {
+    setPreviousClientProfile(clientProfile);
     if (clientProfile) {
       setSelectedTypeIds(new Set(clientProfile.obligation_type_ids));
       setSelectedProfileIds(new Set(clientProfile.obligation_profile_ids || []));
     }
-  }, [clientProfile]);
+  }
 
   // Toggle profile selection
   const toggleProfile = (profileId: number) => {
