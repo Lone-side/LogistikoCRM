@@ -14,6 +14,14 @@ from accounting.models import DoorAccessLog
 
 
 @override_settings(
+    # These tests assert real authorization status codes (403/405/429/503/502).
+    # Under DJANGO_ENV=production the production settings set
+    # SECURE_SSL_REDIRECT=True, which turns every plain-http request into a 301
+    # redirect that *masks* the real authorization response. SSL-redirect
+    # behavior is covered separately by test_final_hardening.py; here we disable
+    # the redirect so the door permission/throttle/audit logic is exercised
+    # directly regardless of the runtime environment.
+    SECURE_SSL_REDIRECT=False,
     CACHES={
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
