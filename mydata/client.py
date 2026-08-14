@@ -20,6 +20,9 @@ import logging
 import time
 import functools
 
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as safe_fromstring
+
 logger = logging.getLogger(__name__)
 
 
@@ -535,19 +538,19 @@ class MyDataClient:
         if response.strip().startswith('<string'):
             try:
                 # Parse the wrapper
-                wrapper_root = ET.fromstring(response)
+                wrapper_root = safe_fromstring(response)
                 # Get the text content (HTML-encoded XML)
                 inner_xml = wrapper_root.text
                 if inner_xml:
                     # Decode HTML entities (&lt; -> <, &gt; -> >, etc.)
                     response = html.unescape(inner_xml)
                     logger.debug("Decoded WCF-wrapped response")
-            except ET.ParseError:
+            except (ET.ParseError, DefusedXmlException):
                 pass  # Fall through to normal parsing
 
         try:
-            root = ET.fromstring(response)
-        except ET.ParseError as e:
+            root = safe_fromstring(response)
+        except (ET.ParseError, DefusedXmlException) as e:
             # Μη αναγνώσιμη απάντηση ≠ κενή περίοδος — αν επιστρέφαμε [] εδώ,
             # το sync θα καταγραφόταν ως επιτυχία με 0 εγγραφές
             logger.error(f"XML Parse Error in VatInfo response: {e}")
@@ -852,8 +855,8 @@ class MyDataClient:
             return records, pagination
 
         try:
-            root = ET.fromstring(response)
-        except ET.ParseError as e:
+            root = safe_fromstring(response)
+        except (ET.ParseError, DefusedXmlException) as e:
             logger.error(f"XML Parse Error in {response_type} response: {e}")
             return records, pagination
 
@@ -1017,7 +1020,7 @@ class MyDataClient:
             ns = {'ns': 'http://www.aade.gr/myDATA/invoice/v1.0'}
 
             try:
-                root = ET.fromstring(response)
+                root = safe_fromstring(response)
 
                 for inv_elem in root.findall('.//ns:invoice', ns):
                     issuer = inv_elem.find('.//ns:issuer', ns)
@@ -1064,7 +1067,7 @@ class MyDataClient:
                         'details': []
                     })
 
-            except ET.ParseError as e:
+            except (ET.ParseError, DefusedXmlException) as e:
                 logger.error(f"XML Parse Error: {e}")
                 return []
 

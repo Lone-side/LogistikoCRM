@@ -287,7 +287,7 @@ class InvoiceAdmin(admin.ModelAdmin):
     def view_mydata_detail(self, request, invoice_id):
         """View full myDATA invoice details"""
         from django.template.response import TemplateResponse
-        import xml.etree.ElementTree as ET
+        from defusedxml import ElementTree as ET
         
         invoice = Invoice.objects.get(pk=invoice_id)
         

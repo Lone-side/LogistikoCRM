@@ -32,6 +32,7 @@ tendo>=0.3.0  # Singleton instance control
 openpyxl>=3.1.2  # Excel export/import
 Pillow>=10.1.0  # Image processing
 python-magic>=0.4.27  # File type validation (SECURITY)
+defusedxml==0.7.1  # Safe parsing of untrusted GSIS/myDATA XML
 # ⚠️ ΚΑΡΦΩΜΕΝΕΣ ΕΚΔΟΣΕΙΣ — ΜΗΝ ΤΙΣ ΧΑΛΑΡΩΣΕΙΣ ΧΩΡΙΣ ΕΛΕΓΧΟ ΕΛΛΗΝΙΚΩΝ.
 # Το 6.15.0 διορθώνει advisories του 6.14.2, αλλά μπορεί να εξάγει το ελληνικό
 # «Δ» ως U+2206. Κανονικοποιείται στο extraction boundary· regression test:

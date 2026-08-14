@@ -20,6 +20,9 @@ from collections import OrderedDict
 from decimal import Decimal
 from typing import Dict, List
 
+from defusedxml.common import DefusedXmlException
+from defusedxml.ElementTree import fromstring as safe_fromstring
+
 INVOICE_NS = 'http://www.aade.gr/myDATA/invoice/v1.0'
 ICLS_NS = 'https://www.aade.gr/myDATA/incomeClassificaton/v1.0'
 
@@ -220,8 +223,8 @@ def _unwrap_wcf_string(xml_text: str) -> str:
     stripped = xml_text.lstrip()
     if stripped.startswith('<string'):
         try:
-            wrapper = ET.fromstring(stripped)
-        except ET.ParseError:
+            wrapper = safe_fromstring(stripped)
+        except (ET.ParseError, DefusedXmlException):
             return xml_text
         if wrapper.text and wrapper.text.strip():
             return html.unescape(wrapper.text)
@@ -248,8 +251,8 @@ def parse_response_doc(xml_text: str) -> List[Dict]:
         raise ValueError('Κενή απάντηση από το myDATA')
     xml_text = _unwrap_wcf_string(xml_text)
     try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as exc:
+        root = safe_fromstring(xml_text)
+    except (ET.ParseError, DefusedXmlException) as exc:
         raise ValueError(f'Μη αναγνώσιμη απάντηση myDATA: {exc}') from exc
 
     results = []
