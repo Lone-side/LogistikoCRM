@@ -137,6 +137,12 @@ $COMPOSE exec web python manage.py setup_obligations
 Εκτελέστε με τη σειρά· κάθε βήμα έχει αναμενόμενο αποτέλεσμα. Στο τέλος
 όλα πρέπει να είναι ✅ πριν μπουν πραγματικά δεδομένα.
 
+Για το ελεγχόμενο πρώτο go-live της 17/08/2026 χρησιμοποιήστε επιπλέον το
+[`GO_LIVE_2026-08-17.md`](GO_LIVE_2026-08-17.md), το οποίο απαιτεί
+καταγεγραμμένα αποδεικτικά για CI, off-host backup, isolated restore,
+migration freeze, smoke tests και rollback. Οποιοδήποτε κενό P0 gate είναι
+NO-GO.
+
 Ορίστε πρώτα: `COMPOSE="docker compose -f docker-compose.prod.yml -f docker-compose.office.yml"`
 
 | # | Δοκιμή | Εντολή / ενέργεια | Αναμενόμενο |
