@@ -11,10 +11,15 @@ probe. Το endpoint παραμένει admin-only.
 """
 from unittest.mock import patch
 
-from django.test import TestCase, tag
+from django.test import SimpleTestCase, TestCase, tag
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from common.api_health import health_check_detailed
+from common.api_health import (
+    health_check,
+    health_check_detailed,
+    health_live,
+    health_ready,
+)
 from common.utils.helpers import USER_MODEL
 
 HEALTHY = {'status': 'healthy'}
@@ -37,6 +42,13 @@ def mock_components(db=HEALTHY, cache=HEALTHY, celery=HEALTHY, disk=HEALTHY):
         check_celery=lambda: celery,
         check_disk_space=lambda: disk,
     )
+
+
+class HealthProbeThrottleTest(SimpleTestCase):
+    def test_machine_health_probes_are_not_user_throttled(self):
+        for view in (health_check, health_ready, health_live):
+            with self.subTest(view=view.__name__):
+                self.assertEqual(view.cls.throttle_classes, [])
 
 
 @tag('TestCase')

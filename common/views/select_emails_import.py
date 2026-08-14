@@ -23,6 +23,7 @@ from crm.models import Request
 from crm.utils.helpers import get_crmimap
 from crm.utils.import_emails import get_email_headers_page
 from crm.utils.import_emails import parse_message_bytes
+from crm.utils.restore_imap_emails import process_imported_email
 from crm.site.crmadminsite import crm_site
 from massmail.models import EmailAccount
 from common.utils.email_account_access import get_accessible_email_account_or_404
@@ -163,7 +164,7 @@ def emails_import(data: dict, request: WSGIRequest,
             sleep(0.7)
 
     return HttpResponseRedirect(url)
-    
+
 
 def select_ea_view(eas: QuerySet, next_url: str, ticket: str,
                    deal_id, request_id) -> HttpResponseRedirect:
@@ -197,7 +198,15 @@ def _get_emails_by_uid(request: WSGIRequest, ea: EmailAccount, t: str, uids: lis
                         b_msg = parse_message_bytes(uid, data)
                     if b_msg:
                         crm_conf = apps.get_app_config('crm')
-                        crm_conf.eml_queue.put((b_msg, ea, t, uid, ticket, request))
+                        if getattr(crm_conf, 'eml_queue', None) is not None:
+                            # Legacy consumer thread path (legacy threads on).
+                            crm_conf.eml_queue.put(
+                                (b_msg, ea, t, uid, ticket, request))
+                        else:
+                            # Production fail-safe: process synchronously so a
+                            # manual import never crashes on a missing queue.
+                            process_imported_email(
+                                (b_msg, ea, t, uid, ticket, request))
                 if result != 'OK' or not data[0] or err:
                     mail_admins(
                         f"The result is {result} at get_emails_by_uid",

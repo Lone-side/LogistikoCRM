@@ -34,6 +34,7 @@ from crm.utils.helpers import get_email_date
 from crm.utils.helpers import get_uid_data
 from crm.utils.ticketproc import get_ticket
 from crm.utils.send_email import EMAIL_SENT_TO_str
+from crm.utils.create_email_request import create_email_request
 from massmail.models import EmailAccount
 
 EXCEPT_SUBJECT = 'RestoreImapEmails Exception'
@@ -41,6 +42,13 @@ received_email_from_str = _('Received an email from "%s"')
 
 
 class RestoreImapEmails(threading.Thread):
+    """Legacy consumer thread.
+
+    Only started from ``CrmConfig.ready()`` when legacy app threads are
+    enabled. When they are disabled (production fail-safe policy), the same
+    per-email processing is performed synchronously by
+    :func:`process_imported_email` so manual IMAP import keeps working.
+    """
 
     def __init__(self, eml_queue, inq_eml_queue):
         threading.Thread.__init__(self)
@@ -50,134 +58,144 @@ class RestoreImapEmails(threading.Thread):
 
     def run(self):
         while True:
-            raw_content = ea = t = uid = ''
+            item, ea, t, uid, ticket, request = self.eml_queue.get()
             try:
-                item, ea, t, uid, ticket, request = self.eml_queue.get()
-                email_message = email.message_from_bytes(
-                    item, policy=email.policy.default)
-                uid_data = get_uid_data(ea)
-                if received_from_crm(email_message):
-                    if request:
-                        messages.error(
-                            request,
-                            "ERROR: Trying to import an email sent from CRM!"
-                        )
-                        request = None
-                    else:
-                        if int(uid) > getattr(ea, uid_data[t]['start_uid']):
-                            update_ea(ea, uid_data, t, uid)
-                    connection.close()
-                    self.eml_queue.task_done()
-                    continue
-
-                subj = ensure_decoding(email_message['Subject'])
-                richest = email_message.get_body(   # NOQA
-                    preferencelist=('plain', 'html', 'related'))
-                if richest is None:
-                    if email_message.is_multipart():
-                        raw_content, is_html, e = '', False, ''
-                    else:
-                        raise RuntimeError("Unknown content")
-                else:
-                    raw_content, is_html, e = get_raw_content(
-                        richest, ea, t, uid, subj)
-                if e:
-                    self.eml_queue.task_done()
-                    continue
-                if t != 'inquiry':
-                    ticket = ticket or get_ticket((subj, raw_content))
-                    if not ticket:
-                        update_ea(ea, uid_data, t, uid)
-                        connection.close()
-                        self.eml_queue.task_done()
-                        continue
-                    crm_eml = CrmEmail(
-                        ticket=ticket,
-                        incoming=uid_data[t]['incoming'],
-                        sent=uid_data[t]['sent']
-                    )
-                    update_with_deal_and_request(crm_eml, ticket)
-                else:
-                    crm_eml = CrmEmail(inquiry=True, incoming=True)
-
-                crm_eml.creation_date = get_email_date(email_message)
-                crm_eml.content = html2txt(
-                    raw_content) if is_html else delete3enters(raw_content)
-                crm_eml.to = email_message['To']
-                crm_eml.cc = email_message['CC']
-                crm_eml.bcc = email_message['BCC']
-                crm_eml.subject = truncatechars(subj, 220)   # 250 - 30
-                crm_eml.from_field = parseaddr(email_message['From'])[1]
-                crm_eml.uid = int(uid)
-                crm_eml.imap_host = ea.imap_host
-                crm_eml.email_host_user = ea.email_host_user
-                crm_eml.owner = ea.owner
-                crm_eml.department = ea.department
-                crm_eml.is_html = False
-                if email_message['Message-ID'] is not None:
-                    crm_eml.message_id = email_message['Message-ID']
-                if eml_already_exists(email_message, uid):
-                    continue
-                try:
-                    self.crm_eml_save(crm_eml, t, uid_data, uid, ea, email_message)
-                    self.eml_queue.task_done()
-                except IntegrityError as e:
-                    raise e
-                except Exception as e:
-                    if f'{e}'.count('Incorrect string value:'):
-                        if f'{e}'.count('content'):
-                            crm_eml.content = '--- ERROR importing content of the email ---'
-                        elif f'{e}'.count('subject'):
-                            crm_eml.subject = '--- ERROR importing content of the email ---'
-                        self.crm_eml_save(crm_eml, t, uid_data, uid, ea, email_message)
-                    raise e
-
-            except Exception as e:
-                mail_admins(
-                    EXCEPT_SUBJECT,
-                    f"""
-                    \nEmail account: {ea}
-                    \nEmail account: {ea.owner}
-                    \nException: {e}
-                    \nType: {t}
-                    \nUID: {uid}
-                    \nraw_content: {raw_content}
-                    """,
-                    fail_silently=True,
-                )
+                process_imported_email(item, ea, t, uid, ticket, request)
+            finally:
                 self.eml_queue.task_done()
 
+
+def process_imported_email(item, ea, t: str, uid, ticket=None, request=None) -> None:
+    """Process one fetched IMAP message into a CrmEmail.
+
+    Shared by the legacy consumer thread and the synchronous manual-import
+    path (when ``eml_queue`` is absent). Safe to call from a request: never
+    blocks on a queue and never raises past the caller on a recoverable
+    failure — errors are reported to admins instead of crashing the request.
+    """
+    raw_content = None
+    try:
+        email_message = email.message_from_bytes(
+            item, policy=email.policy.default)
+        uid_data = get_uid_data(ea)
+        if received_from_crm(email_message):
+            if request:
+                messages.error(
+                    request,
+                    "ERROR: Trying to import an email sent from CRM!"
+                )
+                request = None
+            else:
+                if int(uid) > getattr(ea, uid_data[t]['start_uid']):
+                    update_ea(ea, uid_data, t, uid)
             connection.close()
+            return
 
-    def crm_eml_save(self, crm_eml: CrmEmail, t: str, uid_data: dict, uid: str,
-                     ea: EmailAccount, email_message: email.message.Message) -> None:
-        with transaction.atomic():
-            crm_eml.save()
-            if t != 'inquiry':
+        subj = ensure_decoding(email_message['Subject'])
+        richest = email_message.get_body(   # NOQA
+            preferencelist=('plain', 'html', 'related'))
+        if richest is None:
+            if email_message.is_multipart():
+                raw_content, is_html, e = '', False, ''
+            else:
+                raise RuntimeError("Unknown content")
+        else:
+            raw_content, is_html, e = get_raw_content(
+                richest, ea, t, uid, subj)
+        if e:
+            return
+        if t != 'inquiry':
+            ticket = ticket or get_ticket((subj, raw_content))
+            if not ticket:
                 update_ea(ea, uid_data, t, uid)
-        attach_files(email_message, crm_eml)
-        if t == 'inquiry':
-            self.inq_eml_queue.put((crm_eml, email_message['From'], ea))
-        if crm_eml.ticket:
-            f_date = get_formatted_short_date()
-            if t in ('incoming', 'inquiry'):
-                from_name = get_counterparty_name(crm_eml)
-                msg = get_trans_for_user(
-                    received_email_from_str, crm_eml.owner)
-                formated_msg = msg % from_name
-                if t == 'incoming':
-                    _notify_user(crm_eml, formated_msg)
-
-            elif t == 'sent':
-                to_name = get_counterparty_name(crm_eml)
-                msg = get_trans_for_user(
-                    EMAIL_SENT_TO_str, crm_eml.owner)
-                formated_msg = msg % to_name
-
-            msg_str = f"{f_date} - {formated_msg}\n"
-            Deal.objects.filter(ticket=crm_eml.ticket).update(
-                workflow=Concat(Value(msg_str), F('workflow'),  output_field=TextField())
+                connection.close()
+                return
+            crm_eml = CrmEmail(
+                ticket=ticket,
+                incoming=uid_data[t]['incoming'],
+                sent=uid_data[t]['sent']
             )
+            update_with_deal_and_request(crm_eml, ticket)
+        else:
+            crm_eml = CrmEmail(inquiry=True, incoming=True)
+
+        crm_eml.creation_date = get_email_date(email_message)
+        crm_eml.content = html2txt(
+            raw_content) if is_html else delete3enters(raw_content)
+        crm_eml.to = email_message['To']
+        crm_eml.cc = email_message['CC']
+        crm_eml.bcc = email_message['BCC']
+        crm_eml.subject = truncatechars(subj, 220)   # 250 - 30
+        crm_eml.from_field = parseaddr(email_message['From'])[1]
+        crm_eml.uid = int(uid)
+        crm_eml.imap_host = ea.imap_host
+        crm_eml.email_host_user = ea.email_host_user
+        crm_eml.owner = ea.owner
+        crm_eml.department = ea.department
+        crm_eml.is_html = False
+        if email_message['Message-ID'] is not None:
+            crm_eml.message_id = email_message['Message-ID']
+        if eml_already_exists(email_message, uid):
+            return
+        try:
+            crm_eml_save(crm_eml, t, uid_data, uid, ea, email_message)
+        except IntegrityError:
+            raise
+        except Exception as e:
+            if f'{e}'.count('Incorrect string value:'):
+                if f'{e}'.count('content'):
+                    crm_eml.content = '--- ERROR importing content of the email ---'
+                elif f'{e}'.count('subject'):
+                    crm_eml.subject = '--- ERROR importing content of the email ---'
+                crm_eml_save(crm_eml, t, uid_data, uid, ea, email_message)
+            raise e
+
+    except Exception as e:
+        mail_admins(
+            EXCEPT_SUBJECT,
+            f"""
+            \nEmail account: {ea}
+            \nEmail account: {ea.owner}
+            \nException: {e}
+            \nType: {t}
+            \nUID: {uid}
+            \nraw_content: {raw_content}
+            """,
+            fail_silently=True,
+        )
+    finally:
+        connection.close()
+
+
+def crm_eml_save(crm_eml: CrmEmail, t: str, uid_data: dict, uid: str,
+                 ea: EmailAccount, email_message: email.message.Message) -> None:
+    with transaction.atomic():
+        crm_eml.save()
+        if t != 'inquiry':
+            update_ea(ea, uid_data, t, uid)
+    attach_files(email_message, crm_eml)
+    if t == 'inquiry':
+        create_email_request(crm_eml, email_message['From'], ea)
+    if crm_eml.ticket:
+        f_date = get_formatted_short_date()
+        if t in ('incoming', 'inquiry'):
+            from_name = get_counterparty_name(crm_eml)
+            msg = get_trans_for_user(
+                received_email_from_str, crm_eml.owner)
+            formated_msg = msg % from_name
+            if t == 'incoming':
+                _notify_user(crm_eml, formated_msg)
+
+        elif t == 'sent':
+            to_name = get_counterparty_name(crm_eml)
+            msg = get_trans_for_user(
+                EMAIL_SENT_TO_str, crm_eml.owner)
+            formated_msg = msg % to_name
+
+        msg_str = f"{f_date} - {formated_msg}\n"
+        Deal.objects.filter(ticket=crm_eml.ticket).update(
+            workflow=Concat(Value(msg_str), F('workflow'),  output_field=TextField())
+        )
 
 
 def _notify_user(crm_eml: CrmEmail, msg: str) -> None:
@@ -273,7 +291,7 @@ def eml_already_exists(email_message, uid) -> bool:
     if email_message['Message-ID']:
         return CrmEmail.objects.filter(
             message_id=email_message['Message-ID']).exists()
-    
+
     if email_message['Date'] or email_message['Delivery-date']:
         return CrmEmail.objects.filter(
             uid=int(uid),
@@ -283,12 +301,12 @@ def eml_already_exists(email_message, uid) -> bool:
     return CrmEmail.objects.filter(
         uid=int(uid),
         subject=ensure_decoding(email_message['Subject']),
-    ).exists()   
+    ).exists()
 
 
 def update_with_deal_and_request(crm_eml: CrmEmail, ticket: str) -> None:
     """
-    Gets a deal or request using a ticket and sets fk on it. 
+    Gets a deal or request using a ticket and sets fk on it.
     It also sets fk on Lead, Contact and Company.
     """
     try:

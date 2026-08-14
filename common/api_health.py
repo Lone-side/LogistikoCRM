@@ -14,7 +14,7 @@ import time
 from django.conf import settings
 from django.db import connection
 from django.core.cache import cache
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 
@@ -148,6 +148,7 @@ def check_disk_space():
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@throttle_classes([])
 def health_check(request):
     """
     Basic health check endpoint.
@@ -246,6 +247,7 @@ def health_check_detailed(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@throttle_classes([])
 def health_ready(request):
     """
     Readiness probe for Kubernetes.
@@ -264,6 +266,7 @@ def health_ready(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@throttle_classes([])
 def health_live(request):
     """
     Liveness probe for Kubernetes.

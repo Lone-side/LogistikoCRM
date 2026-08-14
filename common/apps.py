@@ -13,6 +13,9 @@ class CommonConfig(AppConfig):
     def ready(self):
         # Implicitly connect a signal handler
         from common.signals.handlers import user_creation_handler   # NOQA
+        if not settings.LEGACY_APP_THREADS_ENABLED:
+            return
+
         from common.utils.notif_email_sender import NotifEmailSender
 
         self.nes = NotifEmailSender()       # NOQA
