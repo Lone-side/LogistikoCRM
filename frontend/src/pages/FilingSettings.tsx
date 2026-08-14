@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
   FolderTree,
@@ -60,7 +61,10 @@ const FilingSettingsPage: React.FC = () => {
     }
   }, [formData.folder_structure, formData.use_greek_month_names, fetchPreview]);
 
-  const handleChange = (field: keyof FilingSystemSettings, value: any) => {
+  const handleChange = (
+    field: keyof FilingSystemSettings,
+    value: FilingSystemSettings[keyof FilingSystemSettings]
+  ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setSaveSuccess(false);
   };
@@ -74,8 +78,12 @@ const FilingSettingsPage: React.FC = () => {
       await updateSettings(formData);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      setSaveError(err.response?.data?.error || 'Σφάλμα αποθήκευσης');
+    } catch (err: unknown) {
+      setSaveError(
+        axios.isAxiosError<{ error?: string }>(err)
+          ? err.response?.data?.error || 'Σφάλμα αποθήκευσης'
+          : 'Σφάλμα αποθήκευσης'
+      );
     } finally {
       setSaving(false);
     }

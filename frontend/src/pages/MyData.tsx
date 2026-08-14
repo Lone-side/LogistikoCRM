@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   FileText,
   TrendingUp,
@@ -79,9 +79,7 @@ export default function MyData() {
         const clientList = response.results || response;
         setClients(clientList);
         // Auto-select first client if available
-        if (clientList.length > 0 && !selectedClientId) {
-          setSelectedClientId(clientList[0].id);
-        }
+        if (clientList.length > 0) setSelectedClientId(current => current ?? clientList[0].id);
       } catch (err) {
         console.error('Error fetching clients:', err);
       }
@@ -89,18 +87,11 @@ export default function MyData() {
     fetchClients();
   }, []);
 
-  // Fetch client VAT data when client or period changes
-  useEffect(() => {
-    if (selectedClientId && activeTab === 'overview') {
-      fetchClientData();
-    }
-  }, [selectedClientId, year, month, activeTab]);
-
   // Find selected client's AFM
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
   // Fetch VAT data for selected client
-  const fetchClientData = async () => {
+  const fetchClientData = useCallback(async () => {
     if (!selectedClient) return;
 
     setLoading(true);
@@ -126,7 +117,14 @@ export default function MyData() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedClient, selectedClientId, year, month]);
+
+  // Fetch client VAT data when client or period changes
+  useEffect(() => {
+    if (selectedClientId && activeTab === 'overview') {
+      fetchClientData();
+    }
+  }, [selectedClientId, activeTab, fetchClientData]);
 
   // Sync VAT data from myDATA
   const handleSync = async () => {
