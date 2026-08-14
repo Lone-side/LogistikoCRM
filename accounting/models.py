@@ -2958,10 +2958,13 @@ class DoorAccessLog(models.Model):
     ]
 
     RESULT_CHOICES = [
+        ('attempted', 'Attempted'),
         ('success', 'Επιτυχία'),
         ('failed', 'Αποτυχία'),
         ('timeout', 'Timeout'),
         ('offline', 'Εκτός Σύνδεσης'),
+        ('denied', 'Denied'),
+        ('rate_limited', 'Rate limited'),
     ]
 
     user = models.ForeignKey(
@@ -3006,6 +3009,9 @@ class DoorAccessLog(models.Model):
         ordering = ['-timestamp']
         verbose_name = 'Log Πρόσβασης Πόρτας'
         verbose_name_plural = 'Logs Πρόσβασης Πόρτας'
+        permissions = [
+            ('open_office_door', 'Can open the physical office door'),
+        ]
         indexes = [
             models.Index(fields=['-timestamp'], name='door_log_timestamp_idx'),
             models.Index(fields=['user', '-timestamp'], name='door_log_user_idx'),
@@ -3023,12 +3029,11 @@ class DoorAccessLog(models.Model):
         user_agent = ''
 
         if request:
-            # Get IP from X-Forwarded-For or REMOTE_ADDR
-            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-            if x_forwarded_for:
-                ip_address = x_forwarded_for.split(',')[0].strip()
-            else:
-                ip_address = request.META.get('REMOTE_ADDR')
+            peer_ip = request.META.get('REMOTE_ADDR')
+            ip_address = getattr(request, '_door_client_ip', peer_ip)
+            audit_data = dict(response_data or {})
+            audit_data['peer_ip'] = getattr(request, '_door_peer_ip', peer_ip)
+            response_data = audit_data
 
             user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]
 
