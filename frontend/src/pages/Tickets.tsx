@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Ticket,
@@ -38,6 +38,7 @@ import {
   PRIORITY_COLORS,
   PRIORITY_LABELS,
 } from '../constants';
+import { hasActiveTicketFilters } from '../utils/lintBehavior';
 
 export default function Tickets() {
   // Filters state
@@ -55,18 +56,10 @@ export default function Tickets() {
   const [selectedTicket, setSelectedTicket] = useState<TicketFull | null>(null);
 
   // Data fetching
-  const { data, isLoading, isError, refetch } = useTickets(filters);
+  const queryFilters = { ...filters, search: debouncedSearchInput || undefined };
+  const { data, isLoading, isError, refetch } = useTickets(queryFilters);
   const { data: clientsData } = useClients({ page_size: 1000 }); // Get all clients for dropdown
   const clients = clientsData?.results || [];
-
-  // Auto-search when debounced search input changes
-  useEffect(() => {
-    setFilters((prev) => ({
-      ...prev,
-      search: debouncedSearchInput || undefined,
-      page: 1,
-    }));
-  }, [debouncedSearchInput]);
 
   // Handlers
   const handleFilterChange = useCallback(
@@ -186,7 +179,10 @@ export default function Tickets() {
               type="text"
               placeholder="Αναζήτηση με τίτλο ή πελάτη..."
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
+                setFilters((prev) => ({ ...prev, page: 1 }));
+              }}
               className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>
@@ -199,7 +195,7 @@ export default function Tickets() {
             <Filter size={18} />
             <span>Φίλτρα</span>
           </button>
-          {(filters.status || filters.priority || filters.search || filters.open_only || filters.client_id) && (
+          {hasActiveTicketFilters(filters, searchInput) && (
             <button
               onClick={handleClearFilters}
               className="flex items-center gap-2 px-4 py-2 text-danger-600 hover:bg-danger-50 rounded-lg transition-colors duration-150"

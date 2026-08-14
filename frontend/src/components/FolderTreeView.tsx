@@ -115,7 +115,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         return <CalendarDays className="w-4 h-4 text-cyan-600" />;
       case 'yearend':
         return <FileText className="w-4 h-4 text-amber-500" />;
-      case 'category':
+      case 'category': {
         const icon = CATEGORY_ICONS[node.name];
         const color = CATEGORY_COLORS[node.name] || '#6B7280';
         return icon ? (
@@ -123,6 +123,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         ) : (
           <Folder className="w-4 h-4 text-gray-500" />
         );
+      }
       default:
         return isExpanded ? (
           <FolderOpen className="w-4 h-4 text-amber-500" />

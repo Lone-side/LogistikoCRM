@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState, useCallback } from 'react';
 import apiClient from '../api/client';
+import type { AxiosResponse } from 'axios';
 
 export type ReportPeriod = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'all';
 export type ExportType = 'clients' | 'obligations' | 'financial' | 'performance';
@@ -99,7 +100,7 @@ function downloadBlob(blob: Blob, filename: string) {
 /**
  * Extract filename from Content-Disposition header
  */
-function getFilenameFromResponse(response: any, defaultFilename: string): string {
+function getFilenameFromResponse(response: AxiosResponse<Blob>, defaultFilename: string): string {
   const contentDisposition = response.headers['content-disposition'];
   if (contentDisposition) {
     const match = contentDisposition.match(/filename="?([^"]+)"?/);
@@ -212,7 +213,8 @@ export function useReportExport() {
     }
   }, []);
 
-  const exportObligations = useCallback(async (_period: ReportPeriod = 'month') => {
+  const exportObligations = useCallback(async (period: ReportPeriod = 'month') => {
+    void period;
     setState({ isExporting: true, exportType: 'obligations', error: null });
     try {
       await downloadFilteredObligationsExcel({});

@@ -10,6 +10,7 @@
 έλεγχο αναντιστοιχίας ΑΦΜ και «έξυπνη» πρόταση ονόματος στο upload.
 """
 import logging
+import re
 import os
 import shutil
 
@@ -23,6 +24,16 @@ logger = logging.getLogger(__name__)
 # Όριο αποθηκευμένου κειμένου (χαρακτήρες) και σελίδων ανάγνωσης
 MAX_TEXT_CHARS = 100_000
 MAX_PAGES = 30
+
+# pypdf 6.15.0 may emit U+2206 for a glyph that represents Greek capital
+# delta. Keep this deliberately narrower than Unicode compatibility
+# normalization: other mathematical symbols can carry real meaning in PDFs.
+_INCREMENT = '\u2206'
+_GREEK_CAPITAL_DELTA = '\u0394'
+_GREEK_LETTER = r'\u0370-\u03ff\u1f00-\u1fff'
+_GREEK_INCREMENT = re.compile(
+    rf'(?:(?<=[{_GREEK_LETTER}]){_INCREMENT}|{_INCREMENT}(?=[{_GREEK_LETTER}]))'
+)
 
 # Λέξεις-κλειδιά → κατηγορία ClientDocument (ίδια λογική με
 # MonthlyObligation._get_category_from_obligation, εδώ για περιεχόμενο)
@@ -42,6 +53,11 @@ CATEGORY_KEYWORDS = [
 ]
 
 
+def _normalize_pdf_text(text):
+    """Normalize ambiguous delta only when it participates in a Greek word."""
+    return _GREEK_INCREMENT.sub(_GREEK_CAPITAL_DELTA, text or '')
+
+
 def extract_text_from_file(fileobj, filename, max_pages=MAX_PAGES):
     """
     Εξάγει κείμενο από file-like object.
@@ -57,7 +73,15 @@ def extract_text_from_file(fileobj, filename, max_pages=MAX_PAGES):
             parts = []
             total = 0
             for page in reader.pages[:max_pages]:
-                text = page.extract_text() or ''
+                # ``extract_text`` itself is controlled by pypdf, but do not
+                # amplify a maliciously large page with another full-size
+                # normalization allocation. Bound it to the remaining stored
+                # text budget first.
+                remaining = MAX_TEXT_CHARS - total
+                if remaining <= 0:
+                    break
+                page_text = (page.extract_text() or '')[:remaining]
+                text = _normalize_pdf_text(page_text)
                 parts.append(text)
                 total += len(text)
                 if total >= MAX_TEXT_CHARS:

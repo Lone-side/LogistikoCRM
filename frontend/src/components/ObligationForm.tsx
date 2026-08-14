@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Button } from './Button';
 import { useObligationTypes } from '../hooks/useObligations';
 import { useUsers } from '../hooks/useUsers';
@@ -8,6 +8,7 @@ import {
   MONTHS,
   YEARS,
 } from '../constants';
+import { initialObligationFormData } from '../utils/lintBehavior';
 
 interface ObligationFormProps {
   obligation?: Obligation | null;
@@ -16,8 +17,6 @@ interface ObligationFormProps {
   onCancel: () => void;
   isLoading?: boolean;
 }
-
-const currentYear = new Date().getFullYear();
 
 export function ObligationForm({
   obligation,
@@ -32,44 +31,22 @@ export function ObligationForm({
   const { data: usersData, isLoading: usersLoading } = useUsers();
   const users = usersData?.users || [];
 
-  const [formData, setFormData] = useState<ObligationFormData>({
-    client: 0,
-    obligation_type: 0,
-    month: new Date().getMonth() + 1,
-    year: currentYear,
-    deadline: '',
-    status: 'pending',
-    completed_date: null,
-    time_spent: null,
-    notes: '',
-    assigned_to: null,
-  });
+  const [formData, setFormData] = useState<ObligationFormData>(() => initialObligationFormData(obligation));
   const [errors, setErrors] = useState<Partial<Record<keyof ObligationFormData, string>>>({});
 
   // Set default obligation type when types are loaded
-  useEffect(() => {
-    if (obligationTypes && obligationTypes.length > 0 && formData.obligation_type === 0) {
-      setFormData((prev) => ({ ...prev, obligation_type: obligationTypes[0].id }));
-    }
-  }, [obligationTypes, formData.obligation_type]);
+  if (obligationTypes && obligationTypes.length > 0 && formData.obligation_type === 0) {
+    setFormData((prev) => ({ ...prev, obligation_type: obligationTypes[0].id }));
+  }
 
   // Populate form when editing
-  useEffect(() => {
+  const [previousObligation, setPreviousObligation] = useState(obligation);
+  if (previousObligation !== obligation) {
+    setPreviousObligation(obligation);
     if (obligation) {
-      setFormData({
-        client: obligation.client,
-        obligation_type: obligation.obligation_type,
-        month: obligation.month,
-        year: obligation.year,
-        deadline: obligation.deadline,
-        status: obligation.status,
-        completed_date: obligation.completed_date || null,
-        time_spent: obligation.time_spent || null,
-        notes: obligation.notes || '',
-        assigned_to: obligation.assigned_to || null,
-      });
+      setFormData(initialObligationFormData(obligation));
     }
-  }, [obligation]);
+  }
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof ObligationFormData, string>> = {};

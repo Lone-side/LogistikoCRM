@@ -3,7 +3,7 @@
  * Page for managing email/SMTP settings
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Mail,
   Server,
@@ -58,8 +58,9 @@ export default function EmailSettings() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Initialize form data when settings load
-  useEffect(() => {
+  const [previousSettings, setPreviousSettings] = useState<typeof settings>(undefined);
+  if (previousSettings !== settings) {
+    setPreviousSettings(settings);
     if (settings) {
       setFormData({
         smtp_host: settings.smtp_host,
@@ -80,7 +81,7 @@ export default function EmailSettings() {
         is_active: settings.is_active,
       });
     }
-  }, [settings]);
+  }
 
   // Handle form changes
   const handleChange = (
