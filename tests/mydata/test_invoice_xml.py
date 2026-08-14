@@ -212,6 +212,14 @@ RESPONSE_CANCEL = """<?xml version="1.0" encoding="utf-8"?>
 
 
 class ParseResponseDocTest(SimpleTestCase):
+    def test_rejects_dtd_and_entity_expansion(self):
+        malicious = """<?xml version="1.0"?>
+<!DOCTYPE ResponseDoc [<!ENTITY payload "EXPANDED">]>
+<ResponseDoc><response><index>1</index><statusCode>&payload;</statusCode></response></ResponseDoc>
+"""
+        with self.assertRaises(ValueError):
+            parse_response_doc(malicious)
+
     def test_success_response(self):
         results = parse_response_doc(RESPONSE_SUCCESS)
         self.assertEqual(len(results), 1)

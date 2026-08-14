@@ -31,6 +31,7 @@ openpyxl==3.1.5  # Excel read
 XlsxWriter==3.2.9  # Excel write
 Pillow>=10.1.0  # Image processing
 python-magic>=0.4.27  # File type validation
+defusedxml==0.7.1  # Safe parsing of untrusted GSIS/myDATA XML
 # ⚠️ ΚΑΡΦΩΜΕΝΕΣ ΕΚΔΟΣΕΙΣ — ΜΗΝ ΤΙΣ ΧΑΛΑΡΩΣΕΙΣ ΧΩΡΙΣ ΕΛΕΓΧΟ ΕΛΛΗΝΙΚΩΝ.
 # Το pypdf 6.15.0 εξάγει το ελληνικό «Δ» (U+0394) ως «∆» (U+2206, INCREMENT),
 # οπότε κάθε αναζήτηση σε έγγραφο με Δ (ΔΗΛΩΣΗ, ΔΟΥ, ΑΔΕΙΑ…) γυρίζει κενή.
