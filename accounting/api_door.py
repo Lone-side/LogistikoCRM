@@ -4,18 +4,20 @@ REST API endpoints for Tasmota door control.
 JWT authenticated for React frontend.
 
 Security features:
-- Rate limiting (10 actions per minute per user)
-- Audit logging for all door actions
-- Staff-only access for door control
+- Shared per-user/IP rate limiting
+- Mandatory audit logging for all door mutations
+- Explicit ``accounting.open_office_door`` permission
 """
 
 import requests
 import logging
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.response import Response
 from django.conf import settings
+
+from .door_security import begin_door_mutation, finish_door_mutation
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +26,6 @@ TASMOTA_IP = getattr(settings, 'TASMOTA_IP', '192.168.1.100')
 TASMOTA_PORT = getattr(settings, 'TASMOTA_PORT', 80)
 TASMOTA_DOOR_PULSE_DURATION = getattr(settings, 'TASMOTA_DOOR_PULSE_DURATION', 0.5)
 TIMEOUT = 5
-
-
-class DoorActionThrottle(UserRateThrottle):
-    """
-    Rate limit for door control actions.
-    Prevents abuse - max 10 door actions per minute per user.
-    """
-    rate = '10/minute'
-    scope = 'door_action'
 
 
 class DoorStatusThrottle(UserRateThrottle):
@@ -47,6 +40,11 @@ class DoorStatusThrottle(UserRateThrottle):
 def log_door_access(request, action, result, response_data=None):
     """Log door access to audit trail"""
     try:
+        mutation_audit = getattr(request, "_door_mutation_audit", None)
+        if mutation_audit is not None:
+            finish_door_mutation(mutation_audit, result, response_data)
+            request._door_mutation_audit = None
+            return
         from .models import DoorAccessLog
         DoorAccessLog.log_access(
             user=request.user if request.user.is_authenticated else None,
@@ -136,20 +134,25 @@ def door_status(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsAdminUser])
-@throttle_classes([DoorActionThrottle])
+@permission_classes([IsAuthenticated])
 def door_open(request):
     """
     Open/toggle the door via Tasmota relay.
     POST /api/v1/door/open/
 
-    Requires: Staff/Admin user
+    Requires: explicit ``accounting.open_office_door`` permission
 
     Returns:
         - success: bool
         - message: str (Greek)
         - new_status: "open" | "closed"
     """
+    audit, rejection = begin_door_mutation(request, "toggle")
+    if rejection:
+        status, message = rejection
+        return Response({"success": False, "message": message}, status=status)
+    request._door_mutation_audit = audit
+
     try:
         # Toggle the relay
         url = f"http://{TASMOTA_IP}:{TASMOTA_PORT}/cm?cmnd=Power%20Toggle"
@@ -197,11 +200,11 @@ def door_open(request):
         }
         log_door_access(request, 'toggle', 'offline', response_data)
         return Response(response_data)
-    except Exception as e:
-        logger.error(f"Door toggle error for user {request.user.username}: {e}")
+    except Exception:
+        logger.error("Unexpected door toggle error for user %s", request.user.username)
         response_data = {
             'success': False,
-            'message': f'Σφάλμα: {str(e)}',
+            'message': 'Σφάλμα ελέγχου πόρτας',
             'online': False
         }
         log_door_access(request, 'toggle', 'failed', response_data)
@@ -209,14 +212,13 @@ def door_open(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsAdminUser])
-@throttle_classes([DoorActionThrottle])
+@permission_classes([IsAuthenticated])
 def door_pulse(request):
     """
     Pulse the door relay (momentary on for electric locks).
     POST /api/v1/door/pulse/
 
-    Requires: Staff/Admin user
+    Requires: explicit ``accounting.open_office_door`` permission
 
     Optional body:
         - duration: float (seconds, default from TASMOTA_DOOR_PULSE_DURATION setting)
@@ -225,21 +227,47 @@ def door_pulse(request):
         - success: bool
         - message: str (Greek)
     """
+    audit, rejection = begin_door_mutation(request, "pulse")
+    if rejection:
+        status, message = rejection
+        return Response({"success": False, "message": message}, status=status)
+    request._door_mutation_audit = audit
+
     try:
         duration = float(request.data.get('duration', TASMOTA_DOOR_PULSE_DURATION))
 
-        # Security: limit max pulse duration to 5 seconds
-        if duration > 5:
+        # Tasmota uses deciseconds and PulseTime1=0 disables auto-off. Never
+        # energize the relay with a value that rounds/truncates to zero.
+        if not 0.1 <= duration <= 5:
+            log_door_access(request, 'pulse', 'failed', {'success': False})
             return Response({
                 'success': False,
-                'message': 'Μέγιστη διάρκεια pulse: 5 δευτερόλεπτα'
+                'message': 'Η διάρκεια pulse πρέπει να είναι μεταξύ 0.1 και 5 δευτερολέπτων'
             }, status=400)
 
-        pulse_time = int(duration * 10)  # Tasmota uses deciseconds (0.1s units)
+        pulse_time = max(1, int(round(duration * 10)))
 
         # Set pulse time
         set_pulse_url = f"http://{TASMOTA_IP}:{TASMOTA_PORT}/cm?cmnd=PulseTime1%20{pulse_time}"
-        requests.get(set_pulse_url, timeout=TIMEOUT)
+        configuration = requests.get(set_pulse_url, timeout=TIMEOUT)
+        configured_value = None
+        if configuration.status_code == 200:
+            try:
+                pulse_ack = configuration.json().get('PulseTime1')
+                configured_value = (
+                    pulse_ack.get('Set') if isinstance(pulse_ack, dict) else pulse_ack
+                )
+                configured_value = int(configured_value)
+            except (AttributeError, TypeError, ValueError):
+                configured_value = None
+        if configured_value != pulse_time:
+            response_data = {
+                'success': False,
+                'message': 'Η ασφαλής διάρκεια pulse δεν επιβεβαιώθηκε',
+                'online': configuration.status_code == 200,
+            }
+            log_door_access(request, 'pulse', 'failed', response_data)
+            return Response(response_data, status=502)
 
         # Trigger pulse
         pulse_url = f"http://{TASMOTA_IP}:{TASMOTA_PORT}/cm?cmnd=Power%20ON"
@@ -264,6 +292,13 @@ def door_pulse(request):
             log_door_access(request, 'pulse', 'failed', response_data)
             return Response(response_data)
 
+    except (TypeError, ValueError):
+        response_data = {
+            'success': False,
+            'message': 'Μη έγκυρη διάρκεια pulse',
+        }
+        log_door_access(request, 'pulse', 'failed', response_data)
+        return Response(response_data, status=400)
     except requests.exceptions.Timeout:
         response_data = {
             'success': False,
@@ -280,11 +315,11 @@ def door_pulse(request):
         }
         log_door_access(request, 'pulse', 'offline', response_data)
         return Response(response_data)
-    except Exception as e:
-        logger.error(f"Door pulse error: {e}")
+    except Exception:
+        logger.error("Unexpected door pulse error")
         response_data = {
             'success': False,
-            'message': f'Σφάλμα: {str(e)}',
+            'message': 'Σφάλμα ελέγχου πόρτας',
             'online': False
         }
         log_door_access(request, 'pulse', 'failed', response_data)

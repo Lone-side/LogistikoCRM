@@ -17,7 +17,10 @@ from django.core.management.base import BaseCommand
 ROLES = {
     'Διαχειριστής': {
         'app_all': ['accounting', 'mydata', 'inventory'],
-        'extra': ['view_all_clients', 'view_client_credential_secret'],
+        'extra': [
+            'view_all_clients', 'view_client_credential_secret',
+            'open_office_door',
+        ],
         # Backup: μόνο ο Διαχειριστής — το σκέτο is_staff ΔΕΝ αρκεί πλέον
         # στα backup endpoints (πλήρες dump βάσης + media)
         'settings_app': [
