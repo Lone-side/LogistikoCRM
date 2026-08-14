@@ -1,5 +1,6 @@
 from unittest.mock import Mock, patch
 
+import requests
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.cache import cache
@@ -291,6 +292,59 @@ class DoorSecurityTests(TestCase):
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(device_call.call_count, 1)
+
+    def test_pulse_never_succeeds_without_exact_power_on_ack(self):
+        client = APIClient()
+        client.force_authenticate(self.authorized_user)
+
+        non_200 = Mock(status_code=500)
+        malformed = Mock(status_code=200)
+        malformed.json.side_effect = ValueError('malformed json')
+        missing_power = Mock(status_code=200)
+        missing_power.json.return_value = {"Status": "ok"}
+        power_off = Mock(status_code=200)
+        power_off.json.return_value = {"POWER": "OFF"}
+
+        for final_response in (non_200, malformed, missing_power, power_off):
+            with self.subTest(final_response=final_response):
+                DoorAccessLog.objects.all().delete()
+                configured = Mock(status_code=200)
+                configured.json.return_value = {"PulseTime1": {"Set": 5}}
+                with patch(
+                    "accounting.api_door.requests.get",
+                    side_effect=[configured, final_response],
+                ) as device_call:
+                    response = client.post(self.api_mutations[1], {}, format="json")
+
+                self.assertEqual(response.status_code, 502)
+                self.assertEqual(device_call.call_count, 2)
+                self.assertFalse(
+                    DoorAccessLog.objects.filter(result="success").exists()
+                )
+
+    def test_pulse_device_exceptions_return_non_success_http_status(self):
+        client = APIClient()
+        client.force_authenticate(self.authorized_user)
+
+        cases = (
+            (requests.exceptions.Timeout(), 504, "timeout"),
+            (requests.exceptions.ConnectionError(), 503, "offline"),
+            (RuntimeError("unexpected device failure"), 500, "failed"),
+        )
+        for device_error, expected_status, expected_result in cases:
+            with self.subTest(expected_status=expected_status):
+                DoorAccessLog.objects.all().delete()
+                with patch(
+                    "accounting.api_door.requests.get", side_effect=device_error
+                ) as device_call:
+                    response = client.post(self.api_mutations[1], {}, format="json")
+
+                self.assertEqual(response.status_code, expected_status)
+                self.assertEqual(device_call.call_count, 1)
+                self.assertEqual(DoorAccessLog.objects.get().result, expected_result)
+                self.assertFalse(
+                    DoorAccessLog.objects.filter(result="success").exists()
+                )
 
     def test_denied_and_rate_limited_mutations_are_audited(self):
         denied_client = Client()

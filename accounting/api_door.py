@@ -275,7 +275,15 @@ def door_pulse(request):
         logger.info(f"User {request.user.username} pulsing door for {duration}s")
         response = requests.get(pulse_url, timeout=TIMEOUT)
 
+        confirmed_power = None
         if response.status_code == 200:
+            try:
+                power_ack = response.json()
+                confirmed_power = power_ack.get('POWER1', power_ack.get('POWER'))
+            except (AttributeError, TypeError, ValueError):
+                confirmed_power = None
+
+        if confirmed_power == 'ON':
             logger.info(f"Door pulsed by {request.user.username}")
             response_data = {
                 'success': True,
@@ -290,7 +298,7 @@ def door_pulse(request):
                 'online': False
             }
             log_door_access(request, 'pulse', 'failed', response_data)
-            return Response(response_data)
+            return Response(response_data, status=502)
 
     except (TypeError, ValueError):
         response_data = {
@@ -306,7 +314,7 @@ def door_pulse(request):
             'online': False
         }
         log_door_access(request, 'pulse', 'timeout', response_data)
-        return Response(response_data)
+        return Response(response_data, status=504)
     except requests.exceptions.ConnectionError:
         response_data = {
             'success': False,
@@ -314,7 +322,7 @@ def door_pulse(request):
             'online': False
         }
         log_door_access(request, 'pulse', 'offline', response_data)
-        return Response(response_data)
+        return Response(response_data, status=503)
     except Exception:
         logger.error("Unexpected door pulse error")
         response_data = {
@@ -323,7 +331,7 @@ def door_pulse(request):
             'online': False
         }
         log_door_access(request, 'pulse', 'failed', response_data)
-        return Response(response_data)
+        return Response(response_data, status=500)
 
 
 @api_view(['GET'])
