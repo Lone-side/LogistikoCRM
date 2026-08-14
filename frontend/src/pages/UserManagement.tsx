@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Users,
   Plus,
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components';
 import { PageHeader } from '../components/ui';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
   useUsers,
@@ -370,7 +370,9 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
 
-  useEffect(() => {
+  const [previousUser, setPreviousUser] = useState(user);
+  if (previousUser !== user) {
+    setPreviousUser(user);
     setFormData({
       username: user?.username || '',
       email: user?.email || '',
@@ -382,7 +384,7 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
       is_active: user?.is_active ?? true,
     });
     setErrors({});
-  }, [user]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

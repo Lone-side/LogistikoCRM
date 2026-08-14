@@ -4,7 +4,7 @@ import { useClients, useCreateClient, useDeleteClient, useDebounce } from '../ho
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import { Modal, ConfirmDialog, ClientForm, Button, TableSkeleton } from '../components';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { Users, Search, AlertCircle, RefreshCw, Plus, Edit2, Trash2, Eye, Download, Upload, FileDown, FileUp } from 'lucide-react';
 import type { Client, ClientFormData } from '../types';
 import { PageHeader, EmptyState, Badge } from '../components/ui';
@@ -54,7 +54,7 @@ export default function Clients() {
         (client.eponimia?.toLowerCase() || '').includes(term) ||
         (client.afm || '').includes(term)
     );
-  }, [data?.results, debouncedSearchTerm]);
+  }, [data, debouncedSearchTerm]);
 
   // Handlers
   const handleCreate = (formData: ClientFormData) => {

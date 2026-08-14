@@ -77,8 +77,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form data when type changes (for editing different items)
-  useEffect(() => {
+  const [previousType, setPreviousType] = useState(type);
+  if (previousType !== type) {
+    setPreviousType(type);
     setFormData({
       code: type?.code || '',
       name: type?.name || '',
@@ -93,7 +94,7 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
       is_active: type?.is_active ?? true,
     });
     setError(null);
-  }, [type]);
+  }
 
   // Toggle profile in selection
   const toggleProfile = (profileId: number) => {
@@ -573,15 +574,16 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
 
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form data when group changes
-  useEffect(() => {
+  const [previousGroup, setPreviousGroup] = useState(group);
+  if (previousGroup !== group) {
+    setPreviousGroup(group);
     setFormData({
       name: group?.name || '',
       description: group?.description || '',
       obligation_types: group?.obligation_types || [],
     });
     setError(null);
-  }, [group]);
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

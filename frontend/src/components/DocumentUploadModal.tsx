@@ -3,7 +3,7 @@
  * Modal for uploading documents with drag & drop and versioning support
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Upload, File, X, AlertCircle, Loader2 } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button } from './Button';
@@ -59,19 +59,6 @@ export function DocumentUploadModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploadWithVersion = useUploadDocumentWithVersion();
-
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setFile(null);
-      setCategory('general');
-      setDescription('');
-      setSendEmail(false);
-      setError(null);
-      setExistingDoc(null);
-      setShowVersionDialog(false);
-    }
-  }, [isOpen]);
 
   const validateFile = useCallback((file: File): string | null => {
     const ext = '.' + file.name.split('.').pop()?.toLowerCase();

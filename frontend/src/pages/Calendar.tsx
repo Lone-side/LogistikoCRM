@@ -32,7 +32,7 @@ import type {
 } from '../hooks/useCalendar';
 import { useClients } from '../hooks/useClients';
 import { useObligationTypes } from '../hooks/useObligations';
-import { useToast } from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { PageHeader } from '../components/ui';
 import { CompleteObligationModal } from '../components/CompleteObligationModal';
 import { useCompleteAndNotify } from '../hooks/useEmail';
@@ -400,7 +400,7 @@ function CalendarGrid({ month, year, days, onDayClick }: CalendarGridProps) {
     }
 
     return result;
-  }, [month, year, daysInMonth, firstDayOfWeek, daysInPrevMonth]);
+  }, [daysInMonth, firstDayOfWeek, daysInPrevMonth]);
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -535,29 +535,29 @@ export default function Calendar() {
   }, [selectedObligation, clientsData]);
 
   // Navigation functions
-  const goToPreviousMonth = useCallback(() => {
+  const goToPreviousMonth = () => {
     if (currentMonth === 1) {
       setCurrentMonth(12);
       setCurrentYear(currentYear - 1);
     } else {
       setCurrentMonth(currentMonth - 1);
     }
-  }, [currentMonth, currentYear]);
+  };
 
-  const goToNextMonth = useCallback(() => {
+  const goToNextMonth = () => {
     if (currentMonth === 12) {
       setCurrentMonth(1);
       setCurrentYear(currentYear + 1);
     } else {
       setCurrentMonth(currentMonth + 1);
     }
-  }, [currentMonth, currentYear]);
+  };
 
-  const goToToday = useCallback(() => {
+  const goToToday = () => {
     const now = new Date();
     setCurrentMonth(now.getMonth() + 1);
     setCurrentYear(now.getFullYear());
-  }, []);
+  };
 
   // Handle day click
   const handleDayClick = useCallback((day: number) => {
@@ -585,19 +585,31 @@ export default function Calendar() {
 
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        goToPreviousMonth();
+        if (currentMonth === 1) {
+          setCurrentMonth(12);
+          setCurrentYear(currentYear - 1);
+        } else {
+          setCurrentMonth(currentMonth - 1);
+        }
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        goToNextMonth();
+        if (currentMonth === 12) {
+          setCurrentMonth(1);
+          setCurrentYear(currentYear + 1);
+        } else {
+          setCurrentMonth(currentMonth + 1);
+        }
       } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault();
-        goToToday();
+        const now = new Date();
+        setCurrentMonth(now.getMonth() + 1);
+        setCurrentYear(now.getFullYear());
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedDay, goToPreviousMonth, goToNextMonth, goToToday]);
+  }, [selectedDay, currentMonth, currentYear]);
 
   return (
     <div className="space-y-6">

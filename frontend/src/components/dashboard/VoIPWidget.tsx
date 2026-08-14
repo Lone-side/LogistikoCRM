@@ -3,7 +3,7 @@ import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Ticket, ArrowRight, R
 import { useCalls } from '../../hooks/useVoIP';
 import { useTickets } from '../../hooks/useTickets';
 import { useEffect, useState, useRef } from 'react';
-import { useToast } from '../Toast';
+import { useToast } from '../../hooks/useToast';
 
 /**
  * VoIP Dashboard Widget

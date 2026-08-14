@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
+import axios from 'axios';
 import {
   File, FileText, FileSpreadsheet, Image, Download, Lock, Mail,
   AlertCircle, Loader2, FolderOpen, Upload, CheckCircle, X, AlertTriangle,
@@ -341,8 +342,12 @@ export default function SharedLinkPortal() {
       });
       setContent(response.data);
       setRequiresAuth(false);
-    } catch (err: any) {
-      setAuthError(err.response?.data?.error || 'Σφάλμα επαλήθευσης');
+    } catch (err: unknown) {
+      setAuthError(
+        axios.isAxiosError<{ error?: string }>(err)
+          ? err.response?.data?.error || 'Σφάλμα επαλήθευσης'
+          : 'Σφάλμα επαλήθευσης'
+      );
     } finally {
       setAuthenticating(false);
     }

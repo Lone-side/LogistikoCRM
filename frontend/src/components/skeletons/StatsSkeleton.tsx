@@ -104,7 +104,7 @@ export function BarChartSkeleton({
           <div
             key={i}
             className="bg-gray-200 rounded-t flex-1"
-            style={{ height: `${30 + Math.random() * 70}%` }}
+            style={{ height: `${30 + ((i * 37) % 70)}%` }}
           />
         ))}
       </div>
