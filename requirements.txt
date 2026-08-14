@@ -4,7 +4,7 @@
 # ============================================================================
 
 # Django Core
-Django>=5.2,<5.3  # 5.2 LTS — το 5.0 είναι EOL χωρίς security fixes
+Django>=6.1,<6.2  # 5.2 LTS — το 5.0 είναι EOL χωρίς security fixes
 django-cors-headers>=4.3.0
 django-environ>=0.11.2
 polib>=1.2.0  # Translation file handling (.po files)
