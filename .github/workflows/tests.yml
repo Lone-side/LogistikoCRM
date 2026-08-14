@@ -143,6 +143,54 @@ jobs:
         run: |
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
+  security-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Audit Python dependencies (blocking)
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+      # The legacy codebase has a reviewed medium-severity Bandit backlog.
+      # New high-severity findings are release blockers immediately; medium
+      # findings remain visible in the informational report below until the
+      # backlog is replaced with narrowly documented exceptions.
+      - name: Bandit high-severity gate (blocking)
+        run: |
+          pip install bandit[toml]
+          bandit -r accounting crm common inventory mydata settings webcrm \
+            -c pyproject.toml -lll -q
+
+      - name: Bandit medium/high report (informational)
+        continue-on-error: true
+        run: |
+          bandit -r accounting crm common inventory mydata settings webcrm \
+            -c pyproject.toml -ll
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Audit production frontend dependencies (blocking)
+        working-directory: ./frontend
+        run: |
+          npm ci --ignore-scripts
+          npm audit --omit=dev --audit-level=high
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
