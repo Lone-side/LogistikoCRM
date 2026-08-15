@@ -592,6 +592,17 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
+    # Ξεχωριστό κλειδί υπογραφής, με fallback στο SECRET_KEY ώστε να μη
+    # χρειάζεται αλλαγή σε υπάρχουσες εγκαταστάσεις.
+    #
+    # ΓΙΑΤΙ ΧΩΡΙΣΤΑ: χωρίς αυτό, τα δύο είναι δεμένα και δεν μπορείς να
+    # αλλάξεις το ένα χωρίς να χτυπήσεις το άλλο — rotation του SECRET_KEY
+    # (π.χ. μετά από διαρροή) πετάει έξω ΟΛΟΥΣ τους συνδεδεμένους, και το
+    # SECRET_KEY χρησιμοποιείται επιπλέον σε sessions/CSRF/signing.
+    #
+    # ΠΡΟΣΟΧΗ όταν το ορίσεις: όλα τα υπάρχοντα tokens ακυρώνονται μία φορά
+    # και οι χρήστες ξανασυνδέονται. Κάν' το εκτός ωραρίου.
+    'SIGNING_KEY': os.environ.get('JWT_SIGNING_KEY') or SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
