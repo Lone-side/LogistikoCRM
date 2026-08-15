@@ -1,33 +1,50 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import { Layout, ErrorBoundary } from './components';
 import { ToastProvider } from './components/Toast';
 
-// Pages
-import {
-  Dashboard,
-  Login,
-  Clients,
-  ClientDetails,
-  Obligations,
-  Calendar,
-  Files,
-  Calls,
-  Tickets,
-  Emails,
-  EmailSettings,
-  Reports,
-  Settings,
-  ObligationSettings,
-  UserManagement,
-  MyData,
-} from './pages';
-import Backup from './pages/Backup';
-import FileManager from './pages/FileManager';
-import FilingSettings from './pages/FilingSettings';
-import SharedLinkPortal from './pages/SharedLinkPortal';
+// Το Login μένει eager: είναι η πρώτη οθόνη για μη συνδεδεμένο χρήστη και
+// ένα lazy chunk εδώ θα πρόσθετε round-trip στο critical path.
+import Login from './pages/Login';
+
+// Όλες οι υπόλοιπες σελίδες φορτώνουν κατ' απαίτηση (route-level code
+// splitting) — αλλιώς κάθε χρήστης κατεβάζει ολόκληρη την εφαρμογή για να
+// δει το dashboard.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Clients = lazy(() => import('./pages/Clients'));
+const ClientDetails = lazy(() => import('./pages/ClientDetails'));
+const Obligations = lazy(() => import('./pages/Obligations'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const Files = lazy(() => import('./pages/Files'));
+const Calls = lazy(() => import('./pages/Calls'));
+const Tickets = lazy(() => import('./pages/Tickets'));
+// ΠΡΟΣΟΧΗ: το barrel pages/index.ts εξάγει το `Emails` από το
+// ./EmailTemplates (όχι από το ./Emails) — διατηρείται η ίδια αντιστοίχιση.
+const Emails = lazy(() => import('./pages/EmailTemplates'));
+const EmailSettings = lazy(() => import('./pages/EmailSettings'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Settings = lazy(() => import('./pages/Settings'));
+const ObligationSettings = lazy(() => import('./pages/ObligationSettings'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const MyData = lazy(() => import('./pages/MyData'));
+const Backup = lazy(() => import('./pages/Backup'));
+const FileManager = lazy(() => import('./pages/FileManager'));
+const FilingSettings = lazy(() => import('./pages/FilingSettings'));
+const SharedLinkPortal = lazy(() => import('./pages/SharedLinkPortal'));
+
+function FullPageSpinner() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div
+        className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
+        role="status"
+        aria-label="Φόρτωση"
+      ></div>
+    </div>
+  );
+}
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -54,11 +71,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }, [checkAuth]);
 
   if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <FullPageSpinner />;
   }
 
   if (!isAuthenticated) {
@@ -74,6 +87,7 @@ function App() {
       <ErrorBoundary>
         <ToastProvider>
           <BrowserRouter>
+          <Suspense fallback={<FullPageSpinner />}>
           <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
@@ -236,6 +250,7 @@ function App() {
           {/* Redirect unknown routes to dashboard */}
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
           </BrowserRouter>
         </ToastProvider>
       </ErrorBoundary>

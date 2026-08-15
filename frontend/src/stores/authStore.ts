@@ -4,7 +4,6 @@ import type { User, AuthTokens } from '../types';
 import { authApi } from '../api/client';
 import {
   clearTokens,
-  setAccessToken,
   setTokens as persistTokens,
 } from '../utils/tokenStorage';
 
@@ -128,19 +127,29 @@ export const useAuthStore = create<AuthState>()(
           if (refreshToken) {
             try {
               const newTokens = await authApi.refreshToken(refreshToken);
-              setAccessToken(newTokens.access);
+
+              // Το backend τρέχει ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_
+              // ROTATION: η απάντηση φέρνει ΝΕΟ refresh token και το παλιό
+              // ακυρώνεται. Αν κρατήσουμε μόνο το access, η επόμενη ανανέωση
+              // στέλνει blacklisted token και η συνεδρία πέφτει. Το checkAuth
+              // τρέχει σε κάθε φόρτωση προστατευμένης σελίδας, οπότε αυτό
+              // χτυπούσε συχνά.
+              const rotated = newTokens.refresh ?? refreshToken;
+              persistTokens(newTokens.access, rotated, get().rememberMe);
 
               // Also fetch user info after refresh
               try {
                 const response = await authApi.getCurrentUser();
                 set({
                   accessToken: newTokens.access,
+                  refreshToken: rotated,
                   user: response.data || response,
                   isAuthenticated: true,
                 });
               } catch {
                 set({
                   accessToken: newTokens.access,
+                  refreshToken: rotated,
                   isAuthenticated: true,
                 });
               }

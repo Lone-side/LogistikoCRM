@@ -339,3 +339,61 @@ class GenerateMonthlyObligationsCommandTest(TestCase):
         # Should have detailed output
         self.assertIn('Test Client', output)
         self.assertIn('ΦΠΑ', output)
+
+
+class ShowProgressEncodingTest(TestCase):
+    """Regression: η μπάρα προόδου δεν πρέπει να ρίχνει την εντολή.
+
+    Το show_progress έγραφε κατευθείαν στο sys.stdout χαρακτήρες █/░ και
+    ελληνικό κείμενο. Σε ελληνική κονσόλα Windows (cp1253) αυτό σκάει με
+    UnicodeEncodeError και παρασέρνει ολόκληρη την εντολή — 135 τέτοια
+    σφάλματα έκαναν το τοπικό backend suite να αποτυγχάνει ολοσχερώς.
+    """
+
+    def _command(self):
+        from accounting.management.commands.generate_monthly_obligations import Command
+        return Command()
+
+    def test_progress_is_skipped_when_stdout_is_not_a_tty(self):
+        """Σε tests/CI/cron/docker logs δεν γράφεται τίποτα."""
+        import sys
+        from unittest import mock
+
+        stream = StringIO()  # StringIO.isatty() -> False
+        with mock.patch.object(sys, 'stdout', stream):
+            self._command().show_progress(1, 10, 'Επεξεργασία: ΔΟΚΙΜΗ ΑΕ')
+
+        self.assertEqual(stream.getvalue(), '')
+
+    def test_progress_falls_back_to_ascii_on_encoding_error(self):
+        """Σε cp1253 terminal δεν σκάει· υποχωρεί σε ASCII."""
+        import sys
+        from unittest import mock
+
+        class Cp1253Tty:
+            """Terminal που δεν κωδικοποιεί ελληνικά ή block characters."""
+            encoding = 'cp1253'
+
+            def __init__(self):
+                self.written = []
+
+            def isatty(self):
+                return True
+
+            def write(self, text):
+                # Ό,τι δεν χωρά στο cp1253 σκάει, όπως στην πραγματική κονσόλα.
+                text.encode('cp1253')
+                self.written.append(text)
+
+            def flush(self):
+                pass
+
+        stream = Cp1253Tty()
+        with mock.patch.object(sys, 'stdout', stream):
+            # Δεν πρέπει να σηκώσει UnicodeEncodeError.
+            self._command().show_progress(5, 10, 'Επεξεργασία: ΔΟΚΙΜΗ ΑΕ')
+
+        output = ''.join(stream.written)
+        self.assertIn('50%', output)
+        self.assertIn('#', output)          # ASCII μπάρα
+        self.assertNotIn('█', output)       # όχι block characters

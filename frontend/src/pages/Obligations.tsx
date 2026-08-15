@@ -1055,11 +1055,17 @@ export default function Obligations() {
         onConfirm={handleBulkDeleteConfirm}
         title="Διαγραφή Επιλεγμένων Υποχρεώσεων"
         aria-label="Διαγραφή Επιλεγμένων Υποχρεώσεων"
-        message={`Είστε σίγουροι ότι θέλετε να διαγράψετε ${selectedIds.size} υποχρεώσεις;`}
+        message={
+          selectAll
+            ? `Πρόκειται να διαγράψεις ΟΛΕΣ τις ${selectedIds.size} υποχρεώσεις που εμφανίζονται αυτή τη στιγμή στη λίστα. Η ενέργεια δεν αναιρείται.`
+            : `Είστε σίγουροι ότι θέλετε να διαγράψετε ${selectedIds.size} υποχρεώσεις; Η ενέργεια δεν αναιρείται.`
+        }
         confirmText="Διαγραφή"
         cancelText="Ακύρωση"
         isLoading={bulkDeleteMutation.isPending}
         variant="danger"
+        requireTypedConfirmation={String(selectedIds.size)}
+        typedConfirmationLabel={`Πληκτρολόγησε τον αριθμό ${selectedIds.size} για επιβεβαίωση`}
       />
 
       {/* Generate Month Modal */}

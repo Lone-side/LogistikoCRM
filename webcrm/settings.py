@@ -313,7 +313,21 @@ HEALTH_CHECK_EXEMPT_URLS = [
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_HSTS_PRELOAD = False
+
+# ΜΗΝ το γυρίσεις σε "DENY". Το DENY μπλοκάρει ΚΑΙ same-origin framing, και η
+# εφαρμογή προβάλλει PDF μέσα σε <iframe> σε δύο σημεία:
+#   frontend/src/components/FilePreviewModal.tsx  (προεπισκόπηση εγγράφου)
+#   frontend/src/pages/SharedLinkPortal.tsx       (portal πελάτη)
+# Με DENY ο browser αρνείται να αποδώσει και τα δύο — η προεπισκόπηση σπάει
+# σιωπηλά. Το SAMEORIGIN είναι η σωστή τιμή εδώ· η σύγχρονη εκδοχή του ίδιου
+# ελέγχου είναι το CSP frame-ancestors 'self' (εκκρεμεί, βλ. backlog).
 X_FRAME_OPTIONS = "SAMEORIGIN"
+
+# Το Lax είναι ήδη το default του Django· δηλώνεται ρητά ώστε μια μελλοντική
+# αλλαγή σε "None" (που απαιτεί Secure και ανοίγει CSRF επιφάνεια) να είναι
+# συνειδητή απόφαση και όχι σιωπηλή παράλειψη.
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # ---- CRM settings ---- #
 
@@ -543,6 +557,12 @@ REST_FRAMEWORK = {
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
         'shared_link_auth': '10/hour',    # Δοκιμές κωδικού σε προστατευμένα links (ανά IP)
+        # Το login είναι ο κλασικός στόχος credential stuffing. Χωρίς δικό του
+        # scope έπεφτε στο γενικό anon (100/hour) — πολύ χαλαρό για endpoint
+        # που δοκιμάζει κωδικούς. Το refresh θέλει πιο γενναιόδωρο όριο: είναι
+        # αυτόματο και θα γίνει συχνότερο αν κοντύνει το ACCESS_TOKEN_LIFETIME.
+        'login': '10/min',                # Προσπάθειες σύνδεσης (ανά IP)
+        'token_refresh': '60/min',        # Ανανέωση JWT (ανά IP)
         'credential_reveal': '10/hour',   # Αποκαλύψεις κωδικών πελατών (ανά χρήστη)
         'afm_lookup': '60/hour',          # GSIS ΑΦΜ lookups (ανά χρήστη)
     },
@@ -558,12 +578,31 @@ if os.environ.get('NUM_PROXIES'):
 # JWT Settings
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=5),
+    # Ήταν 5 ώρες: κλεμμένο access token έμενε χρήσιμο για μισή εργάσιμη.
+    # Τα 30 λεπτά μικραίνουν το παράθυρο 10x. Δεν πήγαμε κατευθείαν στα 15'
+    # (η συνήθης σύσταση) γιατί κάθε ανανέωση κάνει rotation+blacklist, και
+    # θέλουμε μία εβδομάδα παρακολούθησης πριν εικοσαπλασιάσουμε τη συχνότητα.
+    # Προϋποθέσεις που μπήκαν μαζί, ΜΗΝ το κοντύνεις χωρίς αυτές:
+    #   - ο interceptor κρατά πλέον το rotated refresh token και σειριοποιεί
+    #     τα παράλληλα refreshes (frontend/src/api/client.ts)
+    #   - beat task 'flush-expired-jwt-tokens' καθαρίζει τους πίνακες
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
+    # Ξεχωριστό κλειδί υπογραφής, με fallback στο SECRET_KEY ώστε να μη
+    # χρειάζεται αλλαγή σε υπάρχουσες εγκαταστάσεις.
+    #
+    # ΓΙΑΤΙ ΧΩΡΙΣΤΑ: χωρίς αυτό, τα δύο είναι δεμένα και δεν μπορείς να
+    # αλλάξεις το ένα χωρίς να χτυπήσεις το άλλο — rotation του SECRET_KEY
+    # (π.χ. μετά από διαρροή) πετάει έξω ΟΛΟΥΣ τους συνδεδεμένους, και το
+    # SECRET_KEY χρησιμοποιείται επιπλέον σε sessions/CSRF/signing.
+    #
+    # ΠΡΟΣΟΧΗ όταν το ορίσεις: όλα τα υπάρχοντα tokens ακυρώνονται μία φορά
+    # και οι χρήστες ξανασυνδέονται. Κάν' το εκτός ωραρίου.
+    'SIGNING_KEY': os.environ.get('JWT_SIGNING_KEY') or SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
     'USER_ID_FIELD': 'id',
@@ -752,6 +791,12 @@ CELERY_BEAT_SCHEDULE = {
     'send-document-request-reminders': {
         'task': 'accounting.tasks.send_document_request_reminders',
         'schedule': crontab(hour=10, minute=0, day_of_week='1-5'),  # 10:00 Δευ-Παρ
+    },
+    'flush-expired-jwt-tokens': {
+        'task': 'accounting.tasks.flush_expired_jwt_tokens',
+        # Με rotation+blacklist κάθε ανανέωση token αφήνει δύο σειρές που δεν
+        # σβήνονται μόνες τους. Χωρίς αυτό οι πίνακες μεγαλώνουν για πάντα.
+        'schedule': crontab(hour=3, minute=30),  # Καθημερινά 03:30
     },
 }
 

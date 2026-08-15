@@ -3,7 +3,9 @@ import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
+  getRememberMe,
   setAccessToken,
+  setTokens,
 } from '../utils/tokenStorage';
 
 // Σε production build (πίσω από nginx) το API είναι same-origin στο /accounting.
@@ -37,6 +39,45 @@ apiClient.interceptors.request.use(
   }
 );
 
+/**
+ * Ένα και μόνο refresh τη φορά.
+ *
+ * Το backend τρέχει με ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION: κάθε
+ * επιτυχές refresh επιστρέφει ΝΕΟ refresh token και βάζει το παλιό σε
+ * blacklist. Δύο συνέπειες, που παλιότερα έβγαζαν τον χρήστη έξω:
+ *
+ *  1. Το νέο refresh token ΠΡΕΠΕΙ να αποθηκευτεί. Αλλιώς το επόμενο refresh
+ *     στέλνει blacklisted token και η συνεδρία πέφτει.
+ *  2. Παράλληλα 401 (ένα dashboard στέλνει πολλά queries μαζί) δεν πρέπει να
+ *     κάνουν το καθένα το δικό του refresh: το πρώτο θα ακύρωνε το token και
+ *     τα υπόλοιπα θα αποτύγχαναν. Όλα περιμένουν το ίδιο promise.
+ */
+let refreshPromise: Promise<string> | null = null;
+
+function refreshAccessToken(refreshToken: string): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(
+        `${API_BASE_URL}/api/auth/refresh/`,
+        { refresh: refreshToken },
+        { headers: { 'Content-Type': 'application/json' } }
+      )
+      .then(({ data }) => {
+        if (data.refresh) {
+          // Rotation ενεργή: κράτα ΚΑΙ το νέο refresh token.
+          setTokens(data.access, data.refresh, getRememberMe());
+        } else {
+          setAccessToken(data.access);
+        }
+        return data.access as string;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 // Response interceptor to handle token refresh
 apiClient.interceptors.response.use(
   (response) => response,
@@ -45,26 +86,25 @@ apiClient.interceptors.response.use(
 
     // If 401 error and we haven't already tried to refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = getRefreshToken();
+
+      // Χωρίς refresh token δεν υπάρχει τίποτα να ανανεωθεί. Αυτό είναι απλό
+      // 401 — τυπικά λάθος κωδικός στο login — και πρέπει να φτάσει στον
+      // caller ώστε να εμφανιστεί το μήνυμα σφάλματος, ΟΧΙ redirect.
+      if (!refreshToken) {
+        return Promise.reject(error);
+      }
+
       originalRequest._retry = true;
 
       try {
-        const refreshToken = getRefreshToken();
-        if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/api/auth/refresh/`, {
-            refresh: refreshToken,
-          }, {
-            headers: { 'Content-Type': 'application/json' }
-          });
+        const access = await refreshAccessToken(refreshToken);
 
-          const { access } = response.data;
-          setAccessToken(access);
-
-          // Retry the original request with new token
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${access}`;
-          }
-          return apiClient(originalRequest);
+        // Retry the original request with new token
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${access}`;
         }
+        return apiClient(originalRequest);
       } catch (refreshError) {
         // Refresh failed, clear tokens and redirect to login
         clearTokens();

@@ -16,6 +16,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -93,6 +94,10 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         - user: User object with id, username, email, etc.
     """
     serializer_class = CustomTokenObtainPairSerializer
+    # Χωρίς δικό του scope το login έπεφτε στο γενικό anon throttle
+    # (100/hour) — πολύ χαλαρό για endpoint που δοκιμάζει κωδικούς.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
 
 class CustomTokenRefreshView(TokenRefreshView):
@@ -108,7 +113,8 @@ class CustomTokenRefreshView(TokenRefreshView):
         - access: New JWT access token
         - refresh: New JWT refresh token (if rotation is enabled)
     """
-    pass
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'token_refresh'
 
 
 class CustomTokenVerifyView(TokenVerifyView):
