@@ -313,7 +313,21 @@ HEALTH_CHECK_EXEMPT_URLS = [
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_HSTS_PRELOAD = False
+
+# ΜΗΝ το γυρίσεις σε "DENY". Το DENY μπλοκάρει ΚΑΙ same-origin framing, και η
+# εφαρμογή προβάλλει PDF μέσα σε <iframe> σε δύο σημεία:
+#   frontend/src/components/FilePreviewModal.tsx  (προεπισκόπηση εγγράφου)
+#   frontend/src/pages/SharedLinkPortal.tsx       (portal πελάτη)
+# Με DENY ο browser αρνείται να αποδώσει και τα δύο — η προεπισκόπηση σπάει
+# σιωπηλά. Το SAMEORIGIN είναι η σωστή τιμή εδώ· η σύγχρονη εκδοχή του ίδιου
+# ελέγχου είναι το CSP frame-ancestors 'self' (εκκρεμεί, βλ. backlog).
 X_FRAME_OPTIONS = "SAMEORIGIN"
+
+# Το Lax είναι ήδη το default του Django· δηλώνεται ρητά ώστε μια μελλοντική
+# αλλαγή σε "None" (που απαιτεί Secure και ανοίγει CSRF επιφάνεια) να είναι
+# συνειδητή απόφαση και όχι σιωπηλή παράλειψη.
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
 
 # ---- CRM settings ---- #
 
@@ -543,6 +557,12 @@ REST_FRAMEWORK = {
         'user': '1000/hour',      # Authenticated users: 1000 requests/hour
         'shared_link_upload': '30/hour',  # Public uploads πελατών μέσω portal (ανά IP)
         'shared_link_auth': '10/hour',    # Δοκιμές κωδικού σε προστατευμένα links (ανά IP)
+        # Το login είναι ο κλασικός στόχος credential stuffing. Χωρίς δικό του
+        # scope έπεφτε στο γενικό anon (100/hour) — πολύ χαλαρό για endpoint
+        # που δοκιμάζει κωδικούς. Το refresh θέλει πιο γενναιόδωρο όριο: είναι
+        # αυτόματο και θα γίνει συχνότερο αν κοντύνει το ACCESS_TOKEN_LIFETIME.
+        'login': '10/min',                # Προσπάθειες σύνδεσης (ανά IP)
+        'token_refresh': '60/min',        # Ανανέωση JWT (ανά IP)
         'credential_reveal': '10/hour',   # Αποκαλύψεις κωδικών πελατών (ανά χρήστη)
         'afm_lookup': '60/hour',          # GSIS ΑΦΜ lookups (ανά χρήστη)
     },
