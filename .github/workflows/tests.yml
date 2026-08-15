@@ -220,11 +220,10 @@ jobs:
       - name: Test
         run: npm test
 
-      # 32 προϋπάρχοντα eslint errors (react-hooks rules) — ορατά αλλά μη
-      # μπλοκαριστικά μέχρι το lint follow-up. Χωρίς "|| echo" ώστε το step
-      # να κοκκινίζει και να μη χάνεται το αποτέλεσμα.
-      - name: Lint (non-blocking until eslint cleanup)
-        continue-on-error: true
+      # Το lint baseline καθαρίστηκε (d58f4e5) και επαληθεύτηκε καθαρό στις
+      # 15/08/2026 — το gate είναι πλέον μπλοκαριστικό, όπως απαιτεί το
+      # docs/GO_LIVE_2026-08-17.md §2.
+      - name: Lint
         run: npm run lint
 
   # Production security smoke: επιβεβαιώνει ότι η εφαρμογή εκκινεί και τα
