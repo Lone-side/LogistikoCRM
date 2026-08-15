@@ -132,3 +132,38 @@ class LoginThrottleTest(APITestCase):
             "το refresh πρέπει να επιτρέπει περισσότερα αιτήματα/δευτερόλεπτο "
             "από το login",
         )
+
+
+class JWTLifetimeTest(APITestCase):
+    """Το access token δεν πρέπει να ξαναγίνει μακρόβιο κατά λάθος."""
+
+    def test_access_token_is_short_lived(self):
+        from datetime import timedelta
+        from django.conf import settings
+
+        lifetime = settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"]
+        self.assertLessEqual(
+            lifetime,
+            timedelta(minutes=60),
+            "κλεμμένο access token δεν πρέπει να ζει πάνω από μία ώρα",
+        )
+
+    def test_rotation_requires_blacklist(self):
+        """Rotation χωρίς blacklist αφήνει το παλιό refresh σε ισχύ."""
+        from django.conf import settings
+
+        if settings.SIMPLE_JWT.get("ROTATE_REFRESH_TOKENS"):
+            self.assertTrue(
+                settings.SIMPLE_JWT.get("BLACKLIST_AFTER_ROTATION"),
+                "με ROTATE_REFRESH_TOKENS πρέπει να είναι ενεργό και το "
+                "BLACKLIST_AFTER_ROTATION",
+            )
+
+    def test_expired_token_cleanup_is_scheduled(self):
+        """Με rotation+blacklist οι πίνακες μεγαλώνουν χωρίς καθαρισμό."""
+        from django.conf import settings
+
+        tasks = {
+            entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()
+        }
+        self.assertIn("accounting.tasks.flush_expired_jwt_tokens", tasks)

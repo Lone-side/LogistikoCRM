@@ -578,7 +578,15 @@ if os.environ.get('NUM_PROXIES'):
 # JWT Settings
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=5),
+    # Ήταν 5 ώρες: κλεμμένο access token έμενε χρήσιμο για μισή εργάσιμη.
+    # Τα 30 λεπτά μικραίνουν το παράθυρο 10x. Δεν πήγαμε κατευθείαν στα 15'
+    # (η συνήθης σύσταση) γιατί κάθε ανανέωση κάνει rotation+blacklist, και
+    # θέλουμε μία εβδομάδα παρακολούθησης πριν εικοσαπλασιάσουμε τη συχνότητα.
+    # Προϋποθέσεις που μπήκαν μαζί, ΜΗΝ το κοντύνεις χωρίς αυτές:
+    #   - ο interceptor κρατά πλέον το rotated refresh token και σειριοποιεί
+    #     τα παράλληλα refreshes (frontend/src/api/client.ts)
+    #   - beat task 'flush-expired-jwt-tokens' καθαρίζει τους πίνακες
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -772,6 +780,12 @@ CELERY_BEAT_SCHEDULE = {
     'send-document-request-reminders': {
         'task': 'accounting.tasks.send_document_request_reminders',
         'schedule': crontab(hour=10, minute=0, day_of_week='1-5'),  # 10:00 Δευ-Παρ
+    },
+    'flush-expired-jwt-tokens': {
+        'task': 'accounting.tasks.flush_expired_jwt_tokens',
+        # Με rotation+blacklist κάθε ανανέωση token αφήνει δύο σειρές που δεν
+        # σβήνονται μόνες τους. Χωρίς αυτό οι πίνακες μεγαλώνουν για πάντα.
+        'schedule': crontab(hour=3, minute=30),  # Καθημερινά 03:30
     },
 }
 

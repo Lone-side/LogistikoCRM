@@ -929,6 +929,32 @@ def cleanup_stale_sync_logs(stale_minutes=60):
 
 
 # ============================================
+# JWT BLACKLIST CLEANUP (Celery beat, καθημερινά)
+# ============================================
+
+@shared_task
+def flush_expired_jwt_tokens():
+    """Σβήνει τα ληγμένα JWT από τους πίνακες του token_blacklist.
+
+    Το project τρέχει με ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION:
+    ΚΑΘΕ ανανέωση token γράφει ένα OutstandingToken (το νέο refresh) και ένα
+    BlacklistedToken (το παλιό). Κανένα από τα δύο δεν σβήνεται μόνο του, οπότε
+    οι πίνακες μεγαλώνουν για πάντα — και ο ρυθμός είναι ανάλογος του πόσο
+    συχνά ανανεώνονται τα tokens.
+
+    Το SimpleJWT δίνει έτοιμη την εντολή `flushexpiredtokens`, που αφαιρεί
+    ΜΟΝΟ όσα έχουν ήδη λήξει· ενεργές συνεδρίες δεν θίγονται.
+    """
+    from django.core.management import call_command
+    from io import StringIO
+
+    out = StringIO()
+    call_command('flushexpiredtokens', stdout=out)
+    logger.info('Καθαρίστηκαν ληγμένα JWT tokens')
+    return out.getvalue().strip() or 'flushexpiredtokens: ok'
+
+
+# ============================================
 # ΑΙΤΗΜΑΤΑ ΕΓΓΡΑΦΩΝ: υπενθυμίσεις + ειδοποιήσεις uploads
 # ============================================
 
