@@ -264,14 +264,35 @@ class Command(BaseCommand):
                 logger.error(f"Error processing client id={client.pk}: {str(e)}")
     
     def show_progress(self, current, total, message=''):
-        """Show progress bar"""
+        """Show progress bar.
+
+        Η μπάρα είναι ΜΟΝΟ για διαδραστική χρήση. Όταν το stdout δεν είναι
+        terminal (tests, CI, cron, docker logs) παραλείπεται εντελώς: δεν
+        προσφέρει τίποτα σε αρχείο καταγραφής και το \r γεμίζει τα logs.
+
+        Επιπλέον, η κονσόλα των Windows στα ελληνικά είναι cp1253 και ΔΕΝ
+        κωδικοποιεί ούτε τα █/░ ούτε ελληνικό κείμενο — χωρίς προστασία, μια
+        εντολή που απλώς τυπώνει πρόοδο σκάει με UnicodeEncodeError.
+        """
+        if not sys.stdout.isatty():
+            return
+
         bar_length = 40
         percent = float(current) / total
         arrow = '█' * int(round(percent * bar_length))
         spaces = '░' * (bar_length - len(arrow))
-        
-        sys.stdout.write(f'\r[{arrow}{spaces}] {int(percent*100)}% - {message[:40]:<40}')
-        sys.stdout.flush()
+        line = f'\r[{arrow}{spaces}] {int(percent*100)}% - {message[:40]:<40}'
+
+        try:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        except UnicodeEncodeError:
+            # Fallback σε καθαρό ASCII για κονσόλες χωρίς UTF-8.
+            encoding = getattr(sys.stdout, 'encoding', None) or 'ascii'
+            ascii_bar = '#' * len(arrow) + '-' * len(spaces)
+            safe_message = message[:40].encode(encoding, 'replace').decode(encoding)
+            sys.stdout.write(f'\r[{ascii_bar}] {int(percent*100)}% - {safe_message:<40}')
+            sys.stdout.flush()
     
     def print_results(self):
         """Print detailed results"""

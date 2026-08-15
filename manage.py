@@ -3,7 +3,31 @@ import os
 import sys
 
 
+def _force_utf8_console():
+    """Γράψε πάντα UTF-8 στο stdout/stderr.
+
+    Οι εντολές του project τυπώνουν ελληνικά (ρόλοι, υποχρεώσεις, πελάτες).
+    Η ελληνική κονσόλα των Windows είναι cp1253 και ΔΕΝ τα κωδικοποιεί, οπότε
+    ένα απλό `self.stdout.write('Δημιουργήθηκε ρόλος…')` έριχνε ολόκληρη την
+    εντολή με UnicodeEncodeError — αρκετό ώστε το τοπικό backend suite να
+    βγάζει 127 errors που δεν υπήρχαν στο CI (Linux/UTF-8).
+
+    Το errors='replace' εγγυάται ότι καμία εντολή δεν θα πέσει ποτέ επειδή
+    ένας χαρακτήρας δεν χωρά στην κονσόλα.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, 'reconfigure', None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding='utf-8', errors='replace')
+        except (OSError, ValueError):
+            # Ανακατευθυνόμενο ή κλειστό stream — δεν είναι λόγος αποτυχίας.
+            pass
+
+
 if __name__ == '__main__':
+    _force_utf8_console()
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'webcrm.settings_local')
     os.environ.setdefault('DJANGO_RUNSERVER_HIDE_WARNING', 'true')
     try:
