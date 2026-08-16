@@ -186,8 +186,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
+            <label htmlFor="oblsettings-perigrafi-3" className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
             <textarea
+              id="oblsettings-perigrafi-3"
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
@@ -197,8 +198,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Συχνότητα</label>
+              <label htmlFor="oblsettings-sychnotita" className="block text-sm font-medium text-slate-700 mb-1">Συχνότητα</label>
               <select
+                id="oblsettings-sychnotita"
                 value={formData.frequency}
                 onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -211,8 +213,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Τύπος Προθεσμίας</label>
+              <label htmlFor="oblsettings-typos-prothesmias" className="block text-sm font-medium text-slate-700 mb-1">Τύπος Προθεσμίας</label>
               <select
+                id="oblsettings-typos-prothesmias"
                 value={formData.deadline_type}
                 onChange={(e) => setFormData({ ...formData, deadline_type: e.target.value })}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -228,8 +231,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           {formData.deadline_type === 'specific_day' && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Ημέρα Προθεσμίας</label>
+              <label htmlFor="oblsettings-imera-prothesmias" className="block text-sm font-medium text-slate-700 mb-1">Ημέρα Προθεσμίας</label>
               <input
+                id="oblsettings-imera-prothesmias"
                 type="number"
                 min={1}
                 max={31}
@@ -289,8 +293,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Ομάδα Αλληλοαποκλεισμού</label>
+              <label htmlFor="oblsettings-omada-alliloapokleismoy" className="block text-sm font-medium text-slate-700 mb-1">Ομάδα Αλληλοαποκλεισμού</label>
               <select
+                id="oblsettings-omada-alliloapokleismoy"
                 value={formData.exclusion_group || ''}
                 onChange={(e) =>
                   setFormData({ ...formData, exclusion_group: e.target.value ? parseInt(e.target.value) : null })
@@ -309,8 +314,9 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
+              <label htmlFor="oblsettings-proteraiotita" className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
               <input
+                id="oblsettings-proteraiotita"
                 type="number"
                 value={formData.priority || 0}
                 onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
@@ -489,8 +495,9 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
+            <label htmlFor="oblsettings-perigrafi-2" className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
             <textarea
+              id="oblsettings-perigrafi-2"
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}
@@ -658,8 +665,9 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
+            <label htmlFor="oblsettings-perigrafi" className="block text-sm font-medium text-slate-700 mb-1">Περιγραφή</label>
             <textarea
+              id="oblsettings-perigrafi"
               value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={2}

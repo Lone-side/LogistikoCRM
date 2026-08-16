@@ -331,8 +331,9 @@ export function CompleteObligationModal({
 
               {/* Template selection */}
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Πρότυπο</label>
+                <label htmlFor="complobl-protypo" className="block text-sm text-gray-600 mb-1">Πρότυπο</label>
                 <select
+                  id="complobl-protypo"
                   value={selectedTemplate || ''}
                   onChange={(e) =>
                     setSelectedTemplate(e.target.value ? Number(e.target.value) : null)

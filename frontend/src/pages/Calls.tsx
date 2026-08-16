@@ -278,8 +278,9 @@ export default function Calls() {
           <div className="mt-4 pt-4 border-t border-slate-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Κατεύθυνση</label>
+                <label htmlFor="calls-kateythynsi" className="block text-sm font-medium text-slate-700 mb-1">Κατεύθυνση</label>
                 <select
+                  id="calls-kateythynsi"
                   value={filters.direction || ''}
                   onChange={(e) => handleFilterChange('direction', e.target.value as CallsFilters['direction'])}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -292,8 +293,9 @@ export default function Calls() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Από ημερομηνία</label>
+                <label htmlFor="calls-apo-imerominia" className="block text-sm font-medium text-slate-700 mb-1">Από ημερομηνία</label>
                 <input
+                  id="calls-apo-imerominia"
                   type="date"
                   value={filters.date_from || ''}
                   onChange={(e) => handleFilterChange('date_from', e.target.value)}
@@ -301,8 +303,9 @@ export default function Calls() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Έως ημερομηνία</label>
+                <label htmlFor="calls-eos-imerominia" className="block text-sm font-medium text-slate-700 mb-1">Έως ημερομηνία</label>
                 <input
+                  id="calls-eos-imerominia"
                   type="date"
                   value={filters.date_to || ''}
                   onChange={(e) => handleFilterChange('date_to', e.target.value)}

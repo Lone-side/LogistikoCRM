@@ -127,8 +127,9 @@ export function SendEmailModal({
 
         {/* Template selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Πρότυπο</label>
+          <label htmlFor="sendemail-protypo" className="block text-sm font-medium text-gray-700 mb-1">Πρότυπο</label>
           <select
+            id="sendemail-protypo"
             value={selectedTemplate || ''}
             onChange={handleTemplateChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -145,8 +146,9 @@ export function SendEmailModal({
 
         {/* Subject */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Θέμα</label>
+          <label htmlFor="sendemail-thema" className="block text-sm font-medium text-gray-700 mb-1">Θέμα</label>
           <input
+            id="sendemail-thema"
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -157,8 +159,9 @@ export function SendEmailModal({
 
         {/* Body */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Μήνυμα</label>
+          <label htmlFor="sendemail-minyma" className="block text-sm font-medium text-gray-700 mb-1">Μήνυμα</label>
           <textarea
+            id="sendemail-minyma"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Κείμενο email..."

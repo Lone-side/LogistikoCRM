@@ -350,8 +350,9 @@ function UploadModal({
       <div className="space-y-4">
         {/* Client selection */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Πελάτης *</label>
+          <label htmlFor="filemgr-pelatis" className="block text-sm font-medium text-slate-700 mb-1">Πελάτης *</label>
           <select
+            id="filemgr-pelatis"
             value={clientId || ''}
             onChange={(e) => handleClientChange(e.target.value ? Number(e.target.value) : null)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -367,8 +368,9 @@ function UploadModal({
 
         {/* Category selection */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Κατηγορία</label>
+          <label htmlFor="filemgr-katigoria" className="block text-sm font-medium text-slate-700 mb-1">Κατηγορία</label>
           <select
+            id="filemgr-katigoria"
             value={category}
             onChange={(e) => setCategory(e.target.value as DocumentCategory)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -493,8 +495,9 @@ function ShareModal({
 
         {/* Expiration */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Λήξη συνδέσμου</label>
+          <label htmlFor="filemgr-lixi-syndesmoy" className="block text-sm font-medium text-slate-700 mb-1">Λήξη συνδέσμου</label>
           <select
+            id="filemgr-lixi-syndesmoy"
             value={expiresInDays || ''}
             onChange={(e) => setExpiresInDays(e.target.value ? Number(e.target.value) : undefined)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md"
@@ -1173,8 +1176,9 @@ export default function FileManager() {
           {showFilters && (
             <div className="mt-4 pt-4 border-t border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm text-slate-500 mb-1">Έτος</label>
+                <label htmlFor="filemgr-etos" className="block text-sm text-slate-500 mb-1">Έτος</label>
                 <select
+                  id="filemgr-etos"
                   value={filters.year || ''}
                   onChange={(e) => setFilters((prev) => ({ ...prev, year: e.target.value ? Number(e.target.value) : undefined }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
@@ -1186,8 +1190,9 @@ export default function FileManager() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-slate-500 mb-1">Μήνας</label>
+                <label htmlFor="filemgr-minas" className="block text-sm text-slate-500 mb-1">Μήνας</label>
                 <select
+                  id="filemgr-minas"
                   value={filters.month || ''}
                   onChange={(e) => setFilters((prev) => ({ ...prev, month: e.target.value ? Number(e.target.value) : undefined }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
@@ -1199,8 +1204,9 @@ export default function FileManager() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-slate-500 mb-1">Τύπος αρχείου</label>
+                <label htmlFor="filemgr-typos-archeioy" className="block text-sm text-slate-500 mb-1">Τύπος αρχείου</label>
                 <select
+                  id="filemgr-typos-archeioy"
                   value={filters.file_type || ''}
                   onChange={(e) => setFilters((prev) => ({ ...prev, file_type: e.target.value || undefined }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"
@@ -1213,8 +1219,9 @@ export default function FileManager() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-slate-500 mb-1">Ετικέτα</label>
+                <label htmlFor="filemgr-etiketa" className="block text-sm text-slate-500 mb-1">Ετικέτα</label>
                 <select
+                  id="filemgr-etiketa"
                   value={filters.tag || ''}
                   onChange={(e) => setFilters((prev) => ({ ...prev, tag: e.target.value || undefined }))}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg"

@@ -250,8 +250,9 @@ export default function Settings() {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Όνομα</label>
+                    <label htmlFor="settings-onoma" className="block text-sm font-medium text-slate-700 mb-1">Όνομα</label>
                     <input
+                      id="settings-onoma"
                       type="text"
                       value={profileForm.first_name}
                       onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
@@ -259,8 +260,9 @@ export default function Settings() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Επώνυμο</label>
+                    <label htmlFor="settings-eponymo" className="block text-sm font-medium text-slate-700 mb-1">Επώνυμο</label>
                     <input
+                      id="settings-eponymo"
                       type="text"
                       value={profileForm.last_name}
                       onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
@@ -270,8 +272,9 @@ export default function Settings() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                  <label htmlFor="settings-email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
                   <input
+                    id="settings-email"
                     type="email"
                     value={profileForm.email}
                     onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
@@ -280,8 +283,9 @@ export default function Settings() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Όνομα χρήστη</label>
+                  <label htmlFor="settings-onoma-christi" className="block text-sm font-medium text-slate-700 mb-1">Όνομα χρήστη</label>
                   <input
+                    id="settings-onoma-christi"
                     type="text"
                     defaultValue={user?.username || ''}
                     disabled
@@ -364,22 +368,25 @@ export default function Settings() {
 
                 <div className="space-y-4 max-w-md">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Τρέχων κωδικός</label>
+                    <label htmlFor="settings-trechon-kodikos" className="block text-sm font-medium text-slate-700 mb-1">Τρέχων κωδικός</label>
                     <input
+                      id="settings-trechon-kodikos"
                       type="password"
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Νέος κωδικός</label>
+                    <label htmlFor="settings-neos-kodikos" className="block text-sm font-medium text-slate-700 mb-1">Νέος κωδικός</label>
                     <input
+                      id="settings-neos-kodikos"
                       type="password"
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Επιβεβαίωση νέου κωδικού</label>
+                    <label htmlFor="settings-epivevaiosi-neoy-kodikoy" className="block text-sm font-medium text-slate-700 mb-1">Επιβεβαίωση νέου κωδικού</label>
                     <input
+                      id="settings-epivevaiosi-neoy-kodikoy"
                       type="password"
                       className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     />
