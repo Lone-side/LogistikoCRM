@@ -36,6 +36,40 @@
   — το preflight αποτυγχάνει διαφορετικά. Παραγωγική υποβολή μόνο μετά το
   [MYDATA_SANDBOX_TEST.md](MYDATA_SANDBOX_TEST.md) και συνειδητή απόφαση.
 
+### 1.1 Ξεχωριστό checkout για την παραγωγή — ΜΗΝ το ενοποιήσετε
+
+Η παραγωγή τρέχει από **δικό της checkout**, όπου κανείς δεν αναπτύσσει:
+
+```
+Projects/LogistikoCRM-prod   ← η παραγωγή δείχνει ΕΔΩ (main, μόνο fast-forward)
+Projects/LogistikoCRM        ← ανάπτυξη: branches, builds, δοκιμές
+```
+
+**Γιατί:** το `docker-compose.office.yml` κάνει bind-mount το
+`nginx/office.conf` και τα certificates **από τον φάκελο του checkout**. Όσο
+η παραγωγή έδειχνε στον φάκελο ανάπτυξης, ένα απλό `git checkout` άλλου
+branch **άλλαζε ζωντανό production config** — σιωπηλά, γιατί το nginx κρατά
+το config στη μνήμη μέχρι το επόμενο reload. Συνέβη στις 16/08/2026.
+
+Το project name παραμένει `logistikocrm_office`, οπότε τα named volumes
+(βάση, media, backups) είναι τα ίδια — η αλλαγή δεν αγγίζει δεδομένα.
+
+Στο production checkout αντιγράφονται **μόνο** τα gitignored αρχεία που
+χρειάζεται το runtime:
+
+```
+certs/.env.office
+certs/office.crt
+certs/office.key
+```
+
+Το `certs/office-ca.key` (ιδιωτικό κλειδί της CA) **δεν** αντιγράφεται:
+χρησιμοποιείται μόνο από το `scripts/office_certs.sh` για έκδοση
+certificates, που είναι εργασία ανάπτυξης.
+
+Όλες οι εντολές παραγωγής (§5 deployment, backup, preflight) τρέχουν
+**μέσα από το `LogistikoCRM-prod`**.
+
 ## 2. Πρώτη εγκατάσταση
 
 ```bash
