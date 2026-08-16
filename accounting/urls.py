@@ -342,8 +342,19 @@ urlpatterns = [
     path("api/v1/documents/upload-with-version/", upload_document_with_version, name="api_upload_document_with_version"),
 
     # REST ROUTER
-    path("api/", include(router.urls)),
-    path("api/v1/", include(router.urls)),  # Versioned API endpoint
+    #
+    # ΜΟΝΟ v1. Ο ίδιος router ήταν παλιότερα mounted ΚΑΙ στο "api/", οπότε
+    # κάθε resource υπήρχε σε δύο διευθύνσεις: permissions, throttles και
+    # RBAC έπρεπε να συντηρούνται δύο φορές, και τα url names ήταν διπλά
+    # (το reverse() επέστρεφε όποιο τύχαινε).
+    #
+    # Το legacy mount ήταν αχρησιμοποίητο: μηδέν κλήσεις από το frontend,
+    # μηδέν tests, μηδέν reverse(), μηδέν templates (έλεγχος 16/08/2026).
+    # Τα ρητά paths κάτω από "api/" (auth, mydata, dashboard, reports,
+    # settings/backup, search) ΔΕΝ περνούν από τον router και δεν θίγονται.
+    #
+    # Το συμβόλαιο κλειδώνεται στο tests/accounting/test_api_mount_contract.py.
+    path("api/v1/", include(router.urls)),
 
     # ============================================
     # ENHANCED VOIP/TICKETS API (v2)
