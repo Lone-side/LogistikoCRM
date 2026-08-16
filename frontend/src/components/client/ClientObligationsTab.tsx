@@ -46,8 +46,9 @@ export default function ClientObligationsTab({
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-slate-600">Έτος:</label>
+          <label htmlFor="client-obligations-year" className="text-sm text-slate-600">Έτος:</label>
           <select
+            id="client-obligations-year"
             value={yearFilter}
             onChange={(e) => setYearFilter(Number(e.target.value))}
             className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
@@ -60,8 +61,9 @@ export default function ClientObligationsTab({
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-slate-600">Κατάσταση:</label>
+          <label htmlFor="client-obligations-status" className="text-sm text-slate-600">Κατάσταση:</label>
           <select
+            id="client-obligations-status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"

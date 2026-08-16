@@ -137,10 +137,14 @@ export function PortalUploadSection({
 
       {pendingItems.length > 0 && (
         <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="portal-target-document"
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
             Σε ποιο έγγραφο αντιστοιχεί το αρχείο;
           </label>
           <select
+            id="portal-target-document"
             value={selectedItemId}
             onChange={(e) => {
               const value = e.target.value;
@@ -413,12 +417,16 @@ export default function SharedLinkPortal() {
           <div className="space-y-4">
             {needsPassword && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="portal-password"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Κωδικός πρόσβασης
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input
+                    id="portal-password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -432,12 +440,16 @@ export default function SharedLinkPortal() {
 
             {needsEmail && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label
+                  htmlFor="portal-email"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
                   Email
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input
+                    id="portal-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
