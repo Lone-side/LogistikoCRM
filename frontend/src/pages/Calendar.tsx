@@ -164,8 +164,9 @@ function DayDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
+      {/* Backdrop — οπτικό μόνο· κλείσιμο με πληκτρολόγιο μέσω Escape/κουμπιού */}
       <div
+        aria-hidden="true"
         className="fixed inset-0 bg-black/50 transition-opacity"
         onClick={onClose}
       />

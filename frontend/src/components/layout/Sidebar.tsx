@@ -66,9 +66,11 @@ const navGroups: NavGroup[] = [
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse }: SidebarProps) {
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Mobile overlay — οπτικό βοήθημα για αφή/ποντίκι. Κρύβεται από τον
+          a11y tree· η πλοήγηση με πληκτρολόγιο γίνεται μέσα στο <aside>. */}
       {isOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
