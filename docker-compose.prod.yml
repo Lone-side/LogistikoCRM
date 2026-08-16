@@ -93,6 +93,10 @@ services:
     build:
       context: .
       target: app
+      args:
+        # Ποιο commit χτίστηκε — το preflight το αναφέρει, ώστε να φαίνεται
+        # αν το image αποκλίνει από το checkout της παραγωγής.
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     # ~361 MiB σε χρήση (gunicorn)
     mem_limit: 1g
@@ -123,6 +127,10 @@ services:
     build:
       context: .
       target: app
+      args:
+        # Ποιο commit χτίστηκε — το preflight το αναφέρει, ώστε να φαίνεται
+        # αν το image αποκλίνει από το checkout της παραγωγής.
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     # ~651 MiB σε χρήση — PDF/XML parsing
     mem_limit: 1536m
@@ -146,6 +154,10 @@ services:
     build:
       context: .
       target: app
+      args:
+        # Ποιο commit χτίστηκε — το preflight το αναφέρει, ώστε να φαίνεται
+        # αν το image αποκλίνει από το checkout της παραγωγής.
+        GIT_SHA: ${GIT_SHA:-unknown}
     restart: unless-stopped
     # ~131 MiB σε χρήση
     mem_limit: 384m

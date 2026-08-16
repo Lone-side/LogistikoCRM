@@ -255,3 +255,29 @@ class OfficePreflightTest(TestCase):
         output = self.run_preflight(
             disk={'status': 'critical', 'used_percent': 95.0})
         self.assert_check(output, 'FAIL', 'disk')
+
+
+class BuildProvenanceCheckTest(OfficePreflightTest):
+    """Το image πρέπει να δηλώνει από ποιο commit χτίστηκε.
+
+    Από τη στιγμή που η παραγωγή τρέχει σε δικό της checkout
+    (OFFICE_RUNBOOK §1.1), μπορεί να ενημερωθεί ο φάκελος χωρίς redeploy.
+    Χωρίς GIT_SHA η απόκλιση είναι αόρατη: containers healthy, παλιός κώδικας.
+    """
+
+    def test_missing_sha_warns(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('GIT_SHA', None)
+            output = self.run_preflight()
+        self.assert_check(output, 'WARN', 'build-provenance')
+
+    def test_unknown_sha_warns(self):
+        with mock.patch.dict(os.environ, {'GIT_SHA': 'unknown'}):
+            output = self.run_preflight()
+        self.assert_check(output, 'WARN', 'build-provenance')
+
+    def test_real_sha_is_reported(self):
+        with mock.patch.dict(os.environ, {'GIT_SHA': 'c9b24ab1234567890abcdef'}):
+            output = self.run_preflight()
+        self.assert_check(output, 'OK', 'build-provenance')
+        self.assertIn('c9b24ab12345', output)

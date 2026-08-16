@@ -65,6 +65,19 @@ USER app
 RUN SECRET_KEY=build-only DEBUG=True python manage.py collectstatic --noinput \
     && rm -f /tmp/*.lock
 
+# Ιχνηλασιμότητα: από ποιο commit χτίστηκε ΑΥΤΟ το image.
+#
+# Το .dockerignore εξαιρεί το .git, οπότε το SHA δεν προκύπτει μέσα στο build
+# — περνά ως build arg από το compose. Χωρίς αυτό δεν υπάρχει τρόπος να
+# επιβεβαιωθεί ότι το image που τρέχει αντιστοιχεί στο checkout της
+# παραγωγής, κάτι που έγινε ουσιώδες από τη στιγμή που τα δύο χωρίστηκαν
+# (βλ. docs/OFFICE_RUNBOOK.md §1.1).
+#
+# Δηλώνεται ΜΕΤΑ το collectstatic ώστε αλλαγή SHA να μην ακυρώνει τα
+# προηγούμενα layers — αλλιώς κάθε build θα ξανάχτιζε τα πάντα.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 EXPOSE 8000
 
 CMD ["gunicorn", "webcrm.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
