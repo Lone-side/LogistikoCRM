@@ -397,3 +397,59 @@ class ShowProgressEncodingTest(TestCase):
         self.assertIn('50%', output)
         self.assertIn('#', output)          # ASCII μπάρα
         self.assertNotIn('█', output)       # όχι block characters
+
+
+class BackupScheduleTest(TestCase):
+    """Το backup schedule ορίζει το RPO — δεν πρέπει να ξαναγίνει ημερήσιο.
+
+    Το restore rehearsal (16/08/2026) έδειξε RTO 3'33", δηλαδή η επαναφορά
+    είναι γρήγορη. Το ρίσκο ήταν το RPO: ένα backup την ημέρα σήμαινε απώλεια
+    έως 24 ωρών εργασίας.
+    """
+
+    def _entry(self):
+        from django.conf import settings
+        for entry in settings.CELERY_BEAT_SCHEDULE.values():
+            if entry['task'] == 'accounting.tasks.backup_database_task':
+                return entry
+        self.fail('δεν βρέθηκε προγραμματισμένο backup task')
+
+    def test_backup_runs_more_than_once_a_day(self):
+        hours = self._entry()['schedule'].hour
+        self.assertGreaterEqual(
+            len(hours), 4,
+            'το backup πρέπει να τρέχει τουλάχιστον 4 φορές την ημέρα — '
+            'αλλιώς το RPO ξαναγίνεται ~24 ώρες',
+        )
+
+    def test_retention_is_expressed_in_days(self):
+        """Χωρίς ρητό keep_days η διατήρηση μετριέται σε ΠΛΗΘΟΣ αρχείων,
+        οπότε πυκνότερα backups κονταίνουν το ιστορικό."""
+        entry = self._entry()
+        keep_days = entry.get('kwargs', {}).get('keep_days')
+        self.assertTrue(
+            keep_days and keep_days >= 14,
+            'το backup task πρέπει να παίρνει ρητό keep_days >= 14',
+        )
+
+    def test_backup_task_forwards_keep_days(self):
+        from unittest import mock
+        from accounting.tasks import backup_database_task
+
+        with mock.patch('django.core.management.call_command') as call:
+            backup_database_task(keep_days=21)
+
+        args = call.call_args[0]
+        self.assertEqual(args[0], 'backup_database')
+        self.assertIn('--keep-days', args)
+        self.assertIn('21', args)
+
+    def test_backup_task_never_skips_media(self):
+        """DB-only backup σπάει το ζευγάρωμα που θέλει το restore --latest."""
+        from unittest import mock
+        from accounting.tasks import backup_database_task
+
+        with mock.patch('django.core.management.call_command') as call:
+            backup_database_task(keep_days=21)
+
+        self.assertNotIn('--skip-media', call.call_args[0])

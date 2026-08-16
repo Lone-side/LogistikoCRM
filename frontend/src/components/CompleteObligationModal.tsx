@@ -193,14 +193,26 @@ export function CompleteObligationModal({
             <span className="font-medium text-gray-900">Επισύναψη Εγγράφου</span>
           </div>
 
-          {/* Drop zone */}
+          {/* Drop zone: είναι ΟΝΤΩΣ διαδραστικό (ανοίγει τον file picker),
+              οπότε χρειάζεται role, εστίαση και πληκτρολόγιο — αλλιώς ο
+              χρήστης χωρίς ποντίκι δεν μπορεί καθόλου να ανεβάσει αρχείο. */}
           <div
+            role="button"
+            tabIndex={0}
+            aria-label="Επιλογή αρχείου για ανέβασμα"
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             className={`
               border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
+              focus:outline-none focus:ring-2 focus:ring-blue-500
               ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
             `}
           >
@@ -319,8 +331,9 @@ export function CompleteObligationModal({
 
               {/* Template selection */}
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Πρότυπο</label>
+                <label htmlFor="complobl-protypo" className="block text-sm text-gray-600 mb-1">Πρότυπο</label>
                 <select
+                  id="complobl-protypo"
                   value={selectedTemplate || ''}
                   onChange={(e) =>
                     setSelectedTemplate(e.target.value ? Number(e.target.value) : null)

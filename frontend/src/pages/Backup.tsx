@@ -608,8 +608,9 @@ export default function Backup() {
 
               {/* File input */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Αρχείο Backup (ZIP)</label>
+                <label htmlFor="backup-archeio-backup-zip" className="block text-sm font-medium text-slate-700 mb-2">Αρχείο Backup (ZIP)</label>
                 <input
+                  id="backup-archeio-backup-zip"
                   type="file"
                   ref={fileInputRef}
                   accept=".zip"

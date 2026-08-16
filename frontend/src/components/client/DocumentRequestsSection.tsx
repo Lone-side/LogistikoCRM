@@ -253,8 +253,9 @@ export function DocumentRequestModal({
         ) : (
           <div className="p-5 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Τίτλος *</label>
+              <label htmlFor="docreq-title" className="block text-sm font-medium text-slate-700 mb-1">Τίτλος *</label>
               <input
+                id="docreq-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="π.χ. Δικαιολογητικά ΦΠΑ Ιουλίου"
@@ -263,10 +264,13 @@ export function DocumentRequestModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <span
+                id="docreq-items-label"
+                className="block text-sm font-medium text-slate-700 mb-1"
+              >
                 Ζητούμενα έγγραφα *
-              </label>
-              <div className="space-y-2">
+              </span>
+              <div className="space-y-2" role="group" aria-labelledby="docreq-items-label">
                 {items.map((item, i) => (
                   <div key={i} className="flex gap-2">
                     <input
@@ -309,8 +313,9 @@ export function DocumentRequestModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Σημειώσεις</label>
+              <label htmlFor="docreq-notes" className="block text-sm font-medium text-slate-700 mb-1">Σημειώσεις</label>
               <textarea
+                id="docreq-notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
@@ -320,8 +325,9 @@ export function DocumentRequestModal({
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία</label>
+                <label htmlFor="docreq-due-date" className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία</label>
                 <input
+                  id="docreq-due-date"
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
@@ -329,10 +335,11 @@ export function DocumentRequestModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="docreq-expiry" className="block text-sm font-medium text-slate-700 mb-1">
                   Λήξη link (μέρες)
                 </label>
                 <input
+                  id="docreq-expiry"
                   type="number"
                   min={1}
                   max={365}
@@ -342,8 +349,9 @@ export function DocumentRequestModal({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Κωδικός</label>
+                <label htmlFor="docreq-password" className="block text-sm font-medium text-slate-700 mb-1">Κωδικός</label>
                 <input
+                  id="docreq-password"
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

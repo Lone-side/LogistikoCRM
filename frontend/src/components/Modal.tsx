@@ -40,20 +40,25 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      {/* Backdrop */}
+      {/* Backdrop — καθαρά οπτικό βοήθημα για ποντίκι. Κρύβεται από τον
+          a11y tree: ο χρήστης πληκτρολογίου κλείνει με Escape (listener
+          παραπάνω) ή με το κουμπί «Κλείσιμο», που έχει aria-label. */}
       <div
+        aria-hidden="true"
         className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
         onClick={onClose}
       />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
+        {/* Χωρίς onClick stopPropagation: το backdrop είναι ΑΔΕΛΦΟΣ κόμβος,
+            οπότε τα κλικ στον διάλογο δεν το έφταναν ποτέ — ο handler ήταν
+            νεκρός κώδικας που έκανε τον διάλογο να μοιάζει διαδραστικός. */}
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="modal-title"
           className={`relative w-full ${sizeClasses[size]} bg-white rounded-lg shadow-xl transform transition-all`}
-          onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">

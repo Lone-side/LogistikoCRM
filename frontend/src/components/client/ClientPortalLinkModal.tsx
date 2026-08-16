@@ -123,10 +123,14 @@ export default function ClientPortalLinkModal({
             {allowUpload && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label
+                    htmlFor="portal-link-upload-note"
+                    className="block text-sm font-medium text-slate-700 mb-1"
+                  >
                     Οδηγίες προς τον πελάτη (προαιρετικά)
                   </label>
                   <textarea
+                    id="portal-link-upload-note"
                     value={uploadNote}
                     onChange={(e) => setUploadNote(e.target.value)}
                     rows={3}
@@ -135,10 +139,14 @@ export default function ClientPortalLinkModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label
+                    htmlFor="portal-link-category"
+                    className="block text-sm font-medium text-slate-700 mb-1"
+                  >
                     Κατηγορία αρχειοθέτησης
                   </label>
                   <select
+                    id="portal-link-category"
                     value={uploadCategory}
                     onChange={(e) => setUploadCategory(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
@@ -157,10 +165,14 @@ export default function ClientPortalLinkModal({
 
             <div className="flex gap-3">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label
+                  htmlFor="portal-link-password"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
                   Κωδικός (προαιρετικά)
                 </label>
                 <input
+                  id="portal-link-password"
                   type="text"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -169,10 +181,14 @@ export default function ClientPortalLinkModal({
                 />
               </div>
               <div className="flex-1">
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label
+                  htmlFor="portal-link-expiry"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
                   Λήξη
                 </label>
                 <select
+                  id="portal-link-expiry"
                   value={expiresInDays ?? ''}
                   onChange={(e) => setExpiresInDays(e.target.value ? parseInt(e.target.value, 10) : null)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"

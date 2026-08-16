@@ -400,10 +400,14 @@ export default function ClientInfoTab({
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label
+                  htmlFor="mydata-user-id"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
                   User ID *
                 </label>
                 <input
+                  id="mydata-user-id"
                   type="text"
                   value={myDataUserId}
                   onChange={(e) => setMyDataUserId(e.target.value)}
@@ -412,10 +416,14 @@ export default function ClientInfoTab({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label
+                  htmlFor="mydata-subscription-key"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
                   Subscription Key *
                 </label>
                 <input
+                  id="mydata-subscription-key"
                   type="password"
                   value={myDataSubscriptionKey}
                   onChange={(e) => setMyDataSubscriptionKey(e.target.value)}

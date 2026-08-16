@@ -211,8 +211,9 @@ export default function Tickets() {
           <div className="mt-4 pt-4 border-t border-slate-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Κατάσταση</label>
+                <label htmlFor="tickets-katastasi-2" className="block text-sm font-medium text-slate-700 mb-1">Κατάσταση</label>
                 <select
+                  id="tickets-katastasi-2"
                   value={filters.status || ''}
                   onChange={(e) => handleFilterChange('status', e.target.value as TicketsFilters['status'])}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -225,8 +226,9 @@ export default function Tickets() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
+                <label htmlFor="tickets-proteraiotita-2" className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
                 <select
+                  id="tickets-proteraiotita-2"
                   value={filters.priority || ''}
                   onChange={(e) => handleFilterChange('priority', e.target.value as TicketsFilters['priority'])}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -239,8 +241,9 @@ export default function Tickets() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
+                <label htmlFor="tickets-pelatis-2" className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
                 <select
+                  id="tickets-pelatis-2"
                   value={filters.client_id || ''}
                   onChange={(e) => handleFilterChange('client_id', e.target.value ? Number(e.target.value) : undefined)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -720,8 +723,9 @@ function TicketDetailModal({
           {/* Client and Call info */}
           {isEditing ? (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
+              <label htmlFor="tickets-pelatis" className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
               <select
+                id="tickets-pelatis"
                 value={clientId || ''}
                 onChange={(e) => setClientId(e.target.value ? Number(e.target.value) : null)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -802,8 +806,9 @@ function TicketDetailModal({
           {/* Status (editable) */}
           {isEditing && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Κατάσταση</label>
+              <label htmlFor="tickets-katastasi" className="block text-sm font-medium text-slate-700 mb-1">Κατάσταση</label>
               <select
+                id="tickets-katastasi"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as typeof status)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -820,8 +825,9 @@ function TicketDetailModal({
           {/* Priority (editable) */}
           {isEditing && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
+              <label htmlFor="tickets-proteraiotita" className="block text-sm font-medium text-slate-700 mb-1">Προτεραιότητα</label>
               <select
+                id="tickets-proteraiotita"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as typeof priority)}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -837,8 +843,9 @@ function TicketDetailModal({
           {/* Assigned To (editable) */}
           {isEditing && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Ανάθεση σε</label>
+              <label htmlFor="tickets-anathesi-se" className="block text-sm font-medium text-slate-700 mb-1">Ανάθεση σε</label>
               <select
+                id="tickets-anathesi-se"
                 value={assignedTo || ''}
                 onChange={(e) => setAssignedTo(e.target.value ? Number(e.target.value) : null)}
                 disabled={usersLoading}

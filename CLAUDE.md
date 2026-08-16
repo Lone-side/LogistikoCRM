@@ -38,7 +38,11 @@ Backlog skills (θα γραφτούν όταν αγγίξουμε τα αντί�
 
 Οι Φάσεις 1–5 (backend cleanup, διασύνδεση αρχείων-υποχρεώσεων, email αυτοματισμοί,
 αναζήτηση/φίλτρα, production infra) έχουν ολοκληρωθεί — βλ. git history.
-(⚠️ Το `CHANGELOG.md` είναι στάσιμο από 10/2025 — μην το εμπιστεύεσαι ως πηγή.)
+> ⚠️ **Τα root docs είναι κληρονομιά του upstream fork.** Το `CHANGELOG.md`
+> είναι το changelog του **Django-CRM**, όχι του LogistikoCRM: 64 commits,
+> μηδέν αναφορά στο project. Το ίδιο ισχύει σε μεγάλο βαθμό για `README.md`
+> (46 αναφορές upstream) και `CONTRIBUTING.md`. Μοναδική πηγή αλήθειας για
+> το τι άλλαξε εδώ: **git history**.
 
 Εκκρεμούν:
 - [ ] Email ειδοποίησης για νέα έγγραφα

@@ -242,13 +242,17 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
+      {/* Backdrop ως ξεχωριστός, κρυμμένος από τον a11y tree κόμβος — όπως
+          στο components/Modal.tsx. Το κλείσιμο με πληκτρολόγιο γίνεται με
+          Escape (listener παραπάνω). */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 bg-black/50"
+        onClick={onClose}
+      />
+
+      <div className="relative z-10 w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden">
         {/* Search input */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
           <Search size={20} className="text-slate-400 flex-shrink-0" />

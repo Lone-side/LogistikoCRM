@@ -241,14 +241,26 @@ export function DocumentUploadModal({
             </div>
           )}
 
-          {/* Drop zone */}
+          {/* Drop zone: είναι ΟΝΤΩΣ διαδραστικό (ανοίγει τον file picker),
+              οπότε χρειάζεται role, εστίαση και πληκτρολόγιο — αλλιώς ο
+              χρήστης χωρίς ποντίκι δεν μπορεί καθόλου να ανεβάσει αρχείο. */}
           <div
+            role="button"
+            tabIndex={0}
+            aria-label="Επιλογή αρχείου για ανέβασμα"
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             className={`
               border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
+              focus:outline-none focus:ring-2 focus:ring-blue-500
               ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
             `}
           >

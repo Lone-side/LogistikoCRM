@@ -870,18 +870,29 @@ def extract_document_text(self, document_id):
 # ============================================
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=300)
-def backup_database_task(self):
+def backup_database_task(self, keep_days=0):
     """
     Αυτόματο backup βάσης — τρέχει από το Celery beat ώστε να μη
     χρειάζεται χειροκίνητο crontab setup (το scripts/backup_cron.sh
     παραμένει για deployments χωρίς Celery).
+
+    keep_days: πόσες ΜΕΡΕΣ ιστορικού να κρατηθούν. Με 0 (default της
+    εντολής) η διατήρηση μετριέται σε ΠΛΗΘΟΣ — τα τελευταία 30 backups —
+    που σημαίνει ότι όσο πυκνώνει η συχνότητα τόσο κονταίνει το ιστορικό.
+    Το beat schedule περνά ρητή τιμή ώστε το βάθος ιστορικού να μην
+    εξαρτάται από το πόσο συχνά τρέχει το task.
+
+    ΠΑΝΤΑ πλήρες backup (βάση + media): ένα DB-only αντίγραφο θα έσπαγε
+    το ζευγάρωμα που χρειάζεται το restore_database --latest και θα
+    οδηγούσε σε αναντιστοιχία βάσης/media κατά την επαναφορά.
     """
     from io import StringIO
     from django.core.management import call_command
 
     out = StringIO()
+    args = ['--keep-days', str(keep_days)] if keep_days else []
     try:
-        call_command('backup_database', stdout=out)
+        call_command('backup_database', *args, stdout=out)
         result = out.getvalue().strip()
         logger.info(f"✅ Scheduled backup: {result}")
         return result

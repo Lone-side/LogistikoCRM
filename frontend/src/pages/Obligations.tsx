@@ -521,8 +521,9 @@ export default function Obligations() {
             <div className="border-t border-slate-200 pt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
               {/* Client filter */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
+                <label htmlFor="obligations-pelatis" className="block text-sm font-medium text-slate-700 mb-1">Πελάτης</label>
                 <select
+                  id="obligations-pelatis"
                   value={filters.client || ''}
                   onChange={(e) => handleFilterChange('client', e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -538,8 +539,9 @@ export default function Obligations() {
 
               {/* Type filter */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Τύπος</label>
+                <label htmlFor="obligations-typos" className="block text-sm font-medium text-slate-700 mb-1">Τύπος</label>
                 <select
+                  id="obligations-typos"
                   value={filters.type}
                   onChange={(e) => handleFilterChange('type', e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -555,8 +557,9 @@ export default function Obligations() {
 
               {/* Month filter */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
+                <label htmlFor="obligations-minas-3" className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
                 <select
+                  id="obligations-minas-3"
                   value={filters.month || ''}
                   onChange={(e) => handleFilterChange('month', e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -572,8 +575,9 @@ export default function Obligations() {
 
               {/* Year filter */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
+                <label htmlFor="obligations-etos-3" className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
                 <select
+                  id="obligations-etos-3"
                   value={filters.year || ''}
                   onChange={(e) => handleFilterChange('year', e.target.value ? Number(e.target.value) : null)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -589,8 +593,9 @@ export default function Obligations() {
 
               {/* Deadline from */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία από</label>
+                <label htmlFor="obligations-prothesmia-apo" className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία από</label>
                 <input
+                  id="obligations-prothesmia-apo"
                   type="date"
                   value={filters.deadline_from}
                   onChange={(e) => handleFilterChange('deadline_from', e.target.value)}
@@ -600,8 +605,9 @@ export default function Obligations() {
 
               {/* Deadline to */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία έως</label>
+                <label htmlFor="obligations-prothesmia-eos" className="block text-sm font-medium text-slate-700 mb-1">Προθεσμία έως</label>
                 <input
+                  id="obligations-prothesmia-eos"
                   type="date"
                   value={filters.deadline_to}
                   onChange={(e) => handleFilterChange('deadline_to', e.target.value)}
@@ -932,8 +938,9 @@ export default function Obligations() {
           {/* Period */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
+              <label htmlFor="obligations-minas-2" className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
               <select
+                id="obligations-minas-2"
                 value={bulkCreateForm.month}
                 onChange={(e) =>
                   setBulkCreateForm((prev) => ({ ...prev, month: Number(e.target.value) }))
@@ -948,8 +955,9 @@ export default function Obligations() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
+              <label htmlFor="obligations-etos-2" className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
               <select
+                id="obligations-etos-2"
                 value={bulkCreateForm.year}
                 onChange={(e) =>
                   setBulkCreateForm((prev) => ({ ...prev, year: Number(e.target.value) }))
@@ -1414,8 +1422,9 @@ function GenerateMonthModal({
           {/* Period Selection */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
+              <label htmlFor="obligations-minas" className="block text-sm font-medium text-slate-700 mb-1">Μήνας</label>
               <select
+                id="obligations-minas"
                 value={month}
                 onChange={(e) => setMonth(Number(e.target.value))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -1429,8 +1438,9 @@ function GenerateMonthModal({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
+              <label htmlFor="obligations-etos" className="block text-sm font-medium text-slate-700 mb-1">Έτος</label>
               <select
+                id="obligations-etos"
                 value={year}
                 onChange={(e) => setYear(Number(e.target.value))}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"

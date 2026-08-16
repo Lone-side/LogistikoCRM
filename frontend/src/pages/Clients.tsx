@@ -504,7 +504,7 @@ function ImportClientsModal({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="fixed inset-0 bg-black/50" onClick={handleClose} />
+        <div aria-hidden="true" className="fixed inset-0 bg-black/50" onClick={handleClose} />
 
         <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg">
           {/* Header */}

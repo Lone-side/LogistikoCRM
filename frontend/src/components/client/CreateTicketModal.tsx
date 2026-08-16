@@ -40,10 +40,14 @@ export default function CreateTicketModal({
         <div className="p-4 space-y-4">
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label
+              htmlFor="ticket-title"
+              className="block text-sm font-medium text-slate-700 mb-1"
+            >
               Τίτλος *
             </label>
             <input
+              id="ticket-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -55,10 +59,14 @@ export default function CreateTicketModal({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label
+              htmlFor="ticket-description"
+              className="block text-sm font-medium text-slate-700 mb-1"
+            >
               Περιγραφή
             </label>
             <textarea
+              id="ticket-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -69,10 +77,14 @@ export default function CreateTicketModal({
 
           {/* Priority */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label
+              htmlFor="ticket-priority"
+              className="block text-sm font-medium text-slate-700 mb-1"
+            >
               Προτεραιότητα
             </label>
             <select
+              id="ticket-priority"
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg"
