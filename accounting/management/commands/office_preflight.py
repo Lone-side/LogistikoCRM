@@ -110,6 +110,7 @@ class Command(BaseCommand):
         self._check_mydata_sandbox()
         self._check_mydata_client_credentials()
         self._check_local_health_endpoint()
+        self._check_build_provenance()
 
         fails = [r for r in self.results if r[0] == 'FAIL']
         warns = [r for r in self.results if r[0] == 'WARN']
@@ -355,6 +356,23 @@ class Command(BaseCommand):
         else:
             self._report('OK', 'mydata-client-creds',
                          'κανένα production credential')
+
+    def _check_build_provenance(self):
+        """Από ποιο commit χτίστηκε το image που τρέχει.
+
+        Η παραγωγή τρέχει από δικό της checkout (OFFICE_RUNBOOK §1.1), οπότε
+        είναι πλέον δυνατό να ενημερωθεί ο φάκελος χωρίς redeploy. Χωρίς το
+        SHA στο image η απόκλιση είναι αόρατη — τα containers φαίνονται υγιή
+        ενώ σερβίρουν παλιό κώδικα.
+        """
+        sha = os.environ.get('GIT_SHA', '').strip()
+        if not sha or sha == 'unknown':
+            self._report('WARN', 'build-provenance',
+                         'το image δεν φέρει GIT_SHA — χτίστηκε χωρίς το '
+                         'build arg· δεν μπορεί να επαληθευτεί ποιος κώδικας '
+                         'τρέχει')
+        else:
+            self._report('OK', 'build-provenance', f'image από {sha[:12]}')
 
     def _check_local_health_endpoint(self):
         state, detail = probe_local_health()

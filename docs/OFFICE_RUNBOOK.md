@@ -70,6 +70,24 @@ certificates, που είναι εργασία ανάπτυξης.
 Όλες οι εντολές παραγωγής (§5 deployment, backup, preflight) τρέχουν
 **μέσα από το `LogistikoCRM-prod`**.
 
+**Ο φάκελος παραγωγής δείχνει πάντα ό,τι ΤΡΕΧΕΙ, όχι ό,τι υπάρχει στο
+main.** Ενημερώνεται μόνο μέσα από deployment — αλλιώς χάνεται η εγγύηση
+«ό,τι βλέπω στον φάκελο είναι αυτό που εξυπηρετεί».
+
+### 1.2 Το build πρέπει να φέρει το commit
+
+Επειδή τα δύο checkouts μπορούν να αποκλίνουν, το image καταγράφει από ποιο
+commit χτίστηκε. **Πάντα** στο build:
+
+```bash
+export GIT_SHA=$(git rev-parse HEAD)
+$COMPOSE build web celery celery-beat nginx
+```
+
+Το `office_preflight` αναφέρει το SHA (`build-provenance`) και βγάζει **WARN**
+αν λείπει. Χωρίς αυτό, «ενημέρωσα τον φάκελο αλλά ξέχασα το redeploy» είναι
+αόρατο: τα containers φαίνονται healthy ενώ σερβίρουν παλιό κώδικα.
+
 ## 2. Πρώτη εγκατάσταση
 
 ```bash
