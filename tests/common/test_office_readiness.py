@@ -135,13 +135,26 @@ class OfficeComposeStructureTest(TestCase):
             (BASE_DIR / 'docker-compose.prod.yml').read_text(encoding='utf-8')
         )
 
-    def test_nginx_ports_bind_only_to_office_ip(self):
+    def test_nginx_ports_bind_only_to_office_ip_or_loopback(self):
+        """Καμία δημοσίευση σε 0.0.0.0 — μόνο η LAN IP ή το loopback.
+
+        Το 127.0.0.1 επιτρέπεται ΡΗΤΑ: δεν φεύγει από το μηχάνημα, άρα δεν
+        είναι έκθεση, και χωρίς αυτό ο ίδιος ο server έχανε το CRM του
+        μόλις έπεφτε το δίκτυο (το OFFICE_BIND_IP δείχνει στη LAN IP).
+        """
         ports = self.overlay['services']['nginx']['ports']
         self.assertTrue(ports)
+        self.assertTrue(
+            any(p.startswith('${OFFICE_BIND_IP') for p in ports),
+            msg='καμία δημοσίευση στο OFFICE_BIND_IP',
+        )
         for port in ports:
+            if port.startswith('127.0.0.1:'):
+                continue
             self.assertTrue(
                 port.startswith('${OFFICE_BIND_IP'),
-                msg=f'port {port!r} δεν δένει στο OFFICE_BIND_IP',
+                msg=(f'port {port!r} δεν δένει ούτε στο OFFICE_BIND_IP '
+                     'ούτε στο loopback'),
             )
             self.assertIn(':?', port, msg='το OFFICE_BIND_IP πρέπει να είναι υποχρεωτικό')
 
