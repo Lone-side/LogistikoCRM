@@ -25,6 +25,14 @@ services:
       - "${OFFICE_BIND_IP:?Set OFFICE_BIND_IP in .env (η στατική LAN IP του server, ΟΧΙ 0.0.0.0)}:443:443"
       # Το :80 μένει ανοιχτό ΜΟΝΟ για redirect σε https (nginx/office.conf)
       - "${OFFICE_BIND_IP:?Set OFFICE_BIND_IP in .env (η στατική LAN IP του server, ΟΧΙ 0.0.0.0)}:80:80"
+      # Loopback ΠΑΝΤΑ, ανεξάρτητα από το OFFICE_BIND_IP: όταν το
+      # OFFICE_BIND_IP δείχνει στη LAN IP, ο ΙΔΙΟΣ ο server έχανε το CRM
+      # του μόλις έπεφτε το δίκτυο (και έσπαγε το https://localhost που
+      # χρησιμοποιούσε ο χρήστης). Το 127.0.0.1 δεν είναι έκθεση — δεν
+      # φεύγει από το μηχάνημα — άρα δεν αντιβαίνει στον κανόνα «ποτέ
+      # 0.0.0.0». Χρειάζεται και για το healthcheck/preflight.
+      - "127.0.0.1:443:443"
+      - "127.0.0.1:80:80"
     volumes:
       # Αντικαθιστά το config του image — τα υπόλοιπα volumes του prod
       # file (media για X-Accel-Redirect) διατηρούνται (append merge).
