@@ -30,6 +30,8 @@ class MyDataCredentialsSerializer(serializers.ModelSerializer):
     client_afm = serializers.CharField(source='client.afm', read_only=True)
     client_name = serializers.CharField(source='client.eponimia', read_only=True)
     has_credentials = serializers.BooleanField(read_only=True)
+    credentials_corrupted = serializers.BooleanField(read_only=True)
+    needs_reconfiguration = serializers.BooleanField(read_only=True)
     environment = serializers.SerializerMethodField()
     # Write-only fields for creating/updating credentials
     user_id = serializers.CharField(write_only=True, required=False)
@@ -45,6 +47,8 @@ class MyDataCredentialsSerializer(serializers.ModelSerializer):
             'user_id',
             'subscription_key',
             'has_credentials',
+            'credentials_corrupted',
+            'needs_reconfiguration',
             'is_sandbox',
             'environment',
             'is_active',

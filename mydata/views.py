@@ -310,6 +310,16 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Check if credentials are corrupted (can't be decrypted)
+        if credentials.credentials_corrupted:
+            return Response({
+                'success': False,
+                'is_verified': False,
+                'error': 'Τα credentials δεν μπορούν να αποκρυπτογραφηθούν (πιθανή αλλαγή SECRET_KEY). Παρακαλώ εισάγετε νέα.',
+                'needs_reconfiguration': True,
+                'credentials_corrupted': True,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         success = credentials.verify_credentials()
 
         return Response({
@@ -390,6 +400,31 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
             )
 
     @action(detail=True, methods=['post'])
+    def clear_corrupted(self, request, pk=None):
+        """
+        Clear corrupted credentials that cannot be decrypted.
+
+        Use this when SECRET_KEY has changed and old credentials
+        are no longer readable. After clearing, user can re-enter
+        new credentials.
+        """
+        credentials = self.get_object()
+
+        if not credentials.credentials_corrupted:
+            return Response({
+                'success': False,
+                'error': 'Τα credentials δεν είναι κατεστραμμένα',
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        credentials.clear_corrupted_credentials()
+
+        return Response({
+            'success': True,
+            'message': 'Τα κατεστραμμένα credentials διαγράφηκαν. Παρακαλώ εισάγετε νέα.',
+            'needs_reconfiguration': True,
+        })
+
+    @action(detail=True, methods=['post'])
     def sync(self, request, pk=None):
         """Trigger VAT sync for this client."""
         from django.core.management import call_command
@@ -402,6 +437,14 @@ class MyDataCredentialsViewSet(ClientScopedQuerysetMixin, viewsets.ModelViewSet)
                 {'error': 'Δεν έχουν οριστεί credentials'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Check if credentials are corrupted (can't be decrypted)
+        if credentials.credentials_corrupted:
+            return Response({
+                'error': 'Τα credentials δεν μπορούν να αποκρυπτογραφηθούν (πιθανή αλλαγή SECRET_KEY). Παρακαλώ εισάγετε νέα.',
+                'needs_reconfiguration': True,
+                'credentials_corrupted': True,
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         if not credentials.is_active:
             return Response(
