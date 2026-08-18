@@ -75,7 +75,7 @@ export function PortalUploadSection({
       if (email) formData.append('email', email);
       if (selectedItemId !== '') formData.append('request_item_id', String(selectedItemId));
       const response = await apiClient.post<PortalUploadResult>(
-        `/accounting/share/${token}/upload/`,
+        `/share/${token}/upload/`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
@@ -292,7 +292,7 @@ export default function SharedLinkPortal() {
   // Initial load
   const fetchSharedContent = useCallback(async () => {
     try {
-      const response = await apiClient.get(`/accounting/share/${token}/`);
+      const response = await apiClient.get(`/share/${token}/`);
       const data = response.data;
 
       if (data.requires_auth) {
@@ -340,7 +340,7 @@ export default function SharedLinkPortal() {
     setAuthError(null);
 
     try {
-      const response = await apiClient.post(`/accounting/share/${token}/`, {
+      const response = await apiClient.post(`/share/${token}/`, {
         password: needsPassword ? password : undefined,
         email: needsEmail ? email : undefined,
       });
