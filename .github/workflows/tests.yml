@@ -82,7 +82,12 @@ jobs:
 
       - name: Run tests
         run: |
-          python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata --keepdb -v 2
+          # ΟΛΑ τα πακέτα. Έλειπαν τα settings/tasks/voip/integration/
+          # utils/chat/help/massmail — 159 tests που δεν έτρεχαν ΠΟΤΕ στο
+          # CI, ανάμεσά τους το tests.settings που φυλάει τη runtime
+          # configuration παραγωγής (Celery broker, cache backend,
+          # DJANGO_ENV, compose, ALLOWED_HOSTS).
+          python manage.py test tests.accounting tests.crm tests.common tests.inventory tests.mydata tests.settings tests.tasks tests.voip tests.integration tests.utils tests.chat tests.help tests.massmail --keepdb -v 2
 
       # PostgreSQL concurrency proof (Γύρος 18 — F2, Γύρος 22): πραγματικά
       # race tests με δύο threads/connections — filing services ΚΑΙ

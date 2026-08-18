@@ -189,8 +189,13 @@ class TestChat(BaseTestCase):
         )
         # notification email sent?
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, [
-                         self.andrew.email, self.chief.email])
+        # Η λίστα παραληπτών προκύπτει από queryset ΧΩΡΙΣ order_by, άρα η
+        # σειρά είναι ό,τι επιστρέψει η βάση: σε SQLite έβγαινε
+        # [andrew, chief], σε PostgreSQL [chief, andrew] — και το CI
+        # κοκκίνιζε χωρίς να υπάρχει σφάλμα. Σημασία έχει ΠΟΙΟΙ, όχι με
+        # τι σειρά.
+        self.assertCountEqual(
+            mail.outbox[0].to, [self.andrew.email, self.chief.email])
         mail.outbox = []
         file.file.delete()
         
