@@ -663,10 +663,10 @@ export default function Calendar() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Client filter */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="calendar-f1" className="block text-sm font-medium text-slate-700 mb-1">
                 Πελάτης
               </label>
-              <select
+              <select id="calendar-f1"
                 value={filters.client_id || ''}
                 onChange={(e) =>
                   setFilters({
@@ -687,10 +687,10 @@ export default function Calendar() {
 
             {/* Type filter */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="calendar-f2" className="block text-sm font-medium text-slate-700 mb-1">
                 Τύπος υποχρέωσης
               </label>
-              <select
+              <select id="calendar-f2"
                 value={filters.type_id || ''}
                 onChange={(e) =>
                   setFilters({
@@ -711,10 +711,10 @@ export default function Calendar() {
 
             {/* Status filter */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="calendar-f3" className="block text-sm font-medium text-slate-700 mb-1">
                 Κατάσταση
               </label>
-              <select
+              <select id="calendar-f3"
                 value={filters.status || ''}
                 onChange={(e) =>
                   setFilters({

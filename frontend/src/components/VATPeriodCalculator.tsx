@@ -452,10 +452,10 @@ export default function VATPeriodCalculator() {
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="v-a-t-period-calculator-f1" className="block text-sm font-medium text-gray-700 mb-1">
                       Πιστωτικό Προηγούμενης Περιόδου (€)
                     </label>
-                    <input
+                    <input id="v-a-t-period-calculator-f1"
                       type="number"
                       step="0.01"
                       min="0"

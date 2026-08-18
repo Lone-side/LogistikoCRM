@@ -179,10 +179,10 @@ const FilingSettingsPage: React.FC = () => {
 
                 {formData.use_network_storage && (
                   <div>
-                    <label className="block text-sm font-medium mb-1">
+                    <label htmlFor="filing-settings-f1" className="block text-sm font-medium mb-1">
                       Διαδρομή Δικτύου
                     </label>
-                    <input
+                    <input id="filing-settings-f1"
                       type="text"
                       value={formData.archive_root || ''}
                       onChange={(e) => handleChange('archive_root', e.target.value)}
@@ -238,10 +238,10 @@ const FilingSettingsPage: React.FC = () => {
 
                 {formData.folder_structure === 'custom' && (
                   <div>
-                    <label className="block text-sm font-medium mb-1">
+                    <label htmlFor="filing-settings-f2" className="block text-sm font-medium mb-1">
                       Custom Template
                     </label>
-                    <input
+                    <input id="filing-settings-f2"
                       type="text"
                       value={formData.custom_folder_template || ''}
                       onChange={(e) => handleChange('custom_folder_template', e.target.value)}
@@ -381,10 +381,10 @@ const FilingSettingsPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">
+                  <label htmlFor="filing-settings-f3" className="block text-sm font-medium mb-1">
                     Έτη Διατήρησης
                   </label>
-                  <input
+                  <input id="filing-settings-f3"
                     type="number"
                     min="5"
                     max="20"
@@ -395,10 +395,10 @@ const FilingSettingsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">
+                  <label htmlFor="filing-settings-f4" className="block text-sm font-medium mb-1">
                     Αυτόματη Αρχειοθέτηση
                   </label>
-                  <input
+                  <input id="filing-settings-f4"
                     type="number"
                     min="0"
                     value={formData.auto_archive_years || 0}
@@ -431,10 +431,10 @@ const FilingSettingsPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">
+                  <label htmlFor="filing-settings-f5" className="block text-sm font-medium mb-1">
                     Επιτρεπόμενοι Τύποι Αρχείων
                   </label>
-                  <textarea
+                  <textarea id="filing-settings-f5"
                     value={formData.allowed_extensions || ''}
                     onChange={(e) => handleChange('allowed_extensions', e.target.value)}
                     rows={3}
@@ -444,10 +444,10 @@ const FilingSettingsPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">
+                  <label htmlFor="filing-settings-f6" className="block text-sm font-medium mb-1">
                     Μέγιστο Μέγεθος (MB)
                   </label>
-                  <input
+                  <input id="filing-settings-f6"
                     type="number"
                     min="1"
                     max="100"

@@ -89,10 +89,10 @@ function ConfirmDialogBody({
       <p className="text-gray-600 mb-6">{message}</p>
       {requireTypedConfirmation !== undefined && (
         <div className="w-full mb-6 text-left">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="confirm-dialog-f1" className="block text-sm font-medium text-gray-700 mb-1">
             {typedConfirmationLabel ?? `Πληκτρολόγησε "${requireTypedConfirmation}" για επιβεβαίωση`}
           </label>
-          <input
+          <input id="confirm-dialog-f1"
             type="text"
             value={typedValue}
             onChange={(e) => setTypedValue(e.target.value)}

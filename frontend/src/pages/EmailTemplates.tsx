@@ -999,10 +999,10 @@ function EmailTemplateForm({
 
       {/* Name */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="email-templates-f1" className="block text-sm font-medium text-slate-700 mb-1">
           Όνομα Προτύπου *
         </label>
-        <input
+        <input id="email-templates-f1"
           type="text"
           name="name"
           value={formData.name}
@@ -1014,10 +1014,10 @@ function EmailTemplateForm({
 
       {/* Description */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="email-templates-f2" className="block text-sm font-medium text-slate-700 mb-1">
           Περιγραφή
         </label>
-        <input
+        <input id="email-templates-f2"
           type="text"
           name="description"
           value={formData.description}
@@ -1029,10 +1029,10 @@ function EmailTemplateForm({
 
       {/* Obligation Type */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="email-templates-f3" className="block text-sm font-medium text-slate-700 mb-1">
           Τύπος Υποχρέωσης (αυτόματη επιλογή)
         </label>
-        <select
+        <select id="email-templates-f3"
           name="obligation_type"
           value={formData.obligation_type || ''}
           onChange={(e) =>
@@ -1057,10 +1057,10 @@ function EmailTemplateForm({
 
       {/* Subject */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="email-templates-f4" className="block text-sm font-medium text-slate-700 mb-1">
           Θέμα Email *
         </label>
-        <input
+        <input id="email-templates-f4"
           type="text"
           name="subject"
           value={formData.subject}
@@ -1084,10 +1084,10 @@ function EmailTemplateForm({
 
       {/* Body */}
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">
+        <label htmlFor="email-templates-f5" className="block text-sm font-medium text-slate-700 mb-1">
           Κείμενο Email *
         </label>
-        <textarea
+        <textarea id="email-templates-f5"
           name="body_html"
           value={formData.body_html}
           onChange={handleChange}

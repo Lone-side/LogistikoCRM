@@ -636,10 +636,10 @@ export default function Settings() {
               </p>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="settings-f1" className="block text-sm font-medium text-slate-700 mb-1">
                   ΑΦΜ Λογιστή *
                 </label>
-                <input
+                <input id="settings-f1"
                   type="text"
                   value={gsisAfm}
                   onChange={(e) => setGsisAfm(e.target.value.replace(/\D/g, '').slice(0, 9))}
@@ -653,10 +653,10 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="settings-f2" className="block text-sm font-medium text-slate-700 mb-1">
                   Όνομα Χρήστη *
                 </label>
-                <input
+                <input id="settings-f2"
                   type="text"
                   value={gsisUsername}
                   onChange={(e) => setGsisUsername(e.target.value)}
@@ -666,10 +666,10 @@ export default function Settings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="settings-f3" className="block text-sm font-medium text-slate-700 mb-1">
                   Κωδικός {!gsisConfigured && '*'}
                 </label>
-                <input
+                <input id="settings-f3"
                   type="password"
                   value={gsisPassword}
                   onChange={(e) => setGsisPassword(e.target.value)}

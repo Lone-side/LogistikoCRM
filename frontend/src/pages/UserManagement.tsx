@@ -105,6 +105,7 @@ export default function UserManagement() {
             <input
               type="text"
               placeholder="Αναζήτηση χρήστη..."
+              aria-label="Αναζήτηση χρήστη"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -455,10 +456,10 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
             <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
               {/* Username */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="user-management-f1" className="block text-sm font-medium text-slate-700 mb-1">
                   Όνομα χρήστη *
                 </label>
-                <input
+                <input id="user-management-f1"
                   type="text"
                   value={formData.username}
                   onChange={(e) =>
@@ -476,10 +477,10 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="user-management-f2" className="block text-sm font-medium text-slate-700 mb-1">
                   Email *
                 </label>
-                <input
+                <input id="user-management-f2"
                   type="email"
                   value={formData.email}
                   onChange={(e) =>
@@ -498,10 +499,10 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
               {/* First Name & Last Name */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="user-management-f3" className="block text-sm font-medium text-slate-700 mb-1">
                     Όνομα
                   </label>
-                  <input
+                  <input id="user-management-f3"
                     type="text"
                     value={formData.first_name}
                     onChange={(e) =>
@@ -511,10 +512,10 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="user-management-f4" className="block text-sm font-medium text-slate-700 mb-1">
                     Επώνυμο
                   </label>
-                  <input
+                  <input id="user-management-f4"
                     type="text"
                     value={formData.last_name}
                     onChange={(e) =>
@@ -559,10 +560,10 @@ function UserModal({ user, onClose, showToast }: UserModalProps) {
               {/* Password Confirm (only for create) */}
               {!isEdit && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="user-management-f5" className="block text-sm font-medium text-slate-700 mb-1">
                     Επιβεβαίωση κωδικού *
                   </label>
-                  <input
+                  <input id="user-management-f5"
                     type={showPassword ? 'text' : 'password'}
                     value={formData.password_confirm}
                     onChange={(e) =>

@@ -918,10 +918,10 @@ export default function Obligations() {
         <div className="space-y-4">
           {/* Obligation Type */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="obligations-f1" className="block text-sm font-medium text-slate-700 mb-1">
               Τύπος Υποχρέωσης *
             </label>
-            <select
+            <select id="obligations-f1"
               value={bulkCreateForm.obligation_type}
               onChange={(e) =>
                 setBulkCreateForm((prev) => ({ ...prev, obligation_type: Number(e.target.value) }))

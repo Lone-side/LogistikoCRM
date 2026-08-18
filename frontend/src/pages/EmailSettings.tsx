@@ -271,10 +271,10 @@ export default function EmailSettings() {
           <div className="space-y-4">
             {/* SMTP Host */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="email-settings-f1" className="block text-sm font-medium text-slate-700 mb-1">
                 SMTP Server
               </label>
-              <input
+              <input id="email-settings-f1"
                 type="text"
                 name="smtp_host"
                 value={formData.smtp_host || ''}
@@ -287,10 +287,10 @@ export default function EmailSettings() {
             {/* SMTP Port & Security */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="email-settings-f2" className="block text-sm font-medium text-slate-700 mb-1">
                   Port
                 </label>
-                <input
+                <input id="email-settings-f2"
                   type="number"
                   name="smtp_port"
                   value={formData.smtp_port || 587}
@@ -299,10 +299,10 @@ export default function EmailSettings() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="email-settings-f3" className="block text-sm font-medium text-slate-700 mb-1">
                   Ασφάλεια
                 </label>
-                <select
+                <select id="email-settings-f3"
                   name="smtp_security"
                   value={formData.smtp_security || 'tls'}
                   onChange={handleChange}
@@ -319,10 +319,10 @@ export default function EmailSettings() {
 
             {/* SMTP Username */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="email-settings-f4" className="block text-sm font-medium text-slate-700 mb-1">
                 Όνομα Χρήστη (Email)
               </label>
-              <input
+              <input id="email-settings-f4"
                 type="email"
                 name="smtp_username"
                 value={formData.smtp_username || ''}
@@ -416,10 +416,10 @@ export default function EmailSettings() {
             <div className="space-y-4">
               {/* From Email */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="email-settings-f5" className="block text-sm font-medium text-slate-700 mb-1">
                   Email Αποστολέα *
                 </label>
-                <input
+                <input id="email-settings-f5"
                   type="email"
                   name="from_email"
                   value={formData.from_email || ''}
@@ -431,10 +431,10 @@ export default function EmailSettings() {
 
               {/* From Name */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="email-settings-f6" className="block text-sm font-medium text-slate-700 mb-1">
                   Όνομα Αποστολέα
                 </label>
-                <input
+                <input id="email-settings-f6"
                   type="text"
                   name="from_name"
                   value={formData.from_name || ''}
@@ -446,10 +446,10 @@ export default function EmailSettings() {
 
               {/* Reply-To */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="email-settings-f7" className="block text-sm font-medium text-slate-700 mb-1">
                   Reply-To Email
                 </label>
-                <input
+                <input id="email-settings-f7"
                   type="email"
                   name="reply_to"
                   value={formData.reply_to || ''}
@@ -471,10 +471,10 @@ export default function EmailSettings() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="email-settings-f8" className="block text-sm font-medium text-slate-700 mb-1">
                     Όνομα Εταιρείας
                   </label>
-                  <input
+                  <input id="email-settings-f8"
                     type="text"
                     name="company_name"
                     value={formData.company_name || ''}
@@ -483,10 +483,10 @@ export default function EmailSettings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="email-settings-f9" className="block text-sm font-medium text-slate-700 mb-1">
                     Τηλέφωνο
                   </label>
-                  <input
+                  <input id="email-settings-f9"
                     type="text"
                     name="company_phone"
                     value={formData.company_phone || ''}
@@ -497,10 +497,10 @@ export default function EmailSettings() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="email-settings-f10" className="block text-sm font-medium text-slate-700 mb-1">
                   Website
                 </label>
-                <input
+                <input id="email-settings-f10"
                   type="url"
                   name="company_website"
                   value={formData.company_website || ''}
@@ -512,10 +512,10 @@ export default function EmailSettings() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="email-settings-f11" className="block text-sm font-medium text-slate-700 mb-1">
                     Όνομα Λογιστή
                   </label>
-                  <input
+                  <input id="email-settings-f11"
                     type="text"
                     name="accountant_name"
                     value={formData.accountant_name || ''}
@@ -524,10 +524,10 @@ export default function EmailSettings() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="email-settings-f12" className="block text-sm font-medium text-slate-700 mb-1">
                     Τίτλος
                   </label>
-                  <input
+                  <input id="email-settings-f12"
                     type="text"
                     name="accountant_title"
                     value={formData.accountant_title || ''}
@@ -548,10 +548,10 @@ export default function EmailSettings() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Signature Editor */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
+            <label htmlFor="email-settings-f13" className="block text-sm font-medium text-slate-700 mb-2">
               HTML Κώδικας
             </label>
-            <textarea
+            <textarea id="email-settings-f13"
               name="email_signature"
               value={formData.email_signature || ''}
               onChange={handleChange}
@@ -637,10 +637,10 @@ export default function EmailSettings() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Rate Limit */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="email-settings-f14" className="block text-sm font-medium text-slate-700 mb-1">
               Rate Limit (emails/sec)
             </label>
-            <input
+            <input id="email-settings-f14"
               type="number"
               name="rate_limit"
               value={formData.rate_limit || 2}
@@ -657,10 +657,10 @@ export default function EmailSettings() {
 
           {/* Burst Limit */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="email-settings-f15" className="block text-sm font-medium text-slate-700 mb-1">
               Burst Limit
             </label>
-            <input
+            <input id="email-settings-f15"
               type="number"
               name="burst_limit"
               value={formData.burst_limit || 5}

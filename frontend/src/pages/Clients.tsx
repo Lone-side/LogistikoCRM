@@ -519,10 +519,10 @@ function ImportClientsModal({
           <div className="px-6 py-4 space-y-4">
             {/* File Input */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
+              <label htmlFor="clients-f1" className="block text-sm font-medium text-slate-700 mb-2">
                 Αρχείο Excel (.xlsx)
               </label>
-              <input
+              <input id="clients-f1"
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx,.xls"
