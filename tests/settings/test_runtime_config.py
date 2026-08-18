@@ -28,7 +28,9 @@ from pathlib import Path
 from unittest import mock
 
 import yaml
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+from django.http.request import validate_host
 from django.test import SimpleTestCase
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -406,8 +408,15 @@ class CIWorkflowEnvironmentTest(SimpleTestCase):
     def test_jobs_running_manage_py_declare_django_env(self):
         for name, job in self.workflow['jobs'].items():
             steps = job.get('steps') or []
+            # Τα βήματα που τρέχουν manage.py ΜΕΣΑ σε `docker run` δεν
+            # κληρονομούν το env του job — το container παίρνει μόνο ό,τι
+            # του δοθεί με -e. Ο έλεγχος εδώ αφορά το περιβάλλον του job,
+            # οπότε τα containerized βήματα δεν τον αφορούν (αλλιώς το
+            # docker-build κοκκίνιζε ψευδώς: τρέχει `manage.py check` σε
+            # container και περνά κανονικά).
             runs_manage_py = any(
                 'manage.py' in str(step.get('run', ''))
+                and 'docker run' not in str(step.get('run', ''))
                 for step in steps
             )
             if not runs_manage_py:
@@ -484,3 +493,35 @@ class ProductionEnvTemplateTest(SimpleTestCase):
         checklist = (BASE_DIR / 'PRODUCTION_CHECKLIST.md').read_text(
             encoding='utf-8')
         self.assertIn('DJANGO_ENV', checklist)
+
+
+class AllowedHostsPatternTest(SimpleTestCase):
+    """Το Django ΔΕΝ υποστηρίζει wildcards τύπου «192.168.*.*».
+
+    ΤΟ ΣΦΑΛΜΑ ΠΟΥ ΚΛΕΙΔΩΝΕΙ ΕΔΩ: το settings.py είχε hardcoded
+    '192.168.*.*', '10.*.*.*' και '172.16.*.*' με σχόλιο ότι καλύπτουν
+    «όλα τα τοπικά δίκτυα». Το validate_host() του Django δέχεται μόνο
+    ακριβή ονόματα, '.domain' για subdomains, και σκέτο '*' — οπότε τα
+    τρία μοτίβα δεν ταίριαζαν ΠΟΤΕ. Η εγκατάσταση δούλευε μόνο επειδή η
+    πρόσβαση γίνεται με 'crm.office.lan'. Την ημέρα που θα άνοιγε το
+    OFFICE_BIND_IP στο LAN, κάθε πρόσβαση με IP θα έπαιρνε 400.
+    """
+
+    LAN_PATTERNS = ('192.168.*.*', '10.*.*.*', '172.16.*.*')
+
+    def test_lan_wildcard_patterns_are_not_reintroduced(self):
+        for pattern in self.LAN_PATTERNS:
+            self.assertNotIn(
+                pattern, settings.ALLOWED_HOSTS,
+                msg=(f'Το «{pattern}» δεν κάνει τίποτα στο Django. Για '
+                     'πρόσβαση με IP βάλε τη συγκεκριμένη στατική IP στο '
+                     'env ALLOWED_HOSTS.'),
+            )
+
+    def test_django_really_ignores_such_patterns(self):
+        """Η απόδειξη, ώστε να μη θεωρηθεί αυθαίρετος ο κανόνας."""
+        self.assertFalse(validate_host('192.168.178.22', ['192.168.*.*']))
+        self.assertFalse(validate_host('10.0.0.5', ['10.*.*.*']))
+        # ...ενώ τα υποστηριζόμενα σχήματα δουλεύουν κανονικά:
+        self.assertTrue(validate_host('192.168.178.22', ['192.168.178.22']))
+        self.assertTrue(validate_host('crm.office.lan', ['.office.lan']))

@@ -116,13 +116,20 @@ ADMINS = [(ADMIN_NAME, ADMIN_EMAIL)] if ADMIN_EMAIL else []
 # SECURITY FIX: Default to False, only enable in dev with explicit env var
 DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
-# ALLOWED_HOSTS - Ρυθμίσεις για τοπικό δίκτυο
+# ALLOWED_HOSTS
+#
+# ΠΡΟΣΟΧΗ: το Django ΔΕΝ υποστηρίζει μοτίβα τύπου «192.168.*.*». Το
+# validate_host() δέχεται μόνο ακριβή ονόματα, «.domain.gr» για subdomains,
+# και το σκέτο «*». Εδώ υπήρχαν τρία τέτοια μοτίβα (192.168/10/172.16) με
+# σχόλιο ότι καλύπτουν «όλα τα τοπικά δίκτυα» — δεν κάλυπταν τίποτα:
+# κάθε LAN IP έπαιρνε 400 DisallowedHost. Δούλευε μόνο επειδή η πρόσβαση
+# γίνεται με «crm.office.lan»/«localhost».
+#
+# Για πρόσβαση από άλλο μηχάνημα του γραφείου με IP, βάλε τη ΣΥΓΚΕΚΡΙΜΕΝΗ
+# στατική IP του server στο env ALLOWED_HOSTS (comma-separated).
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    '192.168.*.*',      # Όλα τα τοπικά δίκτυα 192.168.x.x
-    '10.*.*.*',         # Εταιρικά δίκτυα 10.x.x.x
-    '172.16.*.*',       # Private networks 172.16.x.x
 ]
 # Επιπλέον hosts παραγωγής από env (comma-separated, π.χ. crm.example.gr)
 ALLOWED_HOSTS += [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
