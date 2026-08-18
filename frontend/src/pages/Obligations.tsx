@@ -473,13 +473,13 @@ export default function Obligations() {
       {/* Filter Controls */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
           {/* Quick filters row */}
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex items-center text-slate-600">
                 <Filter className="w-5 h-5 mr-2" />
                 <span className="font-medium">Κατάσταση:</span>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {[
                   { value: 'all', label: 'Όλες', className: 'bg-slate-800 text-white' },
                   { value: 'pending', label: 'Εκκρεμείς', className: 'bg-warning-600 text-white' },
@@ -753,6 +753,8 @@ export default function Obligations() {
                           <td className="px-4 py-4">
                             <button
                               onClick={() => handleSelectOne(obligation.id)}
+                              aria-label={`Επιλογή υποχρέωσης ${obligation.client_name || obligation.client}`}
+                              aria-pressed={selectedIds.has(obligation.id)}
                               className="text-slate-400 hover:text-slate-600 cursor-pointer transition-colors duration-150"
                             >
                               {selectedIds.has(obligation.id) ? (
