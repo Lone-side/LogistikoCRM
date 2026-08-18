@@ -74,6 +74,7 @@ export default function Emails() {
             <input
               type="text"
               placeholder="Αναζήτηση email..."
+              aria-label="Αναζήτηση email"
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
             />
           </div>

@@ -178,6 +178,7 @@ export default function Tickets() {
             <input
               type="text"
               placeholder="Αναζήτηση με τίτλο ή πελάτη..."
+              aria-label="Αναζήτηση ticket"
               value={searchInput}
               onChange={(e) => {
                 setSearchInput(e.target.value);
@@ -550,10 +551,10 @@ function CreateTicketModal({
         </div>
         <div className="p-4 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="tickets-f1" className="block text-sm font-medium text-slate-700 mb-1">
               Τίτλος *
             </label>
-            <input
+            <input id="tickets-f1"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -564,10 +565,10 @@ function CreateTicketModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="tickets-f2" className="block text-sm font-medium text-slate-700 mb-1">
               Πελάτης
             </label>
-            <select
+            <select id="tickets-f2"
               value={clientId || ''}
               onChange={(e) => setClientId(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -582,10 +583,10 @@ function CreateTicketModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="tickets-f3" className="block text-sm font-medium text-slate-700 mb-1">
               Περιγραφή
             </label>
-            <textarea
+            <textarea id="tickets-f3"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
@@ -595,10 +596,10 @@ function CreateTicketModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="tickets-f4" className="block text-sm font-medium text-slate-700 mb-1">
               Προτεραιότητα
             </label>
-            <select
+            <select id="tickets-f4"
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"

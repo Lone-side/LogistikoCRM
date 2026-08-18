@@ -384,10 +384,10 @@ function UploadModal({
         {/* Obligation selection (optional) */}
         {clientId && obligations.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="file-manager-f1" className="block text-sm font-medium text-slate-700 mb-1">
               Σύνδεση με Υποχρέωση <span className="text-slate-400 font-normal">(προαιρετικό)</span>
             </label>
-            <select
+            <select id="file-manager-f1"
               value={obligationId || ''}
               onChange={(e) => setObligationId(e.target.value ? Number(e.target.value) : null)}
               className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"

@@ -255,10 +255,10 @@ export function CompleteObligationModal({
           {/* Existing document selection */}
           {existingDocuments.length > 0 && !file && (
             <div className="mt-3">
-              <label className="block text-sm text-gray-600 mb-1">
+              <label htmlFor="complete-obligation-modal-f1" className="block text-sm text-gray-600 mb-1">
                 Ή επιλέξτε υπάρχον έγγραφο:
               </label>
-              <select
+              <select id="complete-obligation-modal-f1"
                 value={selectedDocId || ''}
                 onChange={(e) => {
                   setSelectedDocId(e.target.value ? Number(e.target.value) : null);
@@ -354,10 +354,10 @@ export function CompleteObligationModal({
 
         {/* Notes */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="complete-obligation-modal-f2" className="block text-sm font-medium text-gray-700 mb-1">
             Σημειώσεις
           </label>
-          <textarea
+          <textarea id="complete-obligation-modal-f2"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Προαιρετικές σημειώσεις..."
@@ -368,10 +368,10 @@ export function CompleteObligationModal({
 
         {/* Time spent */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="complete-obligation-modal-f3" className="block text-sm font-medium text-gray-700 mb-1">
             Χρόνος εργασίας (ώρες)
           </label>
-          <input
+          <input id="complete-obligation-modal-f3"
             type="number"
             value={timeSpent}
             onChange={(e) => setTimeSpent(e.target.value)}

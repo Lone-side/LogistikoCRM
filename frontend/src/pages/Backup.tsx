@@ -430,10 +430,10 @@ export default function Backup() {
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="backup-f1" className="block text-sm font-medium text-slate-700 mb-1">
                   Σημειώσεις (προαιρετικό)
                 </label>
-                <input
+                <input id="backup-f1"
                   type="text"
                   value={createNotes}
                   onChange={(e) => setCreateNotes(e.target.value)}
@@ -712,10 +712,10 @@ export default function Backup() {
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="backup-f2" className="block text-sm font-medium text-slate-700 mb-1">
                   Φάκελος Backup
                 </label>
-                <input
+                <input id="backup-f2"
                   type="text"
                   value={settingsForm.backup_path}
                   onChange={(e) => setSettingsForm({ ...settingsForm, backup_path: e.target.value })}
@@ -725,10 +725,10 @@ export default function Backup() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="backup-f3" className="block text-sm font-medium text-slate-700 mb-1">
                   Μέγιστος αριθμός Backups
                 </label>
-                <input
+                <input id="backup-f3"
                   type="number"
                   min="0"
                   value={settingsForm.max_backups}

@@ -158,10 +158,10 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="obligation-settings-f1" className="block text-sm font-medium text-slate-700 mb-1">
                 Κωδικός <span className="text-danger-600">*</span>
               </label>
-              <input
+              <input id="obligation-settings-f1"
                 type="text"
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
@@ -171,10 +171,10 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="obligation-settings-f2" className="block text-sm font-medium text-slate-700 mb-1">
                 Όνομα <span className="text-danger-600">*</span>
               </label>
-              <input
+              <input id="obligation-settings-f2"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -249,11 +249,11 @@ function ObligationTypeModal({ isOpen, onClose, type, profiles, groups }: TypeMo
 
           {(formData.frequency === 'quarterly' || formData.frequency === 'annual') && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="obligation-settings-f3" className="block text-sm font-medium text-slate-700 mb-1">
                 Μήνες Εφαρμογής
                 <span className="text-slate-400 text-xs ml-1">(π.χ. 3,6,9,12)</span>
               </label>
-              <input
+              <input id="obligation-settings-f3"
                 type="text"
                 value={formData.applicable_months || ''}
                 onChange={(e) => setFormData({ ...formData, applicable_months: e.target.value })}
@@ -481,10 +481,10 @@ function ObligationProfileModal({ isOpen, onClose, profile, allTypes }: ProfileM
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="obligation-settings-f4" className="block text-sm font-medium text-slate-700 mb-1">
               Όνομα <span className="text-danger-600">*</span>
             </label>
-            <input
+            <input id="obligation-settings-f4"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -651,10 +651,10 @@ function ObligationGroupModal({ isOpen, onClose, group, allTypes }: GroupModalPr
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="obligation-settings-f5" className="block text-sm font-medium text-slate-700 mb-1">
               Όνομα <span className="text-danger-600">*</span>
             </label>
-            <input
+            <input id="obligation-settings-f5"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}

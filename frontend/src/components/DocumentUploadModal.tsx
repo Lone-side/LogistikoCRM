@@ -302,10 +302,10 @@ export function DocumentUploadModal({
 
           {/* Category selection */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="document-upload-modal-f1" className="block text-sm font-medium text-gray-700 mb-1">
               Τύπος εγγράφου
             </label>
-            <select
+            <select id="document-upload-modal-f1"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -320,10 +320,10 @@ export function DocumentUploadModal({
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="document-upload-modal-f2" className="block text-sm font-medium text-gray-700 mb-1">
               Περιγραφή (προαιρετικό)
             </label>
-            <input
+            <input id="document-upload-modal-f2"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}

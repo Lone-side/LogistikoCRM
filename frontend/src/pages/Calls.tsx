@@ -241,6 +241,7 @@ export default function Calls() {
             <input
               type="text"
               placeholder="Αναζήτηση με αριθμό ή πελάτη..."
+              aria-label="Αναζήτηση κλήσης"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -606,10 +607,10 @@ function MatchClientModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="calls-f1" className="block text-sm font-medium text-slate-700 mb-1">
               Αναζήτηση πελάτη
             </label>
-            <input
+            <input id="calls-f1"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -704,10 +705,10 @@ function CreateTicketFromCallModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="calls-f2" className="block text-sm font-medium text-slate-700 mb-1">
               Τίτλος *
             </label>
-            <input
+            <input id="calls-f2"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -716,10 +717,10 @@ function CreateTicketFromCallModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="calls-f3" className="block text-sm font-medium text-slate-700 mb-1">
               Περιγραφή
             </label>
-            <textarea
+            <textarea id="calls-f3"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
@@ -729,10 +730,10 @@ function CreateTicketFromCallModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="calls-f4" className="block text-sm font-medium text-slate-700 mb-1">
               Προτεραιότητα
             </label>
-            <select
+            <select id="calls-f4"
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
