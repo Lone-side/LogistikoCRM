@@ -260,6 +260,7 @@ export default function MyData() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={goToPreviousMonth}
+                    aria-label="Προηγούμενος μήνας"
                     className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
                   >
                     <ChevronLeft size={18} />
@@ -270,6 +271,7 @@ export default function MyData() {
                   </div>
                   <button
                     onClick={goToNextMonth}
+                    aria-label="Επόμενος μήνας"
                     className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors duration-150 cursor-pointer"
                   >
                     <ChevronRight size={18} />

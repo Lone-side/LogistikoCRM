@@ -121,7 +121,7 @@ describe('SharedLinkPortal — πύλη πρόσβασης', () => {
       expect(screen.queryByLabelText('Κωδικός πρόσβασης')).not.toBeInTheDocument()
     );
     expect(mockPost).toHaveBeenCalledWith(
-      '/accounting/share/tok123/',
+      '/share/tok123/',
       expect.objectContaining({ password: 'σωστός' })
     );
   });
@@ -138,7 +138,7 @@ describe('SharedLinkPortal — πύλη πρόσβασης', () => {
 
     await waitFor(() => expect(mockPost).toHaveBeenCalled());
     expect(mockPost).toHaveBeenCalledWith(
-      '/accounting/share/tok123/',
+      '/share/tok123/',
       expect.objectContaining({ email: 'pelatis@example.gr', password: undefined })
     );
   });
